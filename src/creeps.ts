@@ -1,4 +1,5 @@
-import { log, initGlobal, pathing } from './utils/globalFuncs';
+import { log, initGlobal } from './utils/globalFuncs';
+import { pathing } from './utils/constants';
 import { buildProgress, repairProgress } from './utils/visuals';
 import './utils/globalFuncs';
 import 'prototypes/creep';
@@ -226,9 +227,9 @@ export const Repairer = {
 		if (cMem.disable === undefined) cMem.disable = false;
 		if (cMem.rally === undefined) cMem.rally = 'none';
 
-		if (cMem.disable === true) {
+		if (cMem.disable === true)
 			aiAlert(creep);
-		} else {
+		else {
 			if (cMem.rally === 'none') {
 				//! Find energy reserves
 				if (creep.store.getUsedCapacity(RESOURCE_ENERGY) === 0) {
@@ -246,42 +247,44 @@ export const Repairer = {
 							}
 						}
 					}
-				} else {
-					creep.memory.working = true;
-				}
+				} else creep.memory.working = true;
+
 				//! Repair stuff
 				if (creep.memory.working === true) {
 					let allSites: AnyStructure[] = [];
-					if (room.memory.settings.repairSettings.walls) {
-						const damagedSites = room.find(FIND_STRUCTURES, { filter: (i) => { i.structureType === STRUCTURE_WALL && (i.hits / i.hitsMax) * 100 <= room.memory.settings.repairSettings.wallLimit}});
-						allSites.concat(damagedSites);
+					//# if walls are set to repairable, find any under the repair limit threshold and add to main set
+					if (room.memory.settings.repairSettings.walls === true) {
+						const damagedSites = room.find(FIND_STRUCTURES, { filter: function(i) { return i.structureType === STRUCTURE_WALL && (i.hits / i.hitsMax) * 100 <= room.memory.settings.repairSettings.wallLimit}});
+						allSites = allSites.concat(damagedSites);
 					}
 
-					if (room.memory.settings.repairSettings.ramparts) {
-						const damagedSites = room.find(FIND_MY_STRUCTURES, { filter: (i) => { i.structureType === STRUCTURE_RAMPART && (i.hits / i.hitsMax) * 100 <= room.memory.settings.repairSettings.rampartLimit}});
-						allSites.concat(damagedSites);
+					//# if ramparts are set to repairable, find any under the repair limit threshold and add to main set
+					if (room.memory.settings.repairSettings.ramparts === true) {
+						const damagedSites = room.find(FIND_MY_STRUCTURES, { filter: function(i) { return i.structureType === STRUCTURE_RAMPART && (i.hits / i.hitsMax) * 100 <= room.memory.settings.repairSettings.rampartLimit}});
+						allSites = allSites.concat(damagedSites);
 					}
 
-					if (room.memory.settings.repairSettings.roads) {
-						const damagedRoads = room.find(FIND_STRUCTURES, { filter: (i) => { i.structureType === STRUCTURE_ROAD && i.hits < i.hitsMax }});
-						allSites.concat(damagedRoads);
+					//# if roads are repairable, find and add
+					if (room.memory.settings.repairSettings.roads === true) {
+						const damagedRoads = room.find(FIND_STRUCTURES, { filter: function(i) { return i.structureType === STRUCTURE_ROAD && i.hits < i.hitsMax }});
+						allSites = allSites.concat(damagedRoads);
 					}
 
-					if (room.memory.settings.repairSettings.others) {
-						const damagedSites = room.find(FIND_STRUCTURES, { filter: (i) => { (i.structureType !== STRUCTURE_ROAD && i.structureType !== STRUCTURE_RAMPART && i.structureType !== STRUCTURE_WALL) && i.hits < i.hitsMax }});
-						allSites.concat(damagedSites);
+					//# if other structure types are repairable, find and add
+					if (room.memory.settings.repairSettings.others === true) {
+						const damagedSites = room.find(FIND_STRUCTURES, { filter: function(i) { return (i.structureType !== STRUCTURE_ROAD && i.structureType !== STRUCTURE_RAMPART && i.structureType !== STRUCTURE_WALL) && i.hits < i.hitsMax }});
+						allSites = allSites.concat(damagedSites);
 					}
 
+					//# locate closest repairable, navigate to it, and repair
 					const nearestSite = pos.findClosestByRange(allSites);
 					if (nearestSite) {
 						const result = creep.repair(nearestSite);
-
-						if (result === ERR_NOT_IN_RANGE)
+						if (result === ERR_NOT_IN_RANGE) // move to if not in range
 							creep.moveTo(nearestSite, pathing.repairerPathing);
-						else if (result === OK)
+						else if (result === OK) // display repair progress visual
 							repairProgress(nearestSite, room);
-						else
-							log(`${creep.name}: Repair result - ${result}`);
+						else console.log(`${creep.name}: Repair result - ${result}`); // log return code if not OK or ENIR
 					}
 				}
 			}

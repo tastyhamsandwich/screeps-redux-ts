@@ -1,3 +1,5 @@
+import { PART_COST } from "./constants";
+
 declare global {
 	interface Global {
 		calcPath(startPos: RoomPosition, endPos: RoomPosition): { path: RoomPosition[], length: number, ops: number, cost: number, incomplete: boolean };
@@ -16,6 +18,10 @@ declare global {
 		pathing: {[key: string]: any};
 	}
 }
+
+
+	let controllerPPTArray: number[] = [];
+	let controllerProgress: number = 0;
 
 export function calcPath(startPos: RoomPosition, endPos: RoomPosition): { path: RoomPosition[], length: number, ops: number, cost: number, incomplete: boolean } {
 
@@ -303,17 +309,6 @@ export function initGlobal(override: boolean = false): boolean {
 		return false;
 }
 
-export const PART_COST: Record<BodyPartConstant, number> = {
-	[MOVE]: 50,
-	[WORK]: 100,
-	[CARRY]: 50,
-	[ATTACK]: 80,
-	[RANGED_ATTACK]: 150,
-	[HEAL]: 250,
-	[CLAIM]: 600,
-	[TOUGH]: 10
-};
-
 /**
  * Calculate the total energy cost of a body array.
  * Returns 0 for empty/undefined bodies and ignores unknown parts.
@@ -323,148 +318,215 @@ export function calcBodyCost(body: BodyPartConstant[] | undefined | null): numbe
     return body.reduce((sum, part) => sum + (PART_COST[part] ?? 0), 0);
 }
 
-const cSet = Memory.globalSettings.creepSettings;
 
-export const pathing: { [key: string]: MoveToOpts } = {
-	builderPathing: {
-		visualizePathStyle: { stroke: "#0000ff", opacity: 0.3, lineStyle: "dotted" },
-		reusePath: cSet.builder.reusePathValue,
-		ignoreCreeps: false //cSet.builder.ignoreCreeps
-	},
-	runnerPathing: {
-		visualizePathStyle: { stroke: "#880088", opacity: 0.3, lineStyle: "dotted" },
-		reusePath: cSet.runner.reusePathValue,
-		ignoreCreeps: false //cSet.runner.ignoreCreeps
-	},
-	claimerPathing: {
-		visualizePathStyle: { stroke: "#00ffff", opacity: 0.5, lineStyle: "solid" },
-		reusePath: cSet.claimer.reusePathValue,
-		ignoreCreeps: false //cSet.claimer.ignoreCreeps
-	},
-	/*collectorPathing: {
-		visualizePathStyle: { stroke: "#8833dd", opacity: 0.5, lineStyle: "dotted" },
-		reusePath: cSet.collector.reusePathValue,
-		ignoreCreeps: false //cSet.collector.ignoreCreeps
-	},*/
-	cranePathing: {
-		visualizePathStyle: { stroke: "#00ffff", opacity: 0.3, lineStyle: "solid" },
-		reusePath: cSet.crane.reusePathValue,
-		ignoreCreeps: false //cSet.crane.ignoreCreeps
-	},
-	harvesterPathing: {
-		visualizePathStyle: { stroke: "#00ff00", opacity: 0.5, lineStyle: "dashed" },
-		reusePath: cSet.harvester.reusePathValue,
-		ignoreCreeps: false //cSet.harvester.ignoreCreeps
-	},
-	healerPathing: {
-		visualizePathStyle: { stroke: "#00ff00", opacity: 0.5, lineStyle: "solid" },
-		reusePath: cSet.healer.reusePathValue,
-		ignoreCreeps: false //cSet.healer.ignoreCreeps
-	},
-	invaderPathing: {
-		visualizePathStyle: { stroke: "#ff0000", opacity: 0.5, lineStyle: "solid" },
-		reusePath: cSet.invader.reusePathValue,
-		ignoreCreeps: false //cSet.invader.ignoreCreeps
-	},
-	minerPathing: {
-		visualizePathStyle: { stroke: "#00ff00", opacity: 0.3, lineStyle: "solid" },
-		reusePath: cSet.miner.reusePathValue,
-		ignoreCreeps: false //cSet.miner.ignoreCreeps
-	},
-	providerPathing: {
-		visualizePathStyle: { stroke: "#ff0033", opacity: 0.3, lineStyle: "dotted" },
-		reusePath: cSet.provider.reusePathValue,
-		ignoreCreeps: false //cSet.provider.ignoreCreeps
-	},
-	rangerPathing: {
-		visualizePathStyle: { stroke: "#ff0000", opacity: 0.5, lineStyle: "solid" },
-		reusePath: cSet.ranger.reusePathValue,
-		ignoreCreeps: false //cSet.ranger.ignoreCreeps
-	},
-	rebooterPathing: {
-		visualizePathStyle: { stroke: "#ffffff", opacity: 0.5, lineStyle: "solid" },
-		reusePath: cSet.rebooter.reusePathValue,
-		ignoreCreeps: false //cSet.rebooter.ignoreCreeps
-	},
-	remoteBuilderPathing: {
-		visualizePathStyle: { stroke: "#ffff00", opacity: 0.3, lineStyle: "dotted" },
-		reusePath: cSet.remotebuilder.reusePathValue,
-		ignoreCreeps: false //cSet.remotebuilder.ignoreCreeps
-	},
-	remoteGuardPathing: {
-		visualizePathStyle: { stroke: "#ff0000", opacity: 0.3, lineStyle: "dashed" },
-		reusePath: cSet.remoteguard.reusePathValue,
-		ignoreCreeps: false //cSet.remoteguard.ignoreCreeps
-	},
-	remoteHarvesterPathing: {
-		visualizePathStyle: { stroke: "#98dd44", opacity: 0.5, lineStyle: "dashed" },
-		reusePath: cSet.remoteharvester.reusePathValue,
-		ignoreCreeps: false //cSet.remoteharvester.ignoreCreeps
-	},
-	remoteLogisticianPathing: {
-		visualizePathStyle: { stroke: "#ffffff", opacity: 0.5, lineStyle: "dotted" },
-		reusePath: cSet.remotelogistician.reusePathValue,
-		ignoreCreeps: false //cSet.remotelogistician.ignoreCreeps
-	},
-	remoteRunnerPathing: {
-		visualizePathStyle: { stroke: "#880088", opacity: 0.3, lineStyle: "dotted" },
-		reusePath: cSet.remoterunner.reusePathValue,
-		ignoreCreeps: false //cSet.remoterunner.ignoreCreeps
-	},
-	repairerPathing: {
-		visualizePathStyle: { stroke: "#ff6600", opacity: 0.3, lineStyle: "dotted" },
-		reusePath: cSet.repairer.reusePathValue,
-		ignoreCreeps: false //cSet.repairer.ignoreCreeps
-	},
-	reserverPathing: {
-		visualizePathStyle: { stroke: "#ffffff", opacity: 0.3, lineStyle: "dashed" },
-		reusePath: cSet.reserver.reusePathValue,
-		ignoreCreeps: false //cSet.reserver.ignoreCreeps
-	},
-	scientistPathing: {
-		visualizePathStyle: { stroke: "#ffffff", opacity: 0.8, lineStyle: "solid" },
-		reusePath: cSet.scientist.reusePathValue,
-		ignoreCreeps: false //cSet.scientist.ignoreCreeps
-	},
-	scoutPathing: {
-		visualizePathStyle: { stroke: "#ff00ff", opacity: 0.5, lineStyle: "solid" },
-		reusePath: cSet.scout.reusePathValue,
-		ignoreCreeps: false //cSet.scout.ignoreCreeps
-	},
-	upgraderPathing: {
-		visualizePathStyle: { stroke: "#ffff00", opacity: 0.3, lineStyle: "dotted" },
-		reusePath: cSet.upgrader.reusePathValue,
-		ignoreCreeps: false //cSet.upgrader.ignoreCreeps
-	},
-	warriorPathing: {
-		visualizePathStyle: { stroke: "#ff0000", opacity: 0.5, lineStyle: "solid" },
-		reusePath: cSet.warrior.reusePathValue,
-		ignoreCreeps: false //cSet.warrior.ignoreCreeps
-	},
-	rallyPointPathing: {
-		visualizePathStyle: { stroke: "#ffffff", opacity: 1.0, lineStyle: "solid" },
-		reusePath: Memory.globalSettings.reusePathValue,
-		ignoreCreeps: Memory.globalSettings.ignoreCreeps
-	},
-	subordinatePathing: {
-		visualizePathStyle: { stroke: '#880000', opacity: 1.0, lineStyle: "dashed" },
-		reusePath: Memory.globalSettings.reusePathValue,
-		ignoreCreeps: false
-	}
-};
-6
+
 export function needMoreHarvesters(room: Room): boolean {
-
 	const numSources = room.find(FIND_SOURCES).length;
-	const harvesters = room.find(FIND_MY_CREEPS, { filter: (i) => i.memory.role === 'harvester'});
-	let numWorkParts = 0;
-	_.forEach (harvesters, harvester => {
-		const numParts = harvester.getActiveBodyparts(WORK);
-		numWorkParts += numParts;
-	})
+	const harvesters = room.find(FIND_MY_CREEPS, {
+		filter: (c) => c.memory.role === 'harvester',
+	});
 
-	const requiredWorkPartsPerSource = 5;
-	const totalRequiredWorkParts = numSources * requiredWorkPartsPerSource;
+	// Get active WORK part count for each harvester
+	const harvesterWorkParts = harvesters
+		.map(c => c.getActiveBodyparts(WORK))
+		.sort((a, b) => b - a); // strongest first
 
-	return (numWorkParts >= totalRequiredWorkParts) ? false : true;
+	let sourcesSatisfied = 0;
+	let currentHarvester = 0;
+
+	while (sourcesSatisfied < numSources && currentHarvester < harvesterWorkParts.length) {
+		let remainingWorkNeeded = 5;
+
+		while (remainingWorkNeeded > 0 && currentHarvester < harvesterWorkParts.length) {
+			remainingWorkNeeded -= harvesterWorkParts[currentHarvester];
+			currentHarvester++;
+		}
+
+		if (remainingWorkNeeded <= 0) {
+			sourcesSatisfied++;
+		} else {
+			// ran out of harvesters for this source
+			return true;
+		}
+	}
+
+	return sourcesSatisfied < numSources;
+}
+
+export function visualRCProgress(controller: StructureController): void {
+
+	function add(acc: number, a: number) { return acc + a; }
+	let lvlColor: string = '#dddddd';
+
+	switch (controller.level) {
+		case 1:
+			lvlColor = '#002700';
+			break;
+		case 2:
+			lvlColor = '#228600';
+			break;
+		case 3:
+			lvlColor = '#00ffaa';
+			break;
+		case 4:
+			lvlColor = '#22dddd';
+			break;
+		case 5:
+			lvlColor = '#8000ff';
+			break;
+		case 6:
+			lvlColor = '#dd00bb';
+			break;
+		case 7:
+			lvlColor = '#dd7700';
+			break;
+		case 8:
+			lvlColor = '#dd0000';
+			break;
+	}
+
+	const cont: StructureController = controller;
+	const rmName: string = controller.room.name;
+	const rmSettingsPInfo: ProgressInfoSettings = controller.room.memory.settings.visualSettings.progressInfo;
+
+
+	if (controllerPPTArray.length > cont.level * 12) {
+		const array: number[] = controllerPPTArray;
+		const newArr: number[] = avgArray(array);
+		controllerPPTArray = newArr;
+	}
+
+	const progress: number = cont.progress;
+	let progressLastTick: number;
+
+	if (controllerProgress !== 0)
+		progressLastTick = progress - controllerProgress;
+	else
+		progressLastTick = 0;
+
+	if (!(progressLastTick == 0 && controllerPPTArray.length == 0) && progress !== 0)
+		controllerPPTArray.push(progressLastTick);
+
+	controllerProgress = progress;
+
+	const sum: number = controllerPPTArray.reduce(add, 0);
+	const arrLen: number = controllerPPTArray.length;
+
+	const avgProgressPerTick: number = parseInt((sum / arrLen).toFixed(2));
+	const progressRemaining: number = cont.progressTotal - cont.progress;
+	const ticksRemaining: number = parseInt((progressRemaining / avgProgressPerTick).toFixed(0));
+	const currentTickDuration: number = parseFloat(Memory.time!.lastTickTime!.toFixed(2));
+	const secondsRemaining: number = ticksRemaining * currentTickDuration;
+	const fontSize: number = rmSettingsPInfo.fontSize;
+	const xOffset: number = rmSettingsPInfo.xOffset;
+	const yOffsetFactor: number = rmSettingsPInfo.yOffsetFactor;
+	const stroke: string = rmSettingsPInfo.stroke;
+	const alignment: alignment = rmSettingsPInfo.alignment;
+	const days: number = Math.floor(secondsRemaining / (3600 * 24));
+	const hours: number = Math.floor(secondsRemaining % (3600 * 24) / 3600);
+	const minutes: number = Math.floor(secondsRemaining % 3600 / 60);
+	const seconds: number = Math.floor(secondsRemaining % 60);
+
+	cont.room.visual.text(
+		('L' + cont.level + ' - ' + ((cont.progress / cont.progressTotal) * 100).toFixed(2)) + '%',
+		cont.pos.x + xOffset,
+		cont.pos.y - (yOffsetFactor * 2),
+		{ align: alignment, opacity: 0.8, color: lvlColor, font: fontSize, stroke: stroke });
+
+	cont.room.visual.text(
+		(cont.progress + '/' + cont.progressTotal) + ' - Avg: +' + avgProgressPerTick,
+		cont.pos.x + xOffset,
+		cont.pos.y - yOffsetFactor,
+		{ align: alignment, opacity: 0.8, color: lvlColor, font: fontSize - .1, stroke: stroke });
+
+	if (secondsRemaining)
+		cont.room.visual.text(
+			days + 'd ' + hours + 'h ' + minutes + 'm ' + seconds + 's (' + ticksRemaining + ' ticks)',
+			cont.pos.x + xOffset,
+			cont.pos.y,
+			{ align: alignment, opacity: 0.8, color: lvlColor, font: fontSize - .1, stroke: stroke });
+	else
+		cont.room.visual.text('Unknown time remaining',
+			cont.pos.x + xOffset,
+			cont.pos.y,
+			{ align: alignment, opacity: 0.8, color: '#000000', font: fontSize - .1, stroke: '#ffaa00' });
+}
+
+/**
+ *  Takes a number array as input and returns the average
+ * @param array The array used for calculation
+ * @returns The array's average value
+ */
+function avgArray(array: number[]): number[] {
+
+	function add(acc: number, a: number): number { return acc + a; }
+
+	const sum: number = array.reduce(add, 0);
+	const arrLen: number = array.length;
+	const avg: number = parseInt((sum / arrLen).toFixed(2));
+	const newArr: number[] = [avg];
+
+	return newArr;
+}
+
+/**
+ *  Converts raw seconds into days/hours/minutes/seconds
+ * @param seconds The number of seconds to convert
+ * @returns The string value of "Xd Xh Xm Xs"
+ */
+export function secondsToDhms(seconds: number) {
+	seconds = Number(seconds);
+	var d: number = Math.floor(seconds / (3600 * 24));
+	var h: number = Math.floor(seconds % (3600 * 24) / 3600);
+	var m: number = Math.floor(seconds % 3600 / 60);
+	var s: number = Math.floor(seconds % 60);
+
+	var dDisplay: string = d > 0 ? d + (d == 1 ? " day, " : " days, ") : "";
+	var hDisplay: string = h > 0 ? h + (h == 1 ? " hour, " : " hours, ") : "";
+	var mDisplay: string = m > 0 ? m + (m == 1 ? " minute, " : " minutes, ") : "";
+	var sDisplay: string = s > 0 ? s + (s == 1 ? " second" : " seconds") : "";
+	return dDisplay + hDisplay + mDisplay + sDisplay;
+}
+
+Object.assign(exports, {
+
+	POLYBLUEDOTTED3: {
+		stroke: '#0000ff',
+		strokeWidth: 0.1,
+		lineStyle: 'dashed'
+	}
+})
+
+export function calcTickTime(tickSamples: number = 1000): string { // Call this from 1st line of main loop. Can adjust samples used for calculation from there.
+	let millis: number = Date.now();
+
+	// Set some sane defaults
+	if (typeof Memory.time == "undefined") Memory.time = {};
+	if (typeof Memory.time.lastTickMillis == "undefined") Memory.time.lastTickMillis = millis - 1010;
+	if (typeof Memory.time.lastTickTime == "undefined") Memory.time.lastTickTime = 1.01;
+	if (typeof Memory.time.tickTimeCount == "undefined") Memory.time.tickTimeCount = 0;
+	if (typeof Memory.time.tickTimeTotal == "undefined") Memory.time.tickTimeTotal = 0;
+
+	let lastTickMillis: number = Number(Memory.time.lastTickMillis);
+	let tickTimeCount: number = Number(Memory.time.tickTimeCount);
+	let tickTimeTotal: number = Number(Memory.time.tickTimeTotal);
+
+	if (tickTimeCount >= (tickSamples - 1)) {
+		tickTimeTotal += millis - lastTickMillis;
+		tickTimeCount++;
+		let tickTime: number = (tickTimeTotal / tickTimeCount) / 1000;
+		log("Calculated tickTime as " + tickTime + " from " + tickTimeCount + "samples.");
+		Memory.time.lastTickTime = tickTime;
+		Memory.time.tickTimeTotal = millis - lastTickMillis;
+		Memory.time.tickTimeCount = 1;
+		Memory.time.lastTickMillis = millis;
+	} else {
+		global.tickTime = Number(Memory.time.lastTickTime);
+		tickTimeTotal += millis - lastTickMillis;
+		Memory.time.tickTimeTotal = tickTimeTotal;
+		tickTimeCount++;
+		Memory.time.tickTimeCount = tickTimeCount;
+		Memory.time.lastTickMillis = millis;
+	}
+	return 'Done';
 }

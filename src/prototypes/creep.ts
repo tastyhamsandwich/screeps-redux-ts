@@ -1,4 +1,5 @@
-import { log, pathing } from '../utils/globalFuncs';
+import { log } from '../utils/globalFuncs';
+import { pathing } from '../utils/constants';
 
 declare global {
 	interface Creep {

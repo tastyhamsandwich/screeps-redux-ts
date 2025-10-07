@@ -1,6 +1,6 @@
 import { ErrorMapper } from "utils/ErrorMapper";
 import RoomManager from "./managers/roomManager";
-import { needMoreHarvesters } from "utils/globalFuncs";
+import { needMoreHarvesters, visualRCProgress, calcTickTime } from "./utils/globalFuncs";
 import { buildProgress, repairProgress } from 'utils/visuals';
 import * as CreepAI from 'creeps';
 
@@ -8,6 +8,7 @@ import 'prototypes/creep';
 import 'prototypes/room';
 import 'prototypes/roomPos';
 import 'prototypes/spawn';
+import { last } from "lodash";
 
 declare global {
 
@@ -20,6 +21,12 @@ declare global {
 		globalSettings: GlobalSettings;
 		miscData: MiscData;
 		colonies: { [key: string]: any };
+		time?: {
+			lastTickTime?: number,
+			lastTickMillis?: number,
+			tickTimeCount?: number,
+			tickTimeTotal?: number
+		}
 	}
 
 	// INTERFACE: Room Memory Extension
@@ -32,7 +39,7 @@ declare global {
 			mineral: string;
 			controller: string;
 		};
-		settings: { [key: string]: any };
+		settings: RoomSettings;
 		data: { [key: string]: any };
 		stats: { [key: string]: number | string };
 		availableCreeps: string[];
@@ -47,7 +54,7 @@ declare global {
 		role: string;
 		home: string;
 		room: string;
-		working: boolean;
+		working?: boolean;
 		[key: string]: any;
 	}
 
@@ -103,10 +110,25 @@ declare global {
 		dropHarvestingEnabled?: boolean;
 	}
 
+	interface RoomSettings {
+		repairSettings: RepairSettings;
+		visualSettings: VisualSettings;
+		flags: RoomFlags;
+
+	}
+
+	interface RepairSettings {
+		walls: boolean;
+		ramparts: boolean;
+		roads: boolean;
+		others: boolean;
+		wallLimit: number;
+		rampartLimit: number;
+	}
 	interface VisualSettings {
 		spawnInfo?: SpawnInfoSettings;
 		roomFlags?: RoomFlagsSettings;
-		progressInfo?: ProgressInfoSettings;
+		progressInfo: ProgressInfoSettings;
 		displayControllerUpgradeRange?: boolean;
 		displayTowerRanges?: boolean;
 	}
@@ -122,12 +144,12 @@ declare global {
 		fontSize?: number;
 	}
 	interface ProgressInfoSettings {
-		alignment?: alignment;
-		xOffset?: number;
-		yOffsetFactor?: number;
-		stroke?: string;
-		fontSize?: number;
-		color?: string;
+		alignment: alignment;
+		xOffset: number;
+		yOffsetFactor: number;
+		stroke: string;
+		fontSize: number;
+		color: string;
 	}
 
 	type alignment = 'left' | 'right' | 'center';
@@ -140,6 +162,7 @@ declare global {
 	namespace NodeJS {
 		interface Global {
 			log(): void;
+			tickTime: number;
 		}
 	}
 }
@@ -149,6 +172,15 @@ let tickCount = 0;
 // This utility uses source maps to get the line numbers and file names of the original, TS source code
 export const loop = ErrorMapper.wrapLoop(() => {
 
+	calcTickTime();
+
+	// PURPOSE Generate pixels with extra CPU time
+	if (Game.shard.name === 'shard3') {
+		if (Game.cpu.bucket == 10000) {
+			Game.cpu.generatePixel()
+			console.log('[GENERAL]: CPU Bucket at limit, generating pixel...');
+		}
+	}
 
 	// Automatically delete memory of missing creeps
 	for (const name in Memory.creeps) {
@@ -157,6 +189,7 @@ export const loop = ErrorMapper.wrapLoop(() => {
 		}
 	}
 
+	//! Execute specific role-based creep script for every creep, based on role assigned in memory
 	for (const name in Game.creeps) {
 		const creep = Game.creeps[name];
 		switch (creep.memory.role) {
@@ -189,7 +222,7 @@ export const loop = ErrorMapper.wrapLoop(() => {
 	}
 
 
-
+	//! Encompassing loop to run across every room where we have vision
 	_.forEach(Game.rooms, room => {
 
 		const roomName = room.name;
@@ -201,7 +234,8 @@ export const loop = ErrorMapper.wrapLoop(() => {
 		rMem.data.numCSites = cSites.length;
 		const numCSites: number = rMem.data.numCSites;
 
-
+		if (room.memory.objects === undefined)
+			room.cacheObjects();
 		if (numCSites < numCSitesPrevious)
 			room.cacheObjects();
 
@@ -209,6 +243,7 @@ export const loop = ErrorMapper.wrapLoop(() => {
 			if (cSite.progress > 0) buildProgress(cSite, room);
 		});
 
+		//! From here, only rooms where we own the controller have this code ran
 		if (room.controller && room.controller.my) {
 
 			new RoomManager(room.name);
@@ -238,22 +273,26 @@ export const loop = ErrorMapper.wrapLoop(() => {
 
 			const spawns = room.find(FIND_MY_STRUCTURES, {filter: (i) => i.structureType === STRUCTURE_SPAWN });
 
-				if (spawns.length) {
+			if (spawns.length) {
 
-					_.forEach(spawns, (spawnAny) => {
-						const spawn = spawnAny as StructureSpawn;
-						let cap = spawn.room.energyCapacityAvailable;
+				_.forEach(spawns, (spawnAny) => {
+					// For every spawn in the room that we own
+					const spawn = spawnAny as StructureSpawn;
+					let cap = spawn.room.energyCapacityAvailable;
 
-						if (harvesters.length == 0)
-							cap = spawn.room.energyAvailable;
-						if (!spawn.spawning) {
-						// Simple spawn logic: ensure a minimum number of harvesters per room
-						if (needMoreHarvesters(spawn.room)) {
+					// If we have no harvesters, stop using the room's energy capacity for body measurements and use what we have right now to spawn a new harvester
+					if (harvesters.length == 0)
+						cap = spawn.room.energyAvailable;
+					if (!spawn.spawning) {
+
+						//# Spawn Harvesters
+						if (needMoreHarvesters(spawn.room)) { // Determine if we have enough harvesters (by work parts per total sources in room)
 							const body = spawn.determineBodyParts('harvester', cap);
-							const ticksToSpawn = body.length * 3;
+							const ticksToSpawn = body.length * 3; // unused atm, will later be used to coordinate spawn times more accurately
 							let sourceID;
 							let containerID;
-							if (harvesters.length % 2 === 0) {
+							let lastHarvesterAssigned = spawn.room.memory.data.lastHarvesterAssigned || 0; // tracker flag to determine which source info to use for harvester
+							if (lastHarvesterAssigned === 0) {
 								sourceID = spawn.room.memory.objects.sources[0];
 								containerID = spawn.room.memory.containers.sourceOne;
 							} else {
@@ -268,12 +307,15 @@ export const loop = ErrorMapper.wrapLoop(() => {
 								name = `Col${1}_H${harvesters.length + countMod}`;
 								result = spawn.spawnCreep(body, name, { memory: { role: 'harvester', RFQ: 'harvester', home: room.name, room: room.name, working: false, disable: false, rally: 'none', source: sourceID, bucket: containerID } });
 							}
-							if (result === OK)
-								console.log(`${spawn.name} spawning new harvester ${name} in ${room.name}`);
+							if (result === OK) {
+								console.log(`${spawn.name} spawning new harvester ${name} in ${room.name}, assigned to source #${lastHarvesterAssigned + 1}`);
+								lastHarvesterAssigned = (lastHarvesterAssigned + 1) % 2;
+								spawn.room.memory.data.lastHarvesterAssigned = lastHarvesterAssigned;
+							}
 							else
 								console.log(`${spawn.name} failed to spawn harvester: ${result}`);
 						}
-
+						//# Spawn Fillers
 						else if (fillers.length < fillerTarget) {
 							const body = spawn.determineBodyParts('filler', spawn.room.energyCapacityAvailable);
 							let countMod = 1;
@@ -289,7 +331,7 @@ export const loop = ErrorMapper.wrapLoop(() => {
 							else
 								console.log(`${spawn.name} failed to spawn filler: ${result}`);
 						}
-
+						//# Spawn Upgraders
 						else if (upgraders.length < upgraderTarget) {
 							const body = spawn.determineBodyParts('upgrader', spawn.room.energyCapacityAvailable);
 							let countMod = 1;
@@ -303,9 +345,9 @@ export const loop = ErrorMapper.wrapLoop(() => {
 							if (result === OK)
 								console.log(`${spawn.name} spawning new upgrader ${name} in ${room.name}`);
 							else
-								console.log(`${spawn.name} failed to spawn harvester: ${result}`);
+								console.log(`${spawn.name} failed to spawn upgrader: ${result}`);
 						}
-
+						//# Spawn Builders
 						else if (builders.length < builderTarget)  {
 							const body = spawn.determineBodyParts('builder', spawn.room.energyCapacityAvailable);
 							let countMod = 1;
@@ -321,7 +363,7 @@ export const loop = ErrorMapper.wrapLoop(() => {
 							else
 								console.log(`${spawn.name} failed to spawn builder: ${result}`);
 						}
-
+						//# Spawn Repairers
 						else if (repairers.length < repairerTarget) {
 							const body = spawn.determineBodyParts('repairer', spawn.room.energyCapacityAvailable);
 							let countMod = 1;
@@ -339,27 +381,24 @@ export const loop = ErrorMapper.wrapLoop(() => {
 						}
 					}
 				});
-			}
+			} //! end of if (spawns.length) {}
 
+			// Show some basic energy and quota information every few ticks in the console
 			const tickInterval: number = Memory.globalSettings.consoleSpawnInterval;
 			let storageInfo = '';
-			if (room.storage) storageInfo = '<' + room.storage.store[RESOURCE_ENERGY].toString() + '> ';
+			if (room.storage)
+				storageInfo = '<' + room.storage.store[RESOURCE_ENERGY].toString() + '> ';
 			const energy: string = 'NRG: ' + room.energyAvailable + '/' + room.energyCapacityAvailable + '(' + (room.energyAvailable / room.energyCapacityAvailable * 100).toFixed(0) + '%) ';
 			if (tickInterval !== 0 && tickCount % tickInterval === 0) {
 				console.log(room.link() + energy + storageInfo + ' Tick: ' + tickCount);
 				console.log(room.link() + `H: ${harvesters.length}, F: ${fillers.length}/${fillerTarget}, U: ${upgraders.length}/${upgraderTarget}, B: ${builders.length}/${builderTarget}`);
 			}
-		}
-	})
+
+			if (room.controller.level >= 1) visualRCProgress(room.controller);
+		} //! end of if (room.controller && room.controller.my) {}
+
+	}) //! end of _.forEach(Game.rooms, room => {}) loop
+
 	tickCount++;
-});
-//!
-//! END OF GAME LOOP
-//!
 
-
-
-//?
-//? FUNCTION DECLARATIONS
-//?
-
+}); //! End of entire main loop (wrapped in ErrorMapper)

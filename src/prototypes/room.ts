@@ -424,7 +424,7 @@ Room.prototype.initRoom = function () {
 
 	if (!this.memory.containers) this.memory.containers = { sourceOne: '', sourceTwo: '', controller: '', mineral: ''};
 	if (!this.memory.data) this.memory.data = { controllerLevel: 0, numCSites: 0, sourceData: { source: [], container: [], lastAssigned: 0 } };
-	if (!this.memory.settings) this.memory.settings = { visualSettings: {}, flags: {}, repairSettings: { walls: false, ramparts: false, roads: true, others: true, wallLimit: 10, rampartLimit: 10 }};
+	if (!this.memory.settings) this.memory.settings = { visualSettings: { progressInfo: {alignment: 'left', xOffset: 1, yOffsetFactor: 0.6,  stroke: '#000000', fontSize: 0.6, color: '' } }, flags: {}, repairSettings: { walls: false, ramparts: false, roads: true, others: true, wallLimit: 10, rampartLimit: 10 }};
 
 }
 
