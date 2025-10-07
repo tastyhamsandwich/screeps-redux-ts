@@ -43,9 +43,12 @@ declare global {
 		data: { [key: string]: any };
 		stats: { [key: string]: number | string };
 		availableCreeps: string[];
-		outpostOfRoom?: RoomName;
-		outposts: { [key: string]: any };
+		outposts: { list: {[key: string]: OutpostData };
+					array: string[];
+					reserverLastAssigned: number;
+		 		};
 		quotas: { [key: string]: number };
+		hostColony?: string;
 		//orderQueue: WorkOrder[]
 	}
 
@@ -117,6 +120,12 @@ declare global {
 
 	}
 
+	interface OutpostData {
+		name: string,
+		controllerFlag: string,
+		sourceIDs: Id<Source>[],
+		containerIDs: Id<StructureContainer>[],
+	}
 	interface RepairSettings {
 		walls: boolean;
 		ramparts: boolean;
@@ -124,6 +133,18 @@ declare global {
 		others: boolean;
 		wallLimit: number;
 		rampartLimit: number;
+		towerSettings: TowerRepairSettings;
+	}
+
+	interface TowerRepairSettings {
+		creeps: boolean;
+		walls: boolean;
+		ramparts: boolean;
+		roads: boolean;
+		others: boolean;
+		wallLimit: number;
+		rampartLimit: number;
+		maxRange: number;
 	}
 	interface VisualSettings {
 		spawnInfo?: SpawnInfoSettings;
@@ -248,8 +269,44 @@ export const loop = ErrorMapper.wrapLoop(() => {
 
 			new RoomManager(room.name);
 
-			if (room.controller.level !== room.memory.data.controllerLevel)
+			if (room.controller.level !== room.memory.data.controllerLevel) {
+				const newLevel = room.controller.level;
 				room.memory.data.controllerLevel = room.controller.level;
+
+				switch (newLevel) {
+					case 1:
+						//# Handle creation of initial containers and roads
+						break;
+					case 2:
+						//# Handle creation of first 5 extensions
+						break;
+					case 3:
+						//# Handle creation of next 5 extensions, first tower, and potential transition to remote mining
+						rMem.quotas.reserver = 1;
+						rMem.quotas.remoteharvester = 2;
+						rMem.quotas.remotebodyguard = 1;
+						rMem.quotas.remoteporter = 2;
+						break;
+					case 4:
+						//# Handle creation of storage and next 10 extensions,
+						break;
+					case 5:
+						//# Handle creation of next 10 extensions, 2 links, and 2nd tower
+						break;
+					case 6:
+						//# Handle creation of terminal, first 3 labs, mineral extarctor, third link, and next 10 extensions
+						break;
+					case 7:
+						//# Handle creation of factory, next 3 labs, third tower, fourth link, next 10 extensions (which now hold 100 each), and second spawn
+						break;
+					case 8:
+						//# Handle creation of nuker, final 4 labs, powerSpawn, observer, 3 more towers, final 2 links, third spawn, and final 10 extensions (which now all hold 200 each)
+						break;
+					default:
+						break;
+				}
+			}
+
 
 
 			// pull creep role caps from room memory, or set to default value if none are set
@@ -258,6 +315,7 @@ export const loop = ErrorMapper.wrapLoop(() => {
 			let upgraderTarget: number = _.get(room.memory, ['quotas', 'upgraders'], 2);
 			let builderTarget: number = _.get(room.memory, ['quotas', 'builders'], 2);
 			let repairerTarget: number = _.get(room.memory, ['quotas', 'repairers'], 0);
+			let reserverTarget: number = _.get(room.memory, ['quotas', 'reservers', 1]);
 			let runnerTarget: number = _.get(room.memory, ['quotas', 'runners'], 2);
 
 			// pull current amount of creeps alive by RFQ (Role For Quota)
@@ -269,6 +327,7 @@ export const loop = ErrorMapper.wrapLoop(() => {
 			let upgraders: Creep[] = _.filter(Game.creeps, (creep) => (creep.memory.RFQ == 'upgrader' || creep.memory.role == 'upgrader') && creep.memory.home == roomName);
 			let builders: Creep[] = _.filter(Game.creeps, (creep) => (creep.memory.RFQ == 'builder' || creep.memory.role == 'builder') && creep.memory.home == roomName);
 			let repairers: Creep[] = _.filter(Game.creeps, (creep) => (creep.memory.RFQ == 'repairer' || creep.memory.role == 'repairer') && creep.memory.home == roomName);
+			let reservers: Creep[] = _.filter(Game.creeps, (creep) => (creep.memory.RFQ == 'reserver' || creep.memory.role == 'reserver') && creep.memory.home == roomName);
 			let runners: Creep[] = _.filter(Game.creeps, (creep) => (creep.memory.RFQ == 'runner' || creep.memory.role == 'runner') && creep.memory.home == roomName);
 
 			const spawns = room.find(FIND_MY_STRUCTURES, {filter: (i) => i.structureType === STRUCTURE_SPAWN });
@@ -308,12 +367,12 @@ export const loop = ErrorMapper.wrapLoop(() => {
 								result = spawn.spawnCreep(body, name, { memory: { role: 'harvester', RFQ: 'harvester', home: room.name, room: room.name, working: false, disable: false, rally: 'none', source: sourceID, bucket: containerID } });
 							}
 							if (result === OK) {
-								console.log(`${spawn.name} spawning new harvester ${name} in ${room.name}, assigned to source #${lastHarvesterAssigned + 1}`);
+								console.log(`${spawn.name}: Spawning new Harvester ${name} in ${room.name}, assigned to source #${lastHarvesterAssigned + 1}`);
 								lastHarvesterAssigned = (lastHarvesterAssigned + 1) % 2;
 								spawn.room.memory.data.lastHarvesterAssigned = lastHarvesterAssigned;
 							}
 							else
-								console.log(`${spawn.name} failed to spawn harvester: ${result}`);
+								console.log(`${spawn.name}: Failed to spawn Harvester: ${result}`);
 						}
 						//# Spawn Fillers
 						else if (fillers.length < fillerTarget) {
@@ -327,9 +386,9 @@ export const loop = ErrorMapper.wrapLoop(() => {
 								result = spawn.spawnCreep(body, name, { memory: { role: 'filler', RFQ: 'filler', home: room.name, room: room.name, working: false, disable: false, rally: 'none' } });
 							}
 							if (result === OK)
-								console.log(`${spawn.name} spawning new filler ${name} in ${room.name}`);
+								console.log(`${spawn.name}: Spawning new Filler ${name} in ${room.name}`);
 							else
-								console.log(`${spawn.name} failed to spawn filler: ${result}`);
+								console.log(`${spawn.name}: Failed to spawn Filler: ${result}`);
 						}
 						//# Spawn Upgraders
 						else if (upgraders.length < upgraderTarget) {
@@ -343,9 +402,9 @@ export const loop = ErrorMapper.wrapLoop(() => {
 								result = spawn.spawnCreep(body, name, { memory: { role: 'upgrader', RFQ: 'upgrader', home: room.name, room: room.name, working: false, disable: false, rally: 'none' } });
 							}
 							if (result === OK)
-								console.log(`${spawn.name} spawning new upgrader ${name} in ${room.name}`);
+								console.log(`${spawn.name}: Spawning new Upgrader ${name} in ${room.name}`);
 							else
-								console.log(`${spawn.name} failed to spawn upgrader: ${result}`);
+								console.log(`${spawn.name}: Failed to spawn Upgrader: ${result}`);
 						}
 						//# Spawn Builders
 						else if (builders.length < builderTarget)  {
@@ -359,9 +418,9 @@ export const loop = ErrorMapper.wrapLoop(() => {
 								result = spawn.spawnCreep(body, name, { memory: { role: 'builder', RFQ: 'builder', home: room.name, room: room.name, working: false, disable: false, rally: 'none' } });
 							}
 							if (result === OK)
-								console.log(`${spawn.name} spawning new builder ${name} in ${room.name}`);
+								console.log(`${spawn.name}: Spawning new Builder ${name} in ${room.name}`);
 							else
-								console.log(`${spawn.name} failed to spawn builder: ${result}`);
+								console.log(`${spawn.name}: Failed to spawn Builder: ${result}`);
 						}
 						//# Spawn Repairers
 						else if (repairers.length < repairerTarget) {
@@ -375,9 +434,25 @@ export const loop = ErrorMapper.wrapLoop(() => {
 								result = spawn.spawnCreep(body, name, { memory: { role: 'repairer', RFQ: 'repairer', home: room.name, room: room.name, working: false, disable: false, rally: 'none' } });
 							}
 							if (result === OK)
-								console.log(`${spawn.name} spawning new repairer ${name} in ${room.name}`);
+								console.log(`${spawn.name}: Spawning new Repairer ${name} in ${room.name}`);
 							else
-								console.log(`${spawn.name} failed to spawn repairer: ${result}`);
+								console.log(`${spawn.name}: Failed to spawn Repairer: ${result}`);
+						}
+
+						else if (spawn.room.energyCapacityAvailable >= 800 && reservers.length < reserverTarget) {
+							const body = spawn.determineBodyParts('reserver', spawn.room.energyCapacityAvailable);
+							let countMod = 1;
+							let name = `Col${1}_Rsv${reservers.length + countMod}`;
+							let result = spawn.spawnCreep(body, name, { memory: { role: 'reserver', RFQ: 'reserver', home: room.name, room: room.name, working: false, disable: false, rally: 'none' } });
+							while (result === ERR_NAME_EXISTS) {
+								countMod++;
+								name = `Col${1}_Rsv${reservers.length + countMod}`;
+								result = spawn.spawnCreep(body, name, { memory: { role: 'reserver', RFQ: 'reserver', home: room.name, room: room.name, working: false, disable: false, rally: 'none' } });
+							}
+							if (result === OK)
+								console.log(`${spawn.name}: Spawning new Reserver ${name} in ${room.name}`);
+							else
+								console.log(`${spawn.name}: Failed to spawn Reserver: ${result}`);
 						}
 					}
 				});

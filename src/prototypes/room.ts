@@ -215,11 +215,11 @@ Room.prototype.cacheObjects = function () {
 		if (storageArray.length) {
 			this.memory.objects.containers = storageArray;
 			let updateInfo = '';
-			if (this.memory.outpostOfRoom) {
-				const hostRoom = this.memory.outpostOfRoom;
-				this.memory.outposts.registry[hostRoom].containers = storageArray;
-				Memory.colonies.registry[hostRoom].outposts[this.name].containers = storageArray;
-				updateInfo = "\n>>> NOTICE: Room is an outpost of a main colony. Updated Colonies registry info and global room memory with new container IDs.";
+			if (this.memory.hostColony) {
+				const hostRoom = this.memory.hostColony;
+				this.memory.outposts.list[hostRoom].containerIDs = storageArray;
+				this.memory.objects.containers = storageArray;
+				updateInfo = "\n>>> NOTICE: Room is an outpost of a main colony. Updated outpost info with new container IDs.";
 			}
 			if (storageArray.length > 1)
 				log('Cached ' + storageArray.length + ' containers.' + updateInfo, this);
@@ -423,23 +423,32 @@ Room.prototype.initRoom = function () {
 		repairers: 1,
 	};
 
+	const visualSettings: VisualSettings = { progressInfo: { alignment: 'left', xOffset: 1, yOffsetFactor: 0.6, stroke: '#000000', fontSize: 0.6, color: '' } };
+	const towerSettings: TowerRepairSettings = { creeps: true, walls: false, ramparts: false, roads: false, others: false, wallLimit: 10, rampartLimit: 10, maxRange: 10 }
+	const repairSettings: RepairSettings = { walls: false, ramparts: false, roads: true, others: true, wallLimit: 10, rampartLimit: 10, towerSettings: towerSettings };
+
 	if (!this.memory.containers) this.memory.containers = { sourceOne: '', sourceTwo: '', controller: '', mineral: ''};
 	if (!this.memory.data) this.memory.data = { controllerLevel: 0, numCSites: 0, sourceData: { source: [], container: [], lastAssigned: 0 } };
-	if (!this.memory.settings) this.memory.settings = { visualSettings: { progressInfo: {alignment: 'left', xOffset: 1, yOffsetFactor: 0.6,  stroke: '#000000', fontSize: 0.6, color: '' } }, flags: {}, repairSettings: { walls: false, ramparts: false, roads: true, others: true, wallLimit: 10, rampartLimit: 10 }};
-	if (!this.memory.outposts) this.memory.outposts = {};
+	if (!this.memory.settings) this.memory.settings = { visualSettings: visualSettings, repairSettings: repairSettings,	flags: {} };
+	if (!this.memory.outposts) this.memory.outposts = { list: {}, array: [], reserverLastAssigned: 0};
 }
 
 Room.prototype.initOutpost = function (roomName): void {
-	if (this.memory.outposts === undefined) this.memory.outposts = {};
+	if (this.memory.outposts === undefined) this.memory.outposts = { list: {}, array: [], reserverLastAssigned: 0};
+
+	const sourceIDs: Id<Source>[] = [];
+	const containerIDs: Id<StructureContainer>[] = [];
 
 	const outpostMemoryObject = {
 		name: roomName,
 		controllerFlag: roomName,
-		sourceIDs: [],
-		containerIDs: [],
+		sourceIDs: sourceIDs,
+		containerIDs: containerIDs,
 	}
 
-	this.memory.outposts[roomName] = outpostMemoryObject;
+	Game.rooms[roomName].memory.hostColony = this.name;
+	this.memory.outposts.list[roomName] = outpostMemoryObject;
+	this.memory.outposts.array.push(roomName);
 }
 Room.prototype.initFlags = function () {
 

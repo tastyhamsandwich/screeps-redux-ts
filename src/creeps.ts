@@ -315,6 +315,52 @@ export const Repairer = {
 	}
 }
 
+export const Reserver = {
+	run: (creep: Creep) => {
+		const room: Room = creep.room;
+		const cMem: CreepMemory = creep.memory;
+		const rMem: RoomMemory = Game.rooms[cMem.home].memory;
+		const pos: RoomPosition = creep.pos;
+
+		if (cMem.disable === undefined) cMem.disable = false;
+		if (cMem.rally === undefined) cMem.rally = 'none';
+
+		//# If no targetOutpost pre-defined, assign one to self based on reserverLastAssigned index in room's outposts memory
+		//# Increment RLA index and wrap to zero if at length value of outposts array
+		if (cMem.targetOutpost === undefined) {
+			cMem.targetOutpost = rMem.outposts.array[rMem.outposts.reserverLastAssigned];
+			rMem.outposts.reserverLastAssigned = (rMem.outposts.reserverLastAssigned + 1) % rMem.outposts.array.length;
+		}
+		//# If creep is at home room, has no rally point, and has a targetOutpost in memory, set rally point to target outpost flag
+		if (creep.room.name === cMem.home && cMem.rally === 'none' && cMem.targetOutpost !== undefined)
+			cMem.rally = rMem.outposts.list[cMem.targetOutpost].controllerFlag;
+
+		if (cMem.disable === true) {
+			//! Disabled AI alert
+			aiAlert(creep);
+		} else {
+			if (cMem.rally === 'none') {
+				//# Once in outpost room and rally point is reached, find controller and start reserving it
+				if (creep.room.name === cMem.targetOutpost) {
+					if (room.controller) {
+						if (pos.isNearTo(room.controller)) {
+							const result = creep.reserveController(room.controller);
+
+							if (result === OK)
+								creep.say('🔁');
+							else
+								log(`${creep.name}: Error reserving controller: ${result}`);
+						}
+					}
+				}
+			} else {
+				//! Override default behavior and navigate to nav point
+				navRallyPoint(creep);
+			}
+		}
+	}
+}
+
 /**
  * A creep whose role it is to locate energy and spend it upgrading the room controller level. Requires standard worker parts (WORK, MOVE, and CARRY) to be effective.
  */
