@@ -12,9 +12,9 @@ declare global {
 	}
 }
 
-RoomPosition.prototype.getNearbyPositions = function(): RoomPosition[] {
+RoomPosition.prototype.getNearbyPositions = function (): RoomPosition[] {
 
-  const positions: RoomPosition[] = [];
+	const positions: RoomPosition[] = [];
 	let startX = this.x - 1 || 1;
 	let startY = this.y - 1 || 1;
 
@@ -27,20 +27,20 @@ RoomPosition.prototype.getNearbyPositions = function(): RoomPosition[] {
 	return positions;
 }
 
-RoomPosition.prototype.getWalkablePositions = function(): RoomPosition[] {
+RoomPosition.prototype.getWalkablePositions = function (): RoomPosition[] {
 
-  let nearbyPositions: RoomPosition[] = this.getNearbyPositions();
-  const terrain = Game.map.getRoomTerrain(this.roomName);
+	let nearbyPositions: RoomPosition[] = this.getNearbyPositions();
+	const terrain = Game.map.getRoomTerrain(this.roomName);
 
-  return _.filter(nearbyPositions, function(pos: RoomPosition) {
-    return terrain.get(pos.x, pos.y) !== TERRAIN_MASK_WALL;
-  });
+	return _.filter(nearbyPositions, function (pos: RoomPosition) {
+		return terrain.get(pos.x, pos.y) !== TERRAIN_MASK_WALL;
+	});
 }
-RoomPosition.prototype.getOpenPositions = function(): RoomPosition[] {
+RoomPosition.prototype.getOpenPositions = function (): RoomPosition[] {
 
-  const walkablePositions = this.getWalkablePositions();
+	const walkablePositions = this.getWalkablePositions();
 
-	let freePositions = _.filter(walkablePositions, function(pos) {
+	let freePositions = _.filter(walkablePositions, function (pos) {
 		return !pos.lookFor(LOOK_CREEPS).length;
 	});
 
@@ -53,5 +53,5 @@ RoomPosition.prototype.getNumOpenPositions = function (): number {
 }
 
 RoomPosition.prototype.link = function (): string {
-  return `[<a href="#!/room/${Game.shard.name}/${this.roomName}">${this.roomName}${this.x},${this.y}</a>]:`;
+	return `[<a href="#!/room/${Game.shard.name}/${this.roomName}">${this.roomName}${this.x},${this.y}</a>]:`;
 };

@@ -10,6 +10,8 @@ declare global {
 		assignHarvestSource(simpleAssignment: boolean, returnID: boolean): Source | Id<Source>;
 		harvestEnergy(): void;
 		unloadEnergy(bucketID?: Id<AnyStoreStructure>): void;
+		cacheLocalObjects(): void;
+		cacheLocalOutpost(): void;
 		executeDirective(): boolean;
 		hasWorked: boolean;
 	}
@@ -350,6 +352,38 @@ if (typeof Creep !== 'undefined') {
 		}
 	}
 
+	Creep.prototype.cacheLocalObjects = function (): void {
+		this.room.cacheObjects();
+	}
+
+	Creep.prototype.cacheLocalOutpost = function (): void {
+
+		this.room.cacheObjects();
+		const newOutpost = Game.rooms[this.memory.home].memory.outposts[this.room.name];
+
+		if (newOutpost === undefined)
+			Game.rooms[this.memory.home].initOutpost(this.room.name);
+
+		newOutpost.sourceIDs = this.room.memory.objects.sources;
+
+		if (this.room.memory.objects.containers.length)
+			newOutpost.containerIDs = this.room.memory.objects.containers;
+
+		let controllerPos;
+		if (this.room.controller)
+			controllerPos = this.room.controller.pos;
+
+		const controllerFlag = this.room.find(FIND_FLAGS, { filter: { name: this.room.name }});
+
+		if (!controllerFlag.length) {
+			this.room.createFlag({pos: controllerPos}, this.room.name, COLOR_BLUE, COLOR_WHITE);
+			newOutpost.controllerFlag = this.room.name;
+		} else {
+			newOutpost.controllerFlag = controllerFlag[0].name;
+		}
+
+
+	}
 
 	Creep.prototype.executeDirective = function (): boolean {
 		// TODO: Implement directive execution logic here

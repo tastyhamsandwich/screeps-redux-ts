@@ -7,6 +7,7 @@ declare global {
 		link(): string;
 		cacheObjects(): void;
 		newSpawnQueue(spawnOrder: SpawnOrder): void;
+		initOutpost(roomName: string): void;
 		initRoom(): void;
 		initFlags(): void;
 		roomSpawnQueue: SpawnOrder[];
@@ -425,9 +426,21 @@ Room.prototype.initRoom = function () {
 	if (!this.memory.containers) this.memory.containers = { sourceOne: '', sourceTwo: '', controller: '', mineral: ''};
 	if (!this.memory.data) this.memory.data = { controllerLevel: 0, numCSites: 0, sourceData: { source: [], container: [], lastAssigned: 0 } };
 	if (!this.memory.settings) this.memory.settings = { visualSettings: { progressInfo: {alignment: 'left', xOffset: 1, yOffsetFactor: 0.6,  stroke: '#000000', fontSize: 0.6, color: '' } }, flags: {}, repairSettings: { walls: false, ramparts: false, roads: true, others: true, wallLimit: 10, rampartLimit: 10 }};
-
+	if (!this.memory.outposts) this.memory.outposts = {};
 }
 
+Room.prototype.initOutpost = function (roomName): void {
+	if (this.memory.outposts === undefined) this.memory.outposts = {};
+
+	const outpostMemoryObject = {
+		name: roomName,
+		controllerFlag: roomName,
+		sourceIDs: [],
+		containerIDs: [],
+	}
+
+	this.memory.outposts[roomName] = outpostMemoryObject;
+}
 Room.prototype.initFlags = function () {
 
 	if (!this.memory.settings.flags)

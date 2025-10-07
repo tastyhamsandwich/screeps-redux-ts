@@ -38,7 +38,7 @@ export const pathing: { [key: string]: MoveToOpts } = {
 	},
 	remotePorterPathing: {
 		visualizePathStyle: { stroke: "#880088", opacity: 0.3, lineStyle: "dotted" },
-		reusePath: cSet.remoteporter.reusePathValue,
+		reusePath: cSet.remoterunner.reusePathValue,
 		ignoreCreeps: false //cSet.remoteporter.ignoreCreeps
 	},
 	repairerPathing: {
