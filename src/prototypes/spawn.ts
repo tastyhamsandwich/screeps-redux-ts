@@ -37,82 +37,90 @@ StructureSpawn.prototype.determineBodyParts = function (role: string, maxEnergy?
 				}
       }
       return totalBodyParts;
-    case 'upgrader':
-    case 'builder':
-    case 'repairer':
+	case 'upgrader':
+	case 'builder':
+	case 'repairer':
 
-			const workParts: BodyPartConstant[] = [];
-			const carryParts: BodyPartConstant[] = [];
-			const moveParts: BodyPartConstant[] = [];
+		const workParts: BodyPartConstant[] = [];
+		const carryParts: BodyPartConstant[] = [];
+		const moveParts: BodyPartConstant[] = [];
 
-			let remainingEnergy = maxEnergy;
+		let remainingEnergy = maxEnergy;
 
-			// Start with one of each (minimum requirement)
+		// Start with one of each (minimum requirement)
+		workParts.push(WORK);
+		remainingEnergy -= 100;
+		carryParts.push(CARRY);
+		remainingEnergy -= 50;
+		moveParts.push(MOVE);
+		remainingEnergy -= 50;
+
+		// Budget out remaining energy, 50% for WORK, 25% for CARRY/MOVE
+		let remainingWorkBudget = remainingEnergy / 2;
+		let remainingMoveBudget = remainingEnergy / 4;
+		let remainingCarryBudget = remainingEnergy / 4;
+
+		// Add WORK parts to array while there is still energy in the WORK budget
+		while (remainingWorkBudget >= 100) {
 			workParts.push(WORK);
-			remainingEnergy -= 100;
+			remainingWorkBudget -= 100;
+		}
+
+		// Any leftover energy is carried over into the CARRY budget
+		remainingCarryBudget += remainingWorkBudget;
+
+		// Add CARRY parts to array while there's energy in budget
+		while (remainingCarryBudget >= 50) {
 			carryParts.push(CARRY);
-			remainingEnergy -= 50;
+			remainingCarryBudget -= 50;
+		}
+
+		// Carry over leftover energy to MOVE budget
+		remainingMoveBudget += remainingCarryBudget;
+
+		// Add MOVE parts to array within budget again
+		while (remainingMoveBudget >= 50) {
 			moveParts.push(MOVE);
-			remainingEnergy -= 50;
+			remainingMoveBudget -= 50;
+		}
 
-			// Budget out remaining energy, 50% for WORK, 25% for CARRY/MOVE
-			let remainingWorkBudget = remainingEnergy / 2;
-			let remainingMoveBudget = remainingEnergy / 4;
-			let remainingCarryBudget = remainingEnergy / 4;
+		// Concatenate all 3 arrays into one array
+		const partialParts = workParts.concat(carryParts);
+		const bodyParts = partialParts.concat(moveParts);
 
-			// Add WORK parts to array while there is still energy in the WORK budget
-			while (remainingWorkBudget >= 100) {
-				workParts.push(WORK);
-				remainingWorkBudget -= 100;
-			}
-
-			// Any leftover energy is carried over into the CARRY budget
-			remainingCarryBudget += remainingWorkBudget;
-
-			// Add CARRY parts to array while there's energy in budget
-			while (remainingCarryBudget >= 50) {
-				carryParts.push(CARRY);
-				remainingCarryBudget -= 50;
-			}
-
-			// Carry over leftover energy to MOVE budget
-			remainingMoveBudget += remainingCarryBudget;
-
-			// Add MOVE parts to array within budget again
-			while (remainingMoveBudget >= 50) {
-				moveParts.push(MOVE);
-				remainingMoveBudget -= 50;
-			}
-
-			// Concatenate all 3 arrays into one array
-			const partialParts = workParts.concat(carryParts);
-			const bodyParts = partialParts.concat(moveParts);
-
-			// Log cost & return array
-			log(`Cost for '${role}' with ${bodyParts} is ${calcBodyCost(bodyParts)}`);
-			return bodyParts;
+		// Log cost & return array
+		log(`Cost for '${role}' with ${bodyParts} is ${calcBodyCost(bodyParts)}`);
+		return bodyParts;
 
     case 'defender':
-			return [];
+		return [];
     case 'filler': {
-			let maxCost = maxEnergy;
-			const carryParts: BodyPartConstant[] = [];
-			const moveParts: BodyPartConstant[] = [];
-			// While there's still at least 50 energy available, iterate loop
-			// Check that we aren't at less than 50 after the first push to ensure we don't break budget
-			while (maxCost >= 50) {
-				carryParts.push(CARRY);
-				maxCost -= 50;
-				if (maxCost < 50) break;
-				moveParts.push(MOVE);
-				maxCost -= 50;
-			}
 
-			// Concatenate the two arrays into one
-			const bodyParts: BodyPartConstant[] = carryParts.concat(moveParts);
+		// Limit fillers to max cost of 300, effectively 4 CARRY and 2 MOVE parts
+		let maxCost = maxEnergy;
+		if (maxEnergy >= 300)
+			maxCost = 300;
 
-			// Log cost & return
-			log(`Cost for '${role}' with ${bodyParts} is ${calcBodyCost(bodyParts)}`);
+		const carryParts: BodyPartConstant[] = [];
+		const moveParts: BodyPartConstant[] = [];
+		// While there's still at least 50 energy available, iterate loop
+		// Check that we aren't at less than 50 after the first push to ensure we don't break budget
+		while (maxCost >= 50) {
+			carryParts.push(CARRY);
+			maxCost -= 50;
+			if (maxCost < 50) break;
+			moveParts.push(MOVE);
+			maxCost -= 50;
+			if (maxCost < 50) break;
+			carryParts.push(CARRY);
+			maxCost -= 50;
+		}
+
+		// Concatenate the two arrays into one
+		const bodyParts: BodyPartConstant[] = carryParts.concat(moveParts);
+
+		// Log cost & return
+		log(`Cost for '${role}' with ${bodyParts} is ${calcBodyCost(bodyParts)}`);
       return bodyParts;
 		}
     case 'porter':
