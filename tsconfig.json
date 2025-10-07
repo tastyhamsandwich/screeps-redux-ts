@@ -1,0 +1,25 @@
+{
+  "compilerOptions": {
+    "module": "esnext",
+    "lib": ["es2018"],
+    "target": "es2018",
+    "moduleResolution": "Node",
+    "outDir": "dist",
+    "baseUrl": "src/",
+    "sourceMap": false,
+    "strict": true,
+    "experimentalDecorators": true,
+    "noImplicitReturns": true,
+    "noImplicitAny": false,
+    "allowSyntheticDefaultImports": true,
+    "allowUnreachableCode": false
+  },
+  "exclude": [
+    "node_modules"
+  ],
+	"paths": {
+		"@globals": ["./src/utils/globalFuncs"],
+		"@protos/*": ["./src/prototypes/*"],
+		"@managers/*": ["./src/managers/*"],
+	}
+}
