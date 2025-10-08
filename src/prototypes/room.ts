@@ -84,7 +84,7 @@ Room.prototype.newSpawnQueue = function(role: any, critical: boolean = false, ma
 Room.prototype.cacheObjects = function () {
 
 	// declare storage array for objects to cache
-	let storageArray: Array<Id<any>> = [];
+	let storageArray: Id<any>[] = [];
 
 	// search room for each object type
 	const sources = this.find(FIND_SOURCES);
@@ -137,7 +137,7 @@ Room.prototype.cacheObjects = function () {
 		for (let i = 0; i < minerals.length; i++)
 			storageArray.push(minerals[i].id);
 		if (storageArray.length) {
-			this.memory.objects.mineral = storageArray[0];
+			this.memory.objects.mineral = [storageArray[0]];
 			if (storageArray.length >= 1)
 				log('Cached 1 mineral.', this);
 		}
@@ -148,7 +148,7 @@ Room.prototype.cacheObjects = function () {
 		for (let i = 0; i < deposits.length; i++)
 			storageArray.push(deposits[i].id);
 		if (storageArray.length) {
-			this.memory.objects.deposit = storageArray[0];
+			this.memory.objects.deposit = [storageArray[0]];
 			if (storageArray.length > 1)
 				log('Cached ' + storageArray.length + ' deposits.', this);
 			else
@@ -161,7 +161,10 @@ Room.prototype.cacheObjects = function () {
 		for (let i = 0; i < controller.length; i++)
 			storageArray.push(controller[i].id);
 		if (storageArray.length) {
-			this.memory.objects.controller = storageArray[0];
+			this.memory.objects.controller = [storageArray[0]];
+			if (this.memory.hostColony !== undefined) {
+				Game.rooms[this.memory.hostColony].memory.outposts.list[this.name].controllerID = storageArray[0];
+			}
 			if (storageArray.length >= 1)
 				log('Cached ' + storageArray.length + ' controllers.', this);
 			else
@@ -233,7 +236,7 @@ Room.prototype.cacheObjects = function () {
 		for (let i = 0; i < storage.length; i++)
 			storageArray.push(storage[i].id);
 		if (storageArray.length) {
-			this.memory.objects.storage = storageArray[0];
+			this.memory.objects.storage = [storageArray[0]];
 			if (storageArray.length >= 1)
 				log('Cached 1 storage.', this);
 		}
@@ -270,7 +273,7 @@ Room.prototype.cacheObjects = function () {
 		for (let i = 0; i < extractor.length; i++)
 			storageArray.push(extractor[i].id);
 		if (storageArray.length) {
-			this.memory.objects.extractor = storageArray[0];
+			this.memory.objects.extractor = [storageArray[0]];
 			if (storageArray.length >= 1)
 				log('Cached 1 extractor.', this);
 		}
@@ -294,7 +297,7 @@ Room.prototype.cacheObjects = function () {
 		for (let i = 0; i < terminal.length; i++)
 			storageArray.push(terminal[i].id);
 		if (storageArray.length) {
-			this.memory.objects.terminal = storageArray[0];
+			this.memory.objects.terminal = [storageArray[0]];
 			if (storageArray.length >= 1)
 				log('Cached 1 terminal.', this);
 		}
@@ -305,7 +308,7 @@ Room.prototype.cacheObjects = function () {
 		for (let i = 0; i < factory.length; i++)
 			storageArray.push(factory[i].id);
 		if (storageArray.length) {
-			this.memory.objects.factory = storageArray[0];
+			this.memory.objects.factory = [storageArray[0]];
 			if (storageArray.length >= 1)
 				log('Cached 1 factory.', this);
 		}
@@ -316,7 +319,7 @@ Room.prototype.cacheObjects = function () {
 		for (let i = 0; i < observer.length; i++)
 			storageArray.push(observer[i].id);
 		if (storageArray.length) {
-			this.memory.objects.observer = storageArray[0];
+			this.memory.objects.observer = [storageArray[0]];
 			if (storageArray.length >= 1)
 				log('Cached 1 observer.', this);
 		}
@@ -327,7 +330,7 @@ Room.prototype.cacheObjects = function () {
 		for (let i = 0; i < powerspawn.length; i++)
 			storageArray.push(powerspawn[i].id);
 		if (storageArray.length) {
-			this.memory.objects.powerSpawn = storageArray[0];
+			this.memory.objects.powerSpawn = [storageArray[0]];
 			if (storageArray.length >= 1)
 				log('Cached 1 power spawn.', this);
 		}
@@ -338,8 +341,7 @@ Room.prototype.cacheObjects = function () {
 		for (let i = 0; i < nuker.length; i++)
 			storageArray.push(nuker[i].id);
 		if (storageArray.length) {
-			this.memory.objects.nuker = storageArray[0];
-			if (storageArray.length >= 1)
+			this.memory.objects.nuker = [storageArray[0]];
 				log('Cached 1 nuker.', this);
 		}
 		storageArray = [];
@@ -424,13 +426,22 @@ Room.prototype.initRoom = function () {
 	};
 
 	const visualSettings: VisualSettings = { progressInfo: { alignment: 'left', xOffset: 1, yOffsetFactor: 0.6, stroke: '#000000', fontSize: 0.6, color: '' } };
-	const towerSettings: TowerRepairSettings = { creeps: true, walls: false, ramparts: false, roads: false, others: false, wallLimit: 10, rampartLimit: 10, maxRange: 10 }
+	const towerSettings: TowerRepairSettings = { creeps: true, walls: false, ramparts: false, roads: false, others: false, wallLimit: 10, rampartLimit: 10, maxRange: 10 };
 	const repairSettings: RepairSettings = { walls: false, ramparts: false, roads: true, others: true, wallLimit: 10, rampartLimit: 10, towerSettings: towerSettings };
+	const mineralsHarvested: MineralStats = { hydrogen: 0, oxygen: 0, utrium: 0, lemergium: 0, keanium: 0, zynthium: 0, catalyst: 0, ghodium: 0 };
+	const compoundStats: CompoundStats = { hydroxide: 0, zynthiumKeanite: 0, utriumLemergite: 0, utriumHydride: 0, utriumOxide: 0, keaniumHydride: 0, keaniumOxide: 0,
+		lemergiumHydride: 0, lemergiumOxide: 0, zynthiumHydride: 0, zynthiumOxide: 0, ghodiumHydride: 0, ghodiumOxide: 0, utriumAcid: 0, utriumAlkalide: 0, keaniumAcid: 0,
+		keaniumAlkalide: 0, lemergiumAcid: 0, lemergiumAlkalide: 0, zynthiumAcid: 0, zynthiumAlkalide: 0, ghodiumAcid: 0, ghodiumAlkalide: 0, catalyzedUtriumAcid: 0,
+		catalyzedUtriumAlkalide: 0, catalyzedKeaniumAcid: 0, catalyzedKeaniumAlkalide: 0, catalyzedLemergiumAcid: 0, catalyzedLemergiumAlkalide: 0, catalyzedZynthiumAcid: 0,
+		catalyzedZynthiumAlkalide: 0, catalyzedGhodiumAcid: 0, catalyzedGhodiumAlkalide: 0 };
+	const labStats: LabStats = { compoundsMade: compoundStats, creepsBoosted: 0, boostsUsed: compoundStats, energySpentBoosting: 0 };
 
 	if (!this.memory.containers) this.memory.containers = { sourceOne: '', sourceTwo: '', controller: '', mineral: ''};
 	if (!this.memory.data) this.memory.data = { controllerLevel: 0, numCSites: 0, sourceData: { source: [], container: [], lastAssigned: 0 } };
 	if (!this.memory.settings) this.memory.settings = { visualSettings: visualSettings, repairSettings: repairSettings,	flags: {} };
 	if (!this.memory.outposts) this.memory.outposts = { list: {}, array: [], reserverLastAssigned: 0};
+	if (!this.memory.stats) this.memory.stats = { energyHarvested: 0, controlPoints: 0, constructionPoints: 0, creepsSpawned: 0, creepPartsSpawned: 0,
+		mineralsHarvested: mineralsHarvested, controllerLevelReached: 0, npcInvadersKilled: 0, hostilePlayerCreepsKilled: 0, labStats: labStats };
 }
 
 Room.prototype.initOutpost = function (roomName): void {
@@ -438,12 +449,13 @@ Room.prototype.initOutpost = function (roomName): void {
 
 	const sourceIDs: Id<Source>[] = [];
 	const containerIDs: Id<StructureContainer>[] = [];
-
+	const controllerID: Id<StructureController> = Game.rooms[roomName].memory.objects.controller as Id<StructureController>;
 	const outpostMemoryObject = {
 		name: roomName,
 		controllerFlag: roomName,
 		sourceIDs: sourceIDs,
 		containerIDs: containerIDs,
+		controllerID: controllerID
 	}
 
 	Game.rooms[roomName].memory.hostColony = this.name;
