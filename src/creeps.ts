@@ -118,6 +118,7 @@ export const Harvester = {
 		if (cMem.disable === undefined) cMem.disable = false;
 		if (cMem.rally === undefined) cMem.rally = 'none';
 		if (cMem.returnEnergy === undefined) cMem.returnEnergy = false;
+		if (cMem.haveCalledDeathAction === undefined) cMem.haveCalledDeathAction = false;
 		if (!cMem.source) creep.assignHarvestSource('remote', true, false);
 
 		if (!cMem.disable) {
@@ -130,6 +131,10 @@ export const Harvester = {
 				if (creep.ticksToLive! <= 2) {
 					creep.unloadEnergy();
 					creep.say('☠️');
+					if (cMem.haveCalledDeathAction === false) {
+						Game.rooms[cMem.home].memory.outposts.numHarvesters--;
+						cMem.haveCalledDeathAction = true;
+					}
 				}
 
 				let source: Source;
@@ -228,7 +233,7 @@ export const Builder = {
 					creep.memory.working = true;
 
 				if (!creep.memory.working) {
-					if (room.storage) {
+					if (room.storage && room.storage.store.getUsedCapacity(RESOURCE_ENERGY) > (creep.store.getCapacity() + 1000)) {
 						if (creep.withdraw(room.storage, RESOURCE_ENERGY) === ERR_NOT_IN_RANGE)
 							creep.moveTo(room.storage, pathing.builderPathing);
 					} else {
@@ -301,7 +306,16 @@ export const Filler = {
 
 			} else {
 				if (creep.store.getUsedCapacity() === 0) {
-					const target = Game.getObjectById(cMem.pickup) as AnyStoreStructure;
+					let target;
+					if (room.storage && room.storage.store.getUsedCapacity(RESOURCE_ENERGY) >= creep.store.getCapacity())
+						target = room.storage;
+					else {
+						const containers: StructureContainer[] = room.find(FIND_STRUCTURES, { filter: function(i) { return i.structureType === STRUCTURE_CONTAINER }});
+						if (containers.length && containers.length > 1)
+							containers.sort((a,b) => b.store.getUsedCapacity(RESOURCE_ENERGY) - a.store.getUsedCapacity(RESOURCE_ENERGY));
+						target = containers[0];
+					}
+
 					if (target) {
 						if (creep.withdraw(target, RESOURCE_ENERGY) === ERR_NOT_IN_RANGE)
 							creep.moveTo(target, pathing.runnerPathing);
@@ -439,8 +453,8 @@ export const Reserver = {
 			cMem.controller = Game.rooms[cMem.home].memory.outposts.list[cMem.targetOutpost].controllerID;
 		}
 		//# If creep is at home room, has no rally point, and has a targetOutpost in memory, set rally point to target outpost flag
-		if (creep.room.name === cMem.home && cMem.rally === 'none' && cMem.targetOutpost !== undefined)
-			cMem.rally = rMem.outposts.list[cMem.targetOutpost].controllerFlag;
+		//if (creep.room.name === cMem.home && cMem.rally === 'none' && cMem.targetOutpost !== undefined)
+		//	cMem.rally = rMem.outposts.list[cMem.targetOutpost].controllerFlag;
 
 		if (cMem.disable === true) {
 			//! Disabled AI alert
@@ -448,8 +462,8 @@ export const Reserver = {
 		} else {
 			if (cMem.rally === 'none') {
 				//# Once in outpost room and rally point is reached, find controller and start reserving it
-				if (creep.room.name === cMem.targetOutpost) {
-					if (room.controller) {
+				if (cMem.targetOutpost !== undefined) {
+					if (room.name === cMem.targetOutpost && room.controller) {
 						if (pos.isNearTo(room.controller)) {
 							const result = creep.reserveController(room.controller);
 
@@ -457,7 +471,11 @@ export const Reserver = {
 								creep.say('🔁');
 							else
 								log(`${creep.name}: Error reserving controller: ${result}`);
+						} else {
+							creep.advMoveTo(room.controller, true, pathing.reserverPathing);
 						}
+					} else {
+						creep.advMoveTo(Game.rooms[cMem.targetOutpost].controller!.pos, true, pathing.reserverPathing);
 					}
 				}
 			} else {

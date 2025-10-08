@@ -1,5 +1,5 @@
 "use strict";
-export function roomDefense(room: Room) {
+export default function roomDefense(room: Room) {
 
 	// Get array of owned towers present in room
 	let towers: Array<StructureTower> = room.find(FIND_MY_STRUCTURES, { filter: { structureType: STRUCTURE_TOWER } });

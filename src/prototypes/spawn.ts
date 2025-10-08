@@ -46,19 +46,12 @@ StructureSpawn.prototype.determineBodyParts = function (role: string, maxEnergy?
 		const moveParts: BodyPartConstant[] = [];
 
 		let remainingEnergy = maxEnergy;
-
-		// Start with one of each (minimum requirement)
-		workParts.push(WORK);
-		remainingEnergy -= 100;
-		carryParts.push(CARRY);
-		remainingEnergy -= 50;
-		moveParts.push(MOVE);
-		remainingEnergy -= 50;
+		if (remainingEnergy >= 600) remainingEnergy = 600;
 
 		// Budget out remaining energy, 50% for WORK, 25% for CARRY/MOVE
-		let remainingWorkBudget = remainingEnergy / 2;
-		let remainingMoveBudget = remainingEnergy / 4;
-		let remainingCarryBudget = remainingEnergy / 4;
+		let remainingWorkBudget  = (remainingEnergy / 3) * 2;
+		let remainingMoveBudget  = (remainingEnergy / 6) * 2;
+		let remainingCarryBudget = (remainingEnergy / 6) * 2;
 
 		// Add WORK parts to array while there is still energy in the WORK budget
 		while (remainingWorkBudget >= 100) {

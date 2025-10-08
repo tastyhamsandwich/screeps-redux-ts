@@ -1,17 +1,36 @@
 import { log } from '../utils/globalFuncs';
 import OutpostSourceCounter from '../classes/OutpostSourceCounter';
 
+type SourceAssignmentUpdate = {
+	source: Id<Source> | false,
+	container: Id<StructureContainer> | false,
+	pathLengthToStorage: number | false,
+	pathToStorage: PathFinderPath | false,
+	creepAssigned: string | false,
+	creepDeathTick: number | false
+}
+
 declare global {
+
+	// PROTODEF: Room Prototype Extension
 	interface Room {
+		getSourcePositions(sourceID: string): RoomPosition[];
+		link(): string;
+		cacheObjects(): void;
+		newSpawnQueue(spawnOrder: SpawnOrder): void;
+		initOutpost(roomName: string): void;
+		initRoom(): void;
+		initFlags(): void;
+		updateSourceAssignment(roomToUpdate: string, updateObject: SourceAssignmentUpdate);
+		roomSpawnQueue: SpawnOrder[];
 		counter: OutpostSourceCounter;
 	}
 
 	var __outpostCounters: Map<string, OutpostSourceCounter>;
 }
 
-if (!global.__outpostCounters) {
+if (!global.__outpostCounters)
 	global.__outpostCounters = new Map();
-}
 
 Object.defineProperty(Room.prototype, "counter", {
 	get: function (this: Room): OutpostSourceCounter {
@@ -27,7 +46,7 @@ Object.defineProperty(Room.prototype, "counter", {
 
 Room.prototype.getSourcePositions = function (sourceID: string): RoomPosition[] {
 
-	const source = this.find(FIND_SOURCES, { filter: (s) => s.id === sourceID })[0];
+	const source = this.find(FIND_SOURCES, { filter: function(s) { return s.id === sourceID }})[0];
 	if (!source) return [];
 	const sourcePos: RoomPosition = source.pos;
 
@@ -55,7 +74,7 @@ Room.prototype.getSourcePositions = function (sourceID: string): RoomPosition[] 
 }
 
 Room.prototype.link = function(): string {
-	return `[<a href="#!/room/${Game.shard.name}/${this.name}">${this.name}</a>]: `;
+	return `<span color='red'>[<a href="#!/room/${Game.shard.name}/${this.name}">${this.name}</a></span>]: `;
 }
 
 
@@ -509,7 +528,20 @@ Room.prototype.initOutpost = function (roomName): void {
 		controllerFlag: roomName,
 		sourceIDs: sourceIDs,
 		containerIDs: containerIDs,
-		controllerID: controllerID
+		controllerID: controllerID,
+		sourceAssignmentMap: []
+	}
+
+	for (let source of sourceIDs) {
+		const sourceAssignment = {
+			source: source,
+			container: null,
+			pathLengthToStorage: null,
+			pathToStorage: null,
+			creepAssigned: null,
+			creepDeathTick: null,
+		};
+		this.memory.outposts.list[this.name].sourceAssignmentMap.push(sourceAssignment);
 	}
 
 	Game.rooms[roomName].memory.hostColony = this.name;
@@ -565,4 +597,25 @@ Room.prototype.initFlags = function () {
 
 	log('Room flags initialized: craneUpgrades(' + this.memory.settings.flags.craneUpgrades + ') centralStorageLogic(' + this.memory.settings.flags.centralStorageLogic + ') dropHarvestingEnabled(' + this.memory.settings.flags.dropHarvestingEnabled + ') repairRamparts(' + this.memory.settings.flags.repairRamparts + ') repairWalls(' + this.memory.settings.flags.repairWalls + ') runnersDoMinerals(' + this.memory.settings.flags.runnersDoMinerals + ') towerRepairBasic(' + this.memory.settings.flags.towerRepairBasic + ') towerRepairDefenses(' + this.memory.settings.flags.towerRepairDefenses + ') runnersPickupEnergy(' + this.memory.settings.flags.runnersPickupEnergy + ') harvestersFixAdjacent(' + this.memory.settings.flags.harvestersFixAdjacent + ') repairBasics(' + this.memory.settings.flags.repairBasics + ') upgradersSeekEnergy(' + this.memory.settings.flags.upgradersSeekEnergy + ')', this);
 	return;
+}
+
+
+Room.prototype.updateSourceAssignment = function(roomToUpdate, updateObject: SourceAssignmentUpdate): boolean {
+	let assignmentMap: SourceAssignment[] = [];
+
+	const roomIsOutpost = Game.rooms[roomToUpdate].memory.hostColony ? true : false
+	if (roomIsOutpost)
+		assignmentMap = Game.rooms[this.memory.hostColony!].memory.outposts.list[this.name].sourceAssignmentMap;
+	else
+		assignmentMap = Game.rooms[this.name].memory.outposts.list[roomToUpdate].sourceAssignmentMap;
+
+	for (let map of assignmentMap) {
+		if (updateObject.source) map.source = updateObject.source;
+		if (updateObject.container) map.container = updateObject.container;
+		if (updateObject.pathLengthToStorage) map.pathLengthToStorage = updateObject.pathLengthToStorage;
+		if (updateObject.pathToStorage) map.pathToStorage = updateObject.pathToStorage;
+		if (updateObject.creepAssigned) map.creepAssigned = updateObject.creepAssigned;
+		if (updateObject.creepDeathTick) map.creepDeathTick = updateObject.creepDeathTick;
+	}
+	return true;
 }

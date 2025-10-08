@@ -510,3 +510,20 @@ export function calcTickTime(tickSamples: number = 1000): string { // Call this 
 	}
 	return 'Done';
 }
+
+function determineRemoteHarvestersNeeded(room: Room): number {
+	const outpostMem = room.memory.outposts;
+	const numOutposts = outpostMem.array.length;
+
+	let totalNumSources = 0;
+
+	for (let i = 0; i < numOutposts; i++) {
+		const outpostName = outpostMem.array[i];
+		const numSources = outpostMem.list[outpostName].sourceIDs.length;
+
+		totalNumSources += numSources;
+	}
+
+	return totalNumSources;
+
+}
