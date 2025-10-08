@@ -252,36 +252,73 @@ if (typeof Creep !== 'undefined') {
 		let sourceID;
 		let containerID;
 
-		if (!sourceTwo) {
-			if (homeRoom.memory.data.sourceData) {
-				if (homeRoom.memory.data.sourceData.source.length)
-					sourceID = homeRoom.memory.data.sourceData.source[0];
-				if (homeRoom.memory.data.sourceData.container.length)
-					containerID = homeRoom.memory.data.sourceData.container[0];
-
-			} else {
-				if (homeRoom.memory.objects)
-					sourceID = homeRoom.memory.objects.sources[0];
-				if (homeRoom.memory.containers.sourceOne)
-					containerID = homeRoom.memory.containers.sourceOne;
-
-			}
-		} else {
-			if (homeRoom.memory.data.sourceData) {
-				if (homeRoom.memory.data.sourceData.source.length > 1)
-					sourceID = homeRoom.memory.data.sourceData.source[1];
-				if (homeRoom.memory.data.sourceData.container.length > 1)
-					containerID = homeRoom.memory.data.sourceData.container[1];
-
-			} else {
-				if (homeRoom.memory.objects.sources.length > 1) {
-					if (homeRoom.memory.objects)
-						sourceID = homeRoom.memory.objects.sources[1];
-					if (homeRoom.memory.containers.sourceTwo)
-						containerID = homeRoom.memory.containers.sourceTwo;
+		if (locality === 'local') {
+			if (!sourceTwo) {
+				if (homeRoom.memory.data.sourceData) {
+					if (homeRoom.memory.data.sourceData.source.length)
+						sourceID = homeRoom.memory.data.sourceData.source[0];
+					if (homeRoom.memory.data.sourceData.container.length)
+						containerID = homeRoom.memory.data.sourceData.container[0];
 
 				} else {
-					return false;
+					if (homeRoom.memory.objects)
+						sourceID = homeRoom.memory.objects.sources[0];
+					if (homeRoom.memory.containers.sourceOne)
+						containerID = homeRoom.memory.containers.sourceOne;
+
+				}
+			} else {
+				if (homeRoom.memory.data.sourceData) {
+					if (homeRoom.memory.data.sourceData.source.length > 1)
+						sourceID = homeRoom.memory.data.sourceData.source[1];
+					if (homeRoom.memory.data.sourceData.container.length > 1)
+						containerID = homeRoom.memory.data.sourceData.container[1];
+
+				} else {
+					if (homeRoom.memory.objects.sources.length > 1) {
+						if (homeRoom.memory.objects)
+							sourceID = homeRoom.memory.objects.sources[1];
+						if (homeRoom.memory.containers.sourceTwo)
+							containerID = homeRoom.memory.containers.sourceTwo;
+
+					} else {
+						return false;
+					}
+				}
+			}
+		}
+		if (locality === 'remote') {
+			if (!sourceTwo) {
+				if (homeRoom.memory.data.sourceData) {
+					if (homeRoom.memory.data.sourceData.source.length)
+						sourceID = homeRoom.memory.data.sourceData.source[0];
+					if (homeRoom.memory.data.sourceData.container.length)
+						containerID = homeRoom.memory.data.sourceData.container[0];
+
+				} else {
+					if (homeRoom.memory.objects)
+						sourceID = homeRoom.memory.objects.sources[0];
+					if (homeRoom.memory.containers.sourceOne)
+						containerID = homeRoom.memory.containers.sourceOne;
+
+				}
+			} else {
+				if (homeRoom.memory.data.sourceData) {
+					if (homeRoom.memory.data.sourceData.source.length > 1)
+						sourceID = homeRoom.memory.data.sourceData.source[1];
+					if (homeRoom.memory.data.sourceData.container.length > 1)
+						containerID = homeRoom.memory.data.sourceData.container[1];
+
+				} else {
+					if (homeRoom.memory.objects.sources.length > 1) {
+						if (homeRoom.memory.objects)
+							sourceID = homeRoom.memory.objects.sources[1];
+						if (homeRoom.memory.containers.sourceTwo)
+							containerID = homeRoom.memory.containers.sourceTwo;
+
+					} else {
+						return false;
+					}
 				}
 			}
 		}

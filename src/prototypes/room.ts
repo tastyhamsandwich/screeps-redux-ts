@@ -1,28 +1,29 @@
 import { log } from '../utils/globalFuncs';
+import OutpostSourceCounter from '../classes/OutpostSourceCounter';
 
 declare global {
-	// PROTODEF: Room Prototype Extension
 	interface Room {
-		getSourcePositions(sourceID: string): RoomPosition[];
-		link(): string;
-		cacheObjects(): void;
-		newSpawnQueue(spawnOrder: SpawnOrder): void;
-		initOutpost(roomName: string): void;
-		initRoom(): void;
-		initFlags(): void;
-		roomSpawnQueue: SpawnOrder[];
+		counter: OutpostSourceCounter;
 	}
+
+	var __outpostCounters: Map<string, OutpostSourceCounter>;
 }
 
-interface SpawnOrder {
-	role: CreepRole;
-	body: BodyPartConstant[];
-	memory: CreepMemory;
-	name: string;
-	critical: boolean;
+if (!global.__outpostCounters) {
+	global.__outpostCounters = new Map();
 }
 
-
+Object.defineProperty(Room.prototype, "counter", {
+	get: function (this: Room): OutpostSourceCounter {
+		if (!global.__outpostCounters.has(this.name)) {
+			const counter = new OutpostSourceCounter(this, this.memory.outposts.counter);
+			global.__outpostCounters.set(this.name, counter);
+		}
+		return global.__outpostCounters.get(this.name)!;
+	},
+	enumerable: false,
+	configurable: false,
+});
 
 Room.prototype.getSourcePositions = function (sourceID: string): RoomPosition[] {
 
@@ -125,6 +126,10 @@ Room.prototype.cacheObjects = function () {
 			storageArray.push(sources[i].id);
 		if (storageArray.length) {
 			this.memory.objects.sources = storageArray;
+			if (this.memory.hostColony !== undefined) {
+				Game.rooms[this.memory.hostColony].memory.outposts.numSources += storageArray.length;
+				Game.rooms[this.memory.hostColony].memory.outposts.list[this.name].sourceIDs = storageArray;
+			}
 			if (storageArray.length > 1)
 				log('Cached ' + storageArray.length + ' sources.', this);
 			else
@@ -213,9 +218,57 @@ Room.prototype.cacheObjects = function () {
 	}
 	// if containers are found, add their IDs to array and add array to room's 'objects' memory
 	if (containers) {
-		for (let i = 0; i < containers.length; i++)
+		for (let i = 0; i < containers.length; i++) {
 			storageArray.push(containers[i].id);
+			// as we iterate through list of containers, check if that container is close to our first room source,
+			// and if so, add it to memory.containers.sourceOne - do the same for sourceTwo
+			const nearbySources = containers[i].pos.findInRange(FIND_SOURCES, 2);
+			if (nearbySources.length == 1) {
+				if (nearbySources[0].id === this.memory.objects.sources[0])
+					this.memory.containers.sourceOne = containers[i].id;
+				else if (nearbySources[0].id === this.memory.objects.sources[1])
+					this.memory.containers.sourceTwo = containers[i].id;
+			} else {
+				// if not nearby any sources, check if container is nearby the controller, and add it to memory.containers.controller
+				const nearbyController = containers[i].pos.findInRange(FIND_STRUCTURES, 3, { filter: { structureType: STRUCTURE_CONTROLLER }});
+				if (nearbyController.length == 1)
+					this.memory.containers.controller = containers[i].id;
+				else {
+					// finally, if container is nearby the room mineral, add it to memory.containrs.mineral
+					const nearbyMineral = containers[i].pos.findInRange(FIND_MINERALS, 2);
+					if (nearbyMineral.length == 1)
+						this.memory.containers.mineral = containers[i].id;
+				}
+			}
+		}
+		// before we push the storageArray to the memory.objects.containers array,
+		// ensure the ordering of items matches the ordering (sourceOne, sourceTwo, controller, mineral)
 		if (storageArray.length) {
+			let s1, s2, c, m;
+			console.log(`Original containers list: ${storageArray}`);
+			// populate the s1/s2/c/m IDs
+			for (let i = 0; i < storageArray.length; i++) {
+				if (storageArray[i] === this.memory.containers.sourceOne)
+					s1 = storageArray[i];
+				else if (storageArray[i] === this.memory.containers.sourceTwo)
+					s2 = storageArray[i];
+				else if (storageArray[i] === this.memory.containers.controller)
+					c  = storageArray[i];
+				else if (storageArray[i] === this.memory.containers.mineral)
+					m  = storageArray[i];
+			}
+			// for each string found, remove entry in its position and replace
+			if (s1) storageArray.splice(0, 1, s1);
+			if (s2) storageArray.splice(1, 1, s2);
+			if (c ) storageArray.splice(2, 1, c );
+			if (m ) storageArray.splice(3, 1, m );
+
+			// testing confirmation output
+			let items = ``;
+			for (let item of storageArray) items = items + `, ${item}`;
+			console.log(`Edited containers list: ${items}`);
+			console.log(`Memory containers list: ${this.memory.containers.sourceOne}, ${this.memory.containers.sourceTwo}, ${this.memory.containers.controller}, ${this.memory.containers.mineral}`);
+
 			this.memory.objects.containers = storageArray;
 			let updateInfo = '';
 			if (this.memory.hostColony) {
@@ -224,6 +277,7 @@ Room.prototype.cacheObjects = function () {
 				this.memory.objects.containers = storageArray;
 				updateInfo = "\n>>> NOTICE: Room is an outpost of a main colony. Updated outpost info with new container IDs.";
 			}
+
 			if (storageArray.length > 1)
 				log('Cached ' + storageArray.length + ' containers.' + updateInfo, this);
 			else
@@ -439,13 +493,13 @@ Room.prototype.initRoom = function () {
 	if (!this.memory.containers) this.memory.containers = { sourceOne: '', sourceTwo: '', controller: '', mineral: ''};
 	if (!this.memory.data) this.memory.data = { controllerLevel: 0, numCSites: 0, sourceData: { source: [], container: [], lastAssigned: 0 } };
 	if (!this.memory.settings) this.memory.settings = { visualSettings: visualSettings, repairSettings: repairSettings,	flags: {} };
-	if (!this.memory.outposts) this.memory.outposts = { list: {}, array: [], reserverLastAssigned: 0};
+	if (!this.memory.outposts) this.memory.outposts = { list: {}, array: [], reserverLastAssigned: 0, numSources: 0, numHarvesters: 0, counter: 0 };
 	if (!this.memory.stats) this.memory.stats = { energyHarvested: 0, controlPoints: 0, constructionPoints: 0, creepsSpawned: 0, creepPartsSpawned: 0,
 		mineralsHarvested: mineralsHarvested, controllerLevelReached: 0, npcInvadersKilled: 0, hostilePlayerCreepsKilled: 0, labStats: labStats };
 }
 
 Room.prototype.initOutpost = function (roomName): void {
-	if (this.memory.outposts === undefined) this.memory.outposts = { list: {}, array: [], reserverLastAssigned: 0};
+	if (this.memory.outposts === undefined) this.memory.outposts = { list: {}, array: [], reserverLastAssigned: 0, numSources: 0, numHarvesters: 0, counter: 0 };
 
 	const sourceIDs: Id<Source>[] = [];
 	const containerIDs: Id<StructureContainer>[] = [];

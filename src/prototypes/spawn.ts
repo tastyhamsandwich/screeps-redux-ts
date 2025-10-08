@@ -143,6 +143,13 @@ StructureSpawn.prototype.determineBodyParts = function (role: string, maxEnergy?
         totalBodyParts.push(MOVE);
 
       return totalBodyParts;
+	case 'reserver':
+		if (maxEnergy >= 1400)
+			return [CLAIM, CLAIM, MOVE, MOVE];
+		else if (maxEnergy >= 700)
+			return [CLAIM, MOVE];
+		else
+			return [];
     default:
       throw new Error("Invalid parameters passed.");
   }
