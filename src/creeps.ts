@@ -20,7 +20,7 @@ export const Harvester = {
 		if (cMem.disable === undefined) cMem.disable = false;
 		if (cMem.rally === undefined) cMem.rally = 'none';
 		if (cMem.returnEnergy === undefined) cMem.returnEnergy = false;
-		if (!cMem.source) creep.assignHarvestSource(true, false);
+		if (!cMem.source) creep.assignHarvestSource('local', true, false);
 
 		if (!cMem.disable) {
 
@@ -107,6 +107,98 @@ export const Harvester = {
 				navRallyPoint(creep);
 		} else //: AI DISABLED ALERT
 			aiAlert(creep);
+	},
+
+	runremote: (creep: Creep) => {
+		const room: Room = creep.room;
+		const cMem: CreepMemory = creep.memory;
+		const rMem: RoomMemory = Game.rooms[cMem.home].memory;
+		const pos: RoomPosition = creep.pos;
+
+		if (cMem.disable === undefined) cMem.disable = false;
+		if (cMem.rally === undefined) cMem.rally = 'none';
+		if (cMem.returnEnergy === undefined) cMem.returnEnergy = false;
+		if (!cMem.source) creep.assignHarvestSource('remote', true, false);
+
+		if (!cMem.disable) {
+			if (cMem.rally == 'none') {
+				if (pos.x == 49) creep.move(LEFT);
+				else if (pos.x == 0) creep.move(RIGHT);
+				else if (pos.y == 49) creep.move(TOP);
+				else if (pos.y == 0) creep.move(BOTTOM);
+
+				if (creep.ticksToLive! <= 2) {
+					creep.unloadEnergy();
+					creep.say('☠️');
+				}
+
+				let source: Source;
+				if (creep.getActiveBodyparts(CARRY) === 0) {
+					source = Game.getObjectById(cMem.source) as unknown as Source;
+					if (!pos.isNearTo(source))
+						creep.advMoveTo(source, true, pathing.harvesterPathing);
+					else {
+						const containers: StructureContainer[] = source.pos.findInRange(FIND_STRUCTURES, 2, { filter: { structureType: STRUCTURE_CONTAINER } });
+						if (containers.length) {
+							const bucket = pos.findClosestByRange(containers);
+							if (bucket) {
+								if (cMem.bucket === undefined)
+									cMem.bucket = bucket.id;
+								if (!pos.isEqualTo(bucket))
+									creep.advMoveTo(bucket, true, pathing.harvesterPathing);
+								else
+									creep.harvestEnergy();
+							}
+						} else
+							creep.harvestEnergy();
+					}
+				} else {
+					if (creep.store.getFreeCapacity() == 0 || creep.store.getFreeCapacity() < (creep.getActiveBodyparts(WORK) * 2)) {
+						if (cMem.returnEnergy === true) {
+							if (creep.transfer(Game.spawns['Spawn1'], RESOURCE_ENERGY) === ERR_NOT_IN_RANGE)
+								creep.advMoveTo(Game.spawns['Spawn1'], true, pathing.harvesterPathing);
+						} else {
+							if (cMem.bucket) {
+								creep.unloadEnergy(cMem.bucket);
+							} else {
+								const containers: StructureContainer[] = pos.findInRange(FIND_STRUCTURES, 3, { filter: (i) => { i.structureType === STRUCTURE_CONTAINER } });
+								if (containers.length) {
+									const target: StructureContainer = pos.findClosestByRange(containers)!;
+									if (target) {
+										cMem.bucket = target.id;
+										if (!pos.isNearTo(target)) creep.advMoveTo(target, true, pathing.harvesterPathing);
+										else if (target.hits < target.hitsMax) creep.repair(target);
+										else {
+											creep.unloadEnergy();
+											creep.harvestEnergy();
+										}
+									}
+								} else {
+									const nearbySites = pos.findInRange(FIND_CONSTRUCTION_SITES, 2);
+									if (nearbySites.length == 0) room.createConstructionSite(pos.x, pos.y, STRUCTURE_CONTAINER);
+									else {
+										const buildersNearby = room.find(FIND_MY_CREEPS, { filter: (i) => i.memory.role == 'remotebuilder' || i.memory.role == 'builder' });
+										if (buildersNearby.length > 0) {
+											const mySite = pos.findInRange(FIND_CONSTRUCTION_SITES, 1);
+											if (mySite.length)
+												creep.build(mySite[0]);
+											else {
+												creep.unloadEnergy();
+												creep.harvestEnergy();
+											}
+										} else {
+											creep.build(nearbySites[0]);
+										}
+									}
+								}
+							}
+						}
+					} else creep.harvestEnergy();
+				}
+			} else //: I HAVE A RALLY POINT, LET'S BOOGY!
+				navRallyPoint(creep);
+		} else //: AI DISABLED ALERT
+			aiAlert(creep);
 	}
 }
 
@@ -171,6 +263,11 @@ export const Builder = {
 				}
 			}
 		}
+	},
+
+	runremote: function (creep: Creep) {
+
+
 	}
 }
 
@@ -265,12 +362,19 @@ export const Repairer = {
 
 				//! Fill towers & repair stuff
 				if (creep.memory.working === true) {
-					const emptyTowers: StructureTower[] = creep.room.find(FIND_MY_STRUCTURES, { filter: (i) => { i.structureType === STRUCTURE_TOWER && i.store.getFreeCapacity(RESOURCE_ENERGY) > 0 }});
+					const emptyTowers: StructureTower[] = creep.room.find(FIND_MY_STRUCTURES, { filter: (i) => { return i.structureType === STRUCTURE_TOWER && i.store.getFreeCapacity(RESOURCE_ENERGY) > 0 }});
 					if (emptyTowers.length) { // Find owned towers with less-than-full stores
 						emptyTowers.sort((a, b) => b.store.getFreeCapacity(RESOURCE_ENERGY) - a.store.getFreeCapacity(RESOURCE_ENERGY)); // Sort by emptiest to fullest
-
-						if (creep.transfer(emptyTowers[0], RESOURCE_ENERGY) === ERR_NOT_IN_RANGE)
+						const result = creep.transfer(emptyTowers[0], RESOURCE_ENERGY);
+						if (result === ERR_NOT_IN_RANGE) {
 							creep.moveTo(emptyTowers[0], pathing.repairerPathing); // Move to & fill up
+							creep.say('🏃‍♂️');
+						} else if (result === OK) {
+							creep.say('⚡')
+						} else {
+							creep.say('🤔');
+							console.log(`${creep.name}: Transfer to tower failed, result: ${result}`);
+						}
 					} else {
 
 						let allSites: AnyStructure[] = [];
@@ -330,6 +434,9 @@ export const Reserver = {
 		if (cMem.targetOutpost === undefined) {
 			cMem.targetOutpost = rMem.outposts.array[rMem.outposts.reserverLastAssigned];
 			rMem.outposts.reserverLastAssigned = (rMem.outposts.reserverLastAssigned + 1) % rMem.outposts.array.length;
+		}
+		if (cMem.controller === undefined) {
+			cMem.controller = Game.rooms[cMem.home].memory.outposts.list[cMem.targetOutpost].controllerID;
 		}
 		//# If creep is at home room, has no rally point, and has a targetOutpost in memory, set rally point to target outpost flag
 		if (creep.room.name === cMem.home && cMem.rally === 'none' && cMem.targetOutpost !== undefined)
@@ -487,27 +594,27 @@ function navRallyPoint(creep: Creep): void {
 	const cMem = creep.memory;
 	const pos = creep.pos;
 
-	if (cMem.rallyPoint instanceof Array) {
-		if (cMem.rallyPoint.length == 1 && pos.isNearTo(Game.flags[cMem.rallyPoint[0]])) cMem.rallyPoint = 'none';
-		else if (!pos.isNearTo(Game.flags[cMem.rallyPoint[0]]))
-			creep.moveTo(Game.flags[cMem.rallyPoint[0]], pathing.rallyPointPathing);
+	if (cMem.rally instanceof Array) {
+		if (cMem.rally.length == 1 && pos.isNearTo(Game.flags[cMem.rally[0]])) cMem.rally = 'none';
+		else if (!pos.isNearTo(Game.flags[cMem.rally[0]]))
+			creep.advMoveTo(Game.flags[cMem.rally[0]].pos, true, pathing.rallyPointPathing);
 		else {
-			if (cMem.rallyPoint.length > 1)
-				creep.moveTo(Game.flags[cMem.rallyPoint[1]], pathing.rallyPointPathing);
-			log('Creep \'' + creep.name + '\' reached rally point \'' + cMem.rallyPoint[0] + '\'', creep.room);
-			const nextWaypoint = cMem.rallyPoint.shift();
+			if (cMem.rally.length > 1)
+				creep.advMoveTo(Game.flags[cMem.rally[1]].pos, true, pathing.rallyPointPathing);
+			log('Creep \'' + creep.name + '\' reached rally point \'' + cMem.rally[0] + '\'', creep.room);
+			const nextWaypoint = cMem.rally.shift();
 			if (nextWaypoint === 'undefined') {
-				delete cMem.rallyPoint;
-				cMem.rallyPoint = 'none';
+				delete cMem.rally;
+				cMem.rally = 'none';
 			}
 		}
 	} else {
-		const rally = Game.flags[cMem.rallyPoint];
+		const rally = Game.flags[cMem.rally];
 		if (pos.isNearTo(rally)) {
-			log('Creep \'' + creep.name + '\' reached rally point \'' + cMem.rallyPoint + '\'', creep.room);
-			cMem.rallyPoint = 'none';
+			log('Creep \'' + creep.name + '\' reached rally point \'' + cMem.rally + '\'', creep.room);
+			cMem.rally = 'none';
 		}
-		else creep.moveTo(rally, pathing.rallyPointPathing);
+		else creep.advMoveTo(rally.pos, true, pathing.rallyPointPathing);
 	}
 }
 

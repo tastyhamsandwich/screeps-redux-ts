@@ -2,12 +2,21 @@ import { log } from '../utils/globalFuncs';
 import { pathing } from '../utils/constants';
 
 declare global {
+
+	type RoomRoute = RoomPathStep[];
+	interface RoomPathStep {
+		room: string;
+		exit: ExitConstant;
+	}
+
+	type Locality = 'local' | 'remote';
 	interface Creep {
 		advGet(target: Source | Id<Source> | Mineral | Id<Mineral> | Deposit | Id<Deposit> | AnyStoreStructure | Resource | Tombstone | Ruin | Id<AnyStoreStructure> | Id<Resource> | Id<Tombstone> | Id<Ruin>): ScreepsReturnCode;
 		advGive(target: Creep | AnyStoreStructure | Id<AnyStoreStructure>, pathing?: MoveToOpts, resource?: ResourceConstant, canTravel?: boolean): ScreepsReturnCode;
 		advHarvest(): void;
-		reassignSource(sourceTwo: boolean): boolean;
-		assignHarvestSource(simpleAssignment: boolean, returnID: boolean): Source | Id<Source>;
+		advMoveTo(target: RoomObject | { pos: RoomPosition } | RoomPosition, pathFinder?: boolean, opts?: MoveToOpts): ScreepsReturnCode;
+		reassignSource(locality: Locality, sourceTwo: boolean): boolean;
+		assignHarvestSource(locality: Locality, simpleAssignment: boolean, returnID: boolean): Source | Id<Source>;
 		harvestEnergy(): void;
 		unloadEnergy(bucketID?: Id<AnyStoreStructure>): void;
 		cacheLocalObjects(): void;
@@ -16,6 +25,8 @@ declare global {
 		hasWorked: boolean;
 	}
 }
+
+const globalRouteCache: Record<string, RoomRoute | ERR_NO_PATH | ERR_INVALID_ARGS> = {};
 
 // Prevent prototype augmentation from executing in non-Screeps (node/mocha) environments.
 if (typeof Creep !== 'undefined') {
@@ -143,23 +154,98 @@ if (typeof Creep !== 'undefined') {
 
 	Creep.prototype.advHarvest = function () {
 
+		let locality: 'local' | 'remote' = 'local';
+
+		if (this.memory.role === 'remoteharvester')
+			locality = 'remote';
+
 		if (!this.memory.source)
-			this.memory.source = this.assignHarvestSource(true, true);
+			this.memory.source = this.assignHarvestSource(locality, true, true);
 
 		const source = Game.getObjectById(this.memory.source) as Source;
 
-		if (this.harvest(source) === ERR_NOT_IN_RANGE)
-			this.moveTo(source);
-		else if (this.harvest(source) === OK) {
+		const result = this.harvest(source);
+		if (result === ERR_NOT_IN_RANGE)
+			this.moveTo(source, pathing.harvesterPathing);
+		else if (result === OK) {
 			this.hasWorked = true;
 			const energyHarvested = Math.min(this.getActiveBodyparts(WORK) * HARVEST_POWER, source.energy);
-			(Memory.stats.energyHarvested as number) += energyHarvested;
+			this.room.memory.stats.energyHarvested += energyHarvested;
 
 			this.say('⛏️' + energyHarvested)
 		}
+		else log(`${this.room.link()}, ${this.name}: Harvest failed, result: ${result}`);
 	}
 
-	Creep.prototype.reassignSource = function (sourceTwo = false) {
+	/**
+	 * Advanced movement funcion that allows creeps to navigate locally via direct movement, or cross-room based on destination room direction, and as such
+	 * does not rely on having sight in the destination location. Can optionally enable PathFinder based mvoement. Caches exit routes in heap, recaching every 100 ticks
+	 * or when needed.
+	 * @param target RoomObject, RoomPosition, or pos: RoomPosition property where creep is going
+	 * @param pathFinder Boolean flag to use PathFinder for cross-room navigation, avoiding hostile rooms and other dangers. Local navigation does not make sure of this either way.
+	 * @param opts MoveToOpts array that can be passed to PathFinder or other default movement functions
+	 * @returns Returns standard ScreepsReturnCode
+	 */
+	Creep.prototype.advMoveTo = function (target: RoomObject | { pos: RoomPosition } | RoomPosition, pathFinder = false, opts: MoveToOpts = {}): ScreepsReturnCode {
+		const targetPos = target instanceof RoomPosition ? target : target.pos;
+
+		// local navigation
+		if (this.room.name === targetPos.roomName) {
+			return this.moveTo(targetPos, opts);
+		}
+
+		// cross-room navigation without PathFinder
+		if (!pathFinder) {
+			const exitDir = Game.map.findExit(this.room, targetPos.roomName);
+			if (typeof exitDir !== 'number') return exitDir; // error code
+
+			const exit = this.pos.findClosestByRange(exitDir as FindConstant);
+			if (!exit) return ERR_NO_PATH;
+
+			return this.moveTo(exit, opts);
+		}
+
+		// multi-room navigation with PathFinder
+		const routeKey = `${this.room.name}->${targetPos.roomName}`;
+		let route = globalRouteCache[routeKey];
+
+		// if route missing or outdated, recalculate
+		if (!route || Game.time % 200 === 0) {
+			route = Game.map.findRoute(this.room.name, targetPos.roomName, {
+				routeCallback(roomName) {
+					// Example of optional cost modifiers (e.g., avoid enemy rooms)
+					const room = Game.rooms[roomName];
+					if (room && room.controller && room.controller.owner && !room.controller.my) {
+						return 5; // Higher cost for hostile rooms
+					}
+					return 1;
+				},
+			});
+			globalRouteCache[routeKey] = route;
+		}
+
+		if (route === ERR_NO_PATH || route === ERR_INVALID_ARGS) {
+			return route;
+		}
+
+		// Get next step in the route
+		const nextRoom = route[0]?.room;
+		if (!nextRoom) return ERR_NO_PATH;
+
+		// Move toward the exit leading to next room
+		const exitDir = Game.map.findExit(this.room, nextRoom);
+		if (typeof exitDir !== 'number') return exitDir;
+
+		//if (exitDir < 0) return ERR_INVALID_TARGET; // error code
+		const exit = this.pos.findClosestByRange(exitDir as FindConstant);
+
+		if (!exit) return ERR_NO_PATH;
+
+		return this.moveTo(exit, opts);
+	};
+
+	Creep.prototype.reassignSource = function (locality: Locality = 'local', sourceTwo = false) {
+
 
 		const homeRoom = Game.rooms[this.memory.home];
 
@@ -205,7 +291,13 @@ if (typeof Creep !== 'undefined') {
 		return true;
 	}
 
-	Creep.prototype.assignHarvestSource = function (simpleAssignment = false, returnID = false): Source | Id<Source> {
+	/**
+	 * Set a creep's 'source' and 'bucket' memory values
+	 * @param locality "local" or "remote", defaults to "local"
+	 * @param simpleAssignment Which assignment algorithm to use. Currently only simpleAssignment = true works properly
+	 * @param returnID If true, function returns a source ID, rather than the Source object directly
+	 */
+	Creep.prototype.assignHarvestSource = function (locality: Locality = "local", simpleAssignment = false, returnID = false): Source | Id<Source> {
 
 		const room = this.room;
 
@@ -271,9 +363,22 @@ if (typeof Creep !== 'undefined') {
 		}
 	}
 
+	/**
+	 * Advanced harvesting function, does not require parameters.
+	 * Instead, it attempts to use a creep's memory value for 'source', or locate one on its own.
+	 */
 	Creep.prototype.harvestEnergy = function (): void {
 
-		const storedSource: Source = (this.memory.source !== undefined) ? Game.getObjectById(this.memory.source) as unknown as Source : this.assignHarvestSource(true, false) as unknown as Source;
+		let locality: 'local' | 'remote' = 'local';
+
+		if (this.memory.role === 'remoteharvester')
+			locality = 'remote';
+
+		if (this.memory.source === undefined)
+			this.memory.source = this.assignHarvestSource(locality, true, true);
+
+		const sourceId: Id<Source> = this.memory.source;
+		const storedSource: Source | null = Game.getObjectById(sourceId);
 
 		if (storedSource) {
 			if (this.pos.isNearTo(storedSource)) {
