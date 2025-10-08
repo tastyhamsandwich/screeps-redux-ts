@@ -1,5 +1,5 @@
 import { ErrorMapper } from "utils/ErrorMapper";
-import RoomManager from "./managers/roomManager";
+import RoomManager from "./managers/RoomManager_v2";
 import OutpostSourceCounter from "classes/OutpostSourceCounter";
 import roomDefense from './tower';
 import { needMoreHarvesters, visualRCProgress, calcTickTime } from "./utils/globalFuncs";
@@ -260,21 +260,6 @@ declare global {
 	// Syntax for adding properties to `global` (ex "global.log")
 	namespace NodeJS {
 		interface Global {
-			calcPath(startPos: RoomPosition, endPos: RoomPosition): { path: RoomPosition[], length: number, ops: number, cost: number, incomplete: boolean };
-			calcPathLength(startPos: RoomPosition, endPos: RoomPosition): number;
-			asRoomPosition(value: RoomPosition | { pos?: RoomPosition } | undefined | null): RoomPosition | null;
-			log(logMsg: string | string[], room: Room | false): void;
-			createRoomFlag(room: string): string | null;
-			validateRoomName(roomName: string): RoomName;
-			randomInt(min: number, max: number): number;
-			randomColor(): ColorConstant;
-			randomColorAsInt(): number;
-			determineBodyParts(role: string, maxEnergy: number, extras?: { [key: string]: any }): BodyPartConstant[] | undefined;
-			initGlobal(override: boolean): boolean;
-			calcBodyCost(body: BodyPartConstant[] | undefined | null): number;
-			PART_COST: Record<BodyPartConstant, number>;
-			pathing: { [key: string]: any };
-			log(): void;
 			tickTime: number;
 		}
 	}
@@ -367,7 +352,7 @@ export const loop = ErrorMapper.wrapLoop(() => {
 		//! From here, only rooms where we own the controller have this code ran
 		if (room.controller && room.controller.my) {
 
-			new RoomManager(room.name);
+			new RoomManager(room);
 
 			roomDefense(room);
 

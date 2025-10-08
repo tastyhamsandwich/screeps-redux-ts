@@ -33,7 +33,7 @@ interface RoomStats {
 /**
  * Manages all logic and operations for a single room.
  */
-export class RoomManager {
+export default class RoomManager {
 	private room: Room;
 	private resources: RoomResources;
 	private stats: RoomStats;

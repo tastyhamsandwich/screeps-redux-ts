@@ -1,4 +1,4 @@
-import { log } from '../utils/globalFuncs';
+import { log, roomExitsTo, calcPath } from '../utils/globalFuncs';
 import OutpostSourceCounter from '../classes/OutpostSourceCounter';
 
 type SourceAssignmentUpdate = {
@@ -8,6 +8,15 @@ type SourceAssignmentUpdate = {
 	pathToStorage: PathFinderPath | false,
 	creepAssigned: string | false,
 	creepDeathTick: number | false
+}
+
+type LogisticsPair = {
+	source: string | Id<StructureContainer | StructureStorage>;
+	destination: Id<StructureContainer | StructureStorage | StructureLink>;
+	resource: ResourceConstant;
+	locality: 'local' | 'remote',
+	descriptor: string,
+	distance?: number,
 }
 
 declare global {
@@ -22,6 +31,8 @@ declare global {
 		initRoom(): void;
 		initFlags(): void;
 		updateSourceAssignment(roomToUpdate: string, updateObject: SourceAssignmentUpdate);
+		registerLogisticalPairs(): void;
+		setQuota(roleTarget: CreepRole, newTarget: number);
 		roomSpawnQueue: SpawnOrder[];
 		counter: OutpostSourceCounter;
 	}
@@ -618,4 +629,207 @@ Room.prototype.updateSourceAssignment = function(roomToUpdate, updateObject: Sou
 		if (updateObject.creepDeathTick) map.creepDeathTick = updateObject.creepDeathTick;
 	}
 	return true;
+}
+
+Room.prototype.registerLogisticalPairs = function (): boolean {
+
+	//* Discover all resource locations, and any links in the room
+	const sources: Source[] = this.find(FIND_SOURCES);
+	const minerals: Mineral[] = this.find(FIND_MINERALS);
+	const linkDrops: StructureLink[] = this.find(FIND_STRUCTURES, { filter: (i) => i.structureType == STRUCTURE_LINK && (i.pos.x <= 2 || i.pos.x >= 47 || i.pos.y <= 2 || i.pos.y >= 47) });
+	const extractor: StructureExtractor[] = this.find(FIND_STRUCTURES, { filter: { structureType: STRUCTURE_EXTRACTOR } });
+	let extractorBuilt: boolean = false;
+	let mineralOutbox: Id<StructureContainer> | null = (minerals) ? minerals[0].pos.findInRange(FIND_STRUCTURES, 2, { filter: { structureType: STRUCTURE_CONTAINER } })[0].id as Id<StructureContainer> : null;
+	let energyInbox: Id<StructureContainer>;
+	let logisticalPairs: LogisticsPair[] = [];
+
+	if (extractor.length)
+		extractorBuilt = true;
+
+	//* If there is a container by the controller, put it's ID in the energyInbox
+	const energyInboxArray: StructureContainer[] | undefined = this.controller?.pos.findInRange(FIND_STRUCTURES, 3, { filter: { structureType: STRUCTURE_CONTAINER } });
+	if (energyInboxArray && energyInboxArray.length > 0) energyInbox = energyInboxArray[0].id;
+
+	//* Capture the room storage ID, if it exists
+	let storage: Id<StructureStorage>;
+	if (this.storage) storage = this.storage.id;
+
+	//* Find any containers by energy sources, put their IDs in the energyOutboxes
+	let sourceBoxes: Array<StructureContainer> = [];
+	if (this.memory.containers.sourceOne) {
+		const sourceOneBox: StructureContainer | null = Game.getObjectById(this.memory.containers.sourceOne);
+		if (sourceOneBox)
+			sourceBoxes.push(sourceOneBox);
+	}
+	if (this.memory.containers.sourceTwo) {
+		const sourceTwoBox: StructureContainer | null = Game.getObjectById(this.memory.containers.sourceTwo);
+		if (sourceTwoBox)
+			sourceBoxes.push(sourceTwoBox);
+	}
+
+	if (sourceBoxes.length == 0 && !sourceBoxes) this.memory.data.noPairs = true;
+	else {
+		if (this.memory.data.noPairs) delete this.memory.data.noPairs;
+	}
+
+	//* Ensure that our found energyInbox conforms to the room's container memory
+	if (energyInboxArray && this.memory.containers.controller !== energyInboxArray[0].id)
+		this.memory.containers.controller = energyInboxArray[0].id;
+
+	//* For room's with a storage built
+	if (this.storage) {
+		//* Build the local source to storage pairs
+		for (let i = 0; i < sourceBoxes.length; i++) {
+			const onePair: LogisticsPair = { source: sourceBoxes[i].id, destination: this.storage.id, resource: 'energy', locality: 'local', descriptor: 'source to storage' };
+			if (onePair.source && onePair.destination) logisticalPairs.push(onePair);
+			else log('Malformed Pair: ' + onePair, this);
+		}
+
+		if (this.memory.outposts) {
+
+			const remoteLinks = this.memory.data.linkRegistry.remotes;
+
+			if (remoteLinks.north) {
+				const northContainers = Game.rooms[roomExitsTo(this.name, 1)].memory.objects.containers;
+
+				for (let i = 0; i < northContainers.length; i++) {
+					const remotePair: LogisticsPair = { source: northContainers[i], destination: remoteLinks.north, resource: 'energy', locality: 'remote', descriptor: 'north source to homelink' };
+					logisticalPairs.push(remotePair);
+				}
+			} else if (Game.rooms[roomExitsTo(this.name, 1)].memory.objects.containers) {
+				for (let i = 0; i < Game.rooms[roomExitsTo(this.name, 1)].memory.objects.containers.length; i++) {
+					const remotePair: LogisticsPair = { source: Game.rooms[roomExitsTo(this.name, 1)].memory.objects.containers[i], destination: this.storage.id, resource: 'energy', locality: 'remote', descriptor: 'north source to storage' };
+					logisticalPairs.push(remotePair);
+				}
+			}
+			if (remoteLinks.east) {
+				const eastContainers = Game.rooms[roomExitsTo(this.name, 3)].memory.objects.containers;
+
+				for (let i = 0; i < eastContainers.length; i++) {
+					const remotePair: LogisticsPair = { source: eastContainers[i], destination: remoteLinks.east, resource: 'energy', locality: 'remote', descriptor: 'east source to homelink' };
+					logisticalPairs.push(remotePair);
+				}
+			} else if (Game.rooms[roomExitsTo(this.name, 3)].memory.objects.containers) {
+				for (let i = 0; i < Game.rooms[roomExitsTo(this.name, 3)].memory.objects.containers.length; i++) {
+					const remotePair: LogisticsPair = { source: Game.rooms[roomExitsTo(this.name, 3)].memory.objects.containers[i], destination: this.storage.id, resource: 'energy', locality: 'remote', descriptor: 'east source to storage' };
+					logisticalPairs.push(remotePair);
+				}
+			}
+			if (remoteLinks.south) {
+				const southContainers = Game.rooms[roomExitsTo(this.name, 5)].memory.objects.containers;
+
+				for (let i = 0; i < southContainers.length; i++) {
+					const remotePair: LogisticsPair = { source: southContainers[i], destination: remoteLinks.south, resource: 'energy', locality: 'remote', descriptor: 'south source to homelink' };
+					logisticalPairs.push(remotePair);
+				}
+			} else if (Game.rooms[roomExitsTo(this.name, 5)].memory.objects.containers) {
+				for (let i = 0; i < Game.rooms[roomExitsTo(this.name, 5)].memory.objects.containers.length; i++) {
+					const remotePair: LogisticsPair = { source: Game.rooms[roomExitsTo(this.name, 5)].memory.objects.containers[i], destination: this.storage.id, resource: 'energy', locality: 'remote', descriptor: 'south source to storage' };
+					logisticalPairs.push(remotePair);
+				}
+			}
+			if (remoteLinks.west) {
+				const westContainers = Game.rooms[roomExitsTo(this.name, 7)].memory.objects.containers;
+
+				for (let i = 0; i < westContainers.length; i++) {
+					const remotePair: LogisticsPair = { source: westContainers[i], destination: remoteLinks.west, resource: 'energy', locality: 'remote', descriptor: 'west source to homelink' };
+				}
+			} else if (Game.rooms[roomExitsTo(this.name, 7)].memory.objects.containers) {
+				for (let i = 0; i < Game.rooms[roomExitsTo(this.name, 7)].memory.objects.containers.length; i++) {
+					const remotePair: LogisticsPair = { source: Game.rooms[roomExitsTo(this.name, 7)].memory.objects.containers[i], destination: this.storage.id, resource: 'energy', locality: 'remote', descriptor: 'west source to storage' };
+					logisticalPairs.push(remotePair);
+				}
+			}
+		}
+
+		//* Build the storage to upgrader box pair
+		if (energyInboxArray && energyInboxArray.length > 0) {
+			const onePairStoU: LogisticsPair = { source: this.storage.id, destination: energyInboxArray[0].id, resource: 'energy', locality: 'local', descriptor: 'storage to upgrader' };
+			if (onePairStoU.source && onePairStoU.destination) logisticalPairs.push(onePairStoU);
+			else log('Malformed Pair: ' + onePairStoU, this);
+			this.memory.containers.controller = energyInboxArray[0].id;
+		}
+
+		//* Build the extractor box to storage pair
+		if (extractorBuilt && typeof mineralOutbox === 'string') {
+			log('mineralOutbox: ' + mineralOutbox, this);
+			log('storage: ' + this.storage.id, this);
+			const minType: MineralConstant = minerals[0].mineralType;
+			const onePair: LogisticsPair = { source: mineralOutbox, destination: this.storage.id, resource: minType, locality: 'local', descriptor: 'extractor to storage' };
+			if (onePair.source && onePair.destination) logisticalPairs.push(onePair);
+			else log('Malformed Pair: ' + onePair, this);
+		}
+		//* For rooms without storage
+	} else {
+		//* Build the local source to upgrader box pairs
+		for (let i = 0; i < sourceBoxes.length; i++) {
+			const onePair: LogisticsPair = { source: sourceBoxes[i].id, destination: energyInboxArray![0].id, resource: 'energy', locality: 'local', descriptor: 'source to upgrader' };
+			if (onePair.source && onePair.destination) logisticalPairs.push(onePair);
+			else log('Malformed Pre-Storage Pair: ' + onePair, this);
+		}
+	}
+
+	//* Calculate the path lengths for each pair and append
+	for (let i = 0; i < logisticalPairs.length; i++) {
+		const pair: LogisticsPair = logisticalPairs[i];
+		const startPos: StructureStorage | StructureContainer = Game.getObjectById(pair.source)!;
+		const endPos = Game.getObjectById(pair.destination);
+
+		if (startPos && endPos) {
+			let pathObj = calcPath(startPos.pos, endPos.pos);
+			let pathLen: number = pathObj.length;
+			logisticalPairs[i].distance = pathLen;
+		}
+	}
+
+	//* For path lengths over 60, cut the length in half and create two pairs (this will divide the job into two runners, lessening the energy burden for lower room levels)
+	/*let finalizedPairs: LogisticsPair[] = [];
+	for (let i = 0; i < logisticalPairs.length; i++) {
+	  if (logisticalPairs[i].distance >= 60) {
+		let clonedHalfPair: LogisticsPair = logisticalPairs[i];
+		clonedHalfPair.distance = Math.ceil(clonedHalfPair.distance / 2);
+		finalizedPairs.push(clonedHalfPair);
+		finalizedPairs.push(clonedHalfPair);
+	  } else {
+		const clonedPair: LogisticsPair = logisticalPairs[i];
+		finalizedPairs.push(clonedPair);
+	  }
+	}*/
+	//* Ensure data objects exist
+
+	if (!this.memory.data) this.memory.data = {};
+	if (!this.memory.data.logisticalPairs) this.memory.data.logisticalPairs = [];
+	if (!this.memory.data.pairCounter) this.memory.data.pairCounter = 0;
+	//* Clear the pair paths if they exist already
+	if (this.memory.data.pairPaths) {
+		delete this.memory.data.pairPaths;
+		this.memory.data.pairPaths = [];
+	}
+	//* Ensure the pair paths do exist, though
+	if (!this.memory.data.pairPaths) this.memory.data.pairPaths = [];
+
+	//* Prepare the pair report
+	let pairReport: string[];
+	if (logisticalPairs.length > 1) {
+		pairReport = ['------------------------------------------------- REGISTERED LOGISTICAL PAIRS --------------------------------------------------'];
+		for (let i = 0; i < logisticalPairs.length; i++)
+			pairReport.push(' PAIR #' + (i + 1) + ': OUTBOX> ' + logisticalPairs[i].source + ' | INBOX> ' + logisticalPairs[i].destination + ' | CARGO> ' + logisticalPairs[i].resource + ' | LOCALITY> ' + logisticalPairs[i].locality + ' | TYPE> ' + logisticalPairs[i].descriptor + '');
+	} else pairReport = ['No pairs available to register properly.'];
+
+	//* Push those pairs to memory and set the porter spawn target to match the number of pairs
+	this.memory.data.logisticalPairs = logisticalPairs;
+
+	this.setQuota('porter', this.memory.data.logisticalPairs.length);
+	log(pairReport, this);
+	if (logisticalPairs.length > 1) return true;
+	else return false;
+}
+
+Room.prototype.setQuota = function (roleTarget: CreepRole, newTarget: number) {
+
+	const oldTarget = this.memory.quotas[roleTarget];
+	this.memory.quotas[roleTarget] = newTarget;
+
+	log('Set role \'' + roleTarget + '\' quota to ' + newTarget + ' (was ' + oldTarget + ').', this);
+	return;
 }

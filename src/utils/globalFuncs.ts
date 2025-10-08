@@ -1,7 +1,103 @@
 import { PART_COST } from "./constants";
 
+declare global {
+	interface Global {
+		calcPath(startPos: RoomPosition, endPos: RoomPosition): { path: RoomPosition[], length: number, ops: number, cost: number, incomplete: boolean };
+		calcPathLength(startPos: RoomPosition, endPos: RoomPosition): number;
+		asRoomPosition(value: RoomPosition | { pos?: RoomPosition } | undefined | null): RoomPosition | null;
+		log(logMsg: string | string[], room: Room | false): void;
+		createRoomFlag(room: string): string | null;
+		validateRoomName(roomName: string): RoomName;
+		randomInt(min: number, max: number): number;
+		randomColor(): ColorConstant;
+		randomColorAsInt(): number;
+		determineBodyParts(role: string, maxEnergy: number, extras?: { [key: string]: any }): BodyPartConstant[] | undefined;
+		initGlobal(override: boolean): boolean;
+		calcBodyCost(body: BodyPartConstant[] | undefined | null): number;
+		PART_COST: Record<BodyPartConstant, number>;
+		pathing: { [key: string]: any };
+		log(): void;
+		tickTime: number;
+	}
+}
+
 let controllerPPTArray: number[] = [];
 let controllerProgress: number = 0;
+
+export function splitRoomName(roomName: string): [string, number, string, number] {
+	const match = roomName.match(/([ENSW])(\d+)([ENSW])(\d+)/);
+	if (!match) {
+		throw new Error('Invalid room name format');
+	}
+
+	return [match[1], parseInt(match[2]), match[3], parseInt(match[4])];
+}
+
+export function roomExitsTo(roomName: string, direction: DirectionConstant | number | string): string {
+	const validated = validateRoomName(roomName);
+
+	if (!validated) {
+		log(`Room name failed validation test. Check Room Name and try again.`, false);
+		log(`Examples: (ExxSyy | WxxNyy) (E32N15 | E5S33 | W1S5 | W42N1)`, false);
+		return '';
+	}
+	if (typeof direction === 'string')
+		direction.toLowerCase();
+
+	const splitName = splitRoomName(roomName);
+
+	let newRoomNumber: number;
+
+	switch (direction) {
+		case TOP:
+		case 'north':
+		case 1:
+			newRoomNumber = splitName[3] + 1;
+			if (newRoomNumber > 60) {
+				log(`Room number value would exceed hard limit of 60.`, false);
+				return '';
+			}
+			if (splitName[2] === 'S' && splitName[3] === 0)
+				return splitName[0] + splitName[1] + 'N' + 0;
+			return splitName[0] + splitName[1] + splitName[2] + newRoomNumber;
+		case LEFT:
+		case 'west':
+		case 7:
+			newRoomNumber = splitName[1] - 1;
+			if (newRoomNumber > 60) {
+				log(`Room number value would exceed hard limit of 60.`, false);
+				return '';
+			}
+			if (splitName[0] === 'E' && splitName[1] === 0)
+				return 'W' + 0 + splitName[2] + splitName[3];
+			return splitName[0] + newRoomNumber + splitName[2] + splitName[3];
+		case BOTTOM:
+		case 'south':
+		case 5:
+			newRoomNumber = splitName[3] - 1;
+			if (newRoomNumber > 60) {
+				log(`Room number value would exceed hard limit of 60.`, false);
+				return '';
+			}
+			if (splitName[2] === 'N' && splitName[3] === 0)
+				return splitName[0] + splitName[1] + 'S' + 0;
+			return splitName[0] + splitName[1] + splitName[2] + newRoomNumber;
+		case RIGHT:
+		case 'east':
+		case 3:
+			newRoomNumber = splitName[1] + 1;
+			if (newRoomNumber > 60) {
+				log(`Room number value would exceed hard limit of 60.`, false);
+				return '';
+			}
+			if (splitName[0] === 'W' && splitName[1] === 0)
+				return 'E' + 0 + splitName[2] + splitName[3];
+			return splitName[0] + newRoomNumber + splitName[2] + splitName[3];
+		default:
+			log(`Error parsing room name '${roomName}'`, false);
+			return '';
+	}
+}
 
 export function calcPath(startPos: RoomPosition, endPos: RoomPosition): { path: RoomPosition[], length: number, ops: number, cost: number, incomplete: boolean } {
 
