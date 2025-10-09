@@ -504,7 +504,7 @@ Room.prototype.initRoom = function () {
 		harvesters: 2,
 		upgraders: 2,
 		fillers: 2,
-		porters: 2,
+		haulers: 2,
 		builders: 2,
 		repairers: 1,
 	};
@@ -579,8 +579,8 @@ Room.prototype.initFlags = function () {
 	if (this.memory.settings.flags.dropHarvestingEnabled === undefined)
 		this.memory.settings.flags.dropHarvestingEnabled = false;
 
-	if (this.memory.settings.flags.runnersDoMinerals === undefined)
-		this.memory.settings.flags.runnersDoMinerals = false;
+	if (this.memory.settings.flags.haulersDoMinerals === undefined)
+		this.memory.settings.flags.haulersDoMinerals = false;
 
 	if (this.memory.settings.flags.towerRepairBasic === undefined)
 		this.memory.settings.flags.towerRepairBasic = false;
@@ -588,8 +588,8 @@ Room.prototype.initFlags = function () {
 	if (this.memory.settings.flags.towerRepairDefenses === undefined)
 		this.memory.settings.flags.towerRepairDefenses = false;
 
-	if (this.memory.settings.flags.runnersPickupEnergy === undefined)
-		this.memory.settings.flags.runnersPickupEnergy = false;
+	if (this.memory.settings.flags.haulersPickupEnergy === undefined)
+		this.memory.settings.flags.haulersPickupEnergy = false;
 
 	if (this.memory.settings.flags.harvestersFixAdjacent === undefined)
 		this.memory.settings.flags.harvestersFixAdjacent = false;
@@ -606,7 +606,7 @@ Room.prototype.initFlags = function () {
 	if (this.memory.settings.flags.closestConSites === undefined)
 		this.memory.settings.flags.closestConSites = false;
 
-	log('Room flags initialized: craneUpgrades(' + this.memory.settings.flags.craneUpgrades + ') centralStorageLogic(' + this.memory.settings.flags.centralStorageLogic + ') dropHarvestingEnabled(' + this.memory.settings.flags.dropHarvestingEnabled + ') repairRamparts(' + this.memory.settings.flags.repairRamparts + ') repairWalls(' + this.memory.settings.flags.repairWalls + ') runnersDoMinerals(' + this.memory.settings.flags.runnersDoMinerals + ') towerRepairBasic(' + this.memory.settings.flags.towerRepairBasic + ') towerRepairDefenses(' + this.memory.settings.flags.towerRepairDefenses + ') runnersPickupEnergy(' + this.memory.settings.flags.runnersPickupEnergy + ') harvestersFixAdjacent(' + this.memory.settings.flags.harvestersFixAdjacent + ') repairBasics(' + this.memory.settings.flags.repairBasics + ') upgradersSeekEnergy(' + this.memory.settings.flags.upgradersSeekEnergy + ')', this);
+	log('Room flags initialized: craneUpgrades(' + this.memory.settings.flags.craneUpgrades + ') centralStorageLogic(' + this.memory.settings.flags.centralStorageLogic + ') dropHarvestingEnabled(' + this.memory.settings.flags.dropHarvestingEnabled + ') repairRamparts(' + this.memory.settings.flags.repairRamparts + ') repairWalls(' + this.memory.settings.flags.repairWalls + ') haulersDoMinerals(' + this.memory.settings.flags.haulersDoMinerals + ') towerRepairBasic(' + this.memory.settings.flags.towerRepairBasic + ') towerRepairDefenses(' + this.memory.settings.flags.towerRepairDefenses + ') haulersPickupEnergy(' + this.memory.settings.flags.haulersPickupEnergy + ') harvestersFixAdjacent(' + this.memory.settings.flags.harvestersFixAdjacent + ') repairBasics(' + this.memory.settings.flags.repairBasics + ') upgradersSeekEnergy(' + this.memory.settings.flags.upgradersSeekEnergy + ')', this);
 	return;
 }
 
@@ -782,7 +782,7 @@ Room.prototype.registerLogisticalPairs = function (): boolean {
 		}
 	}
 
-	//* For path lengths over 60, cut the length in half and create two pairs (this will divide the job into two runners, lessening the energy burden for lower room levels)
+	//* For path lengths over 60, cut the length in half and create two pairs (this will divide the job into two haulers, lessening the energy burden for lower room levels)
 	/*let finalizedPairs: LogisticsPair[] = [];
 	for (let i = 0; i < logisticalPairs.length; i++) {
 	  if (logisticalPairs[i].distance >= 60) {
@@ -816,10 +816,10 @@ Room.prototype.registerLogisticalPairs = function (): boolean {
 			pairReport.push(' PAIR #' + (i + 1) + ': OUTBOX> ' + logisticalPairs[i].source + ' | INBOX> ' + logisticalPairs[i].destination + ' | CARGO> ' + logisticalPairs[i].resource + ' | LOCALITY> ' + logisticalPairs[i].locality + ' | TYPE> ' + logisticalPairs[i].descriptor + '');
 	} else pairReport = ['No pairs available to register properly.'];
 
-	//* Push those pairs to memory and set the porter spawn target to match the number of pairs
+	//* Push those pairs to memory and set the hauler spawn target to match the number of pairs
 	this.memory.data.logisticalPairs = logisticalPairs;
 
-	this.setQuota('porter', this.memory.data.logisticalPairs.length);
+	this.setQuota('hauler', this.memory.data.logisticalPairs.length);
 	log(pairReport, this);
 	if (logisticalPairs.length > 1) return true;
 	else return false;

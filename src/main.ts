@@ -101,8 +101,8 @@ declare global {
 		craneUpgrades?: boolean;
 		displayTowerRanges?: boolean;
 		harvestersFixAdjacent?: boolean;
-		runnersDoMinerals?: boolean;
-		runnersPickupEnergy?: boolean;
+		haulersDoMinerals?: boolean;
+		haulersPickupEnergy?: boolean;
 		repairBasics?: boolean;
 		repairRamparts?: boolean;
 		repairWalls?: boolean;
@@ -254,8 +254,17 @@ declare global {
 
 	//! TYPE DEFINITIONS
 	type alignment = 'left' | 'right' | 'center';
-	type CreepRole = "harvester" | "upgrader" | "builder" | "repairer" | "defender" | "filler" | "porter"
+	type CreepRole = "harvester" | "upgrader" | "builder" | "repairer" | "defender" | "filler" | "hauler"
 	type RoomName = `${'W' | 'E'}${number}${'N' | 'S'}${number}`
+	type LogisticsPair = {
+		source: Id<StructureContainer | StructureStorage>;
+		destination: Id<StructureContainer | StructureStorage | StructureLink>;
+		resource: ResourceConstant;
+		locality: 'local' | 'remote',
+		descriptor: string,
+		distance?: number,
+	}
+
 
 	// Syntax for adding properties to `global` (ex "global.log")
 	namespace NodeJS {
@@ -308,9 +317,8 @@ export const loop = ErrorMapper.wrapLoop(() => {
 			case 'filler':
 				CreepAI.Filler.run(creep);
 				break;
-			case 'porter':
-				// TODO: Implement porter AI
-				//CreepAI.Porter.run(creep);
+			case 'hauler':
+				CreepAI.Hauler.run(creep);
 				break;
 			case 'defender':
 				// TODO: Implement defender AI
@@ -372,7 +380,7 @@ export const loop = ErrorMapper.wrapLoop(() => {
 						rMem.quotas.reserver = 1;
 						rMem.quotas.remoteharvester = 2;
 						rMem.quotas.remotebodyguard = 1;
-						rMem.quotas.remoteporter = 2;
+						rMem.quotas.remotehauler = 2;
 						break;
 					case 4:
 						//# Handle creation of storage and next 10 extensions,
@@ -401,11 +409,11 @@ export const loop = ErrorMapper.wrapLoop(() => {
 			let builderTarget: 	 number = _.get(room.memory,  ['quotas', 'builders'  ] , 2);
 			let repairerTarget:  number = _.get(room.memory,  ['quotas', 'repairers' ] , 0);
 			let reserverTarget:  number = _.get(room.memory,  ['quotas', 'reservers' ] , 1);
-			let runnerTarget: 	 number = _.get(room.memory,  ['quotas', 'runners'	 ] , 2);
+			let haulerTarget: 	 number = _.get(room.memory,  ['quotas', 'haulers'	 ] , 2);
 
 			let remoteharvesterTarget: number = _.get(room.memory, ['quotas', 'remoteharvesters'], 2);
 			let remotebodyguardTarget: number = _.get(room.memory, ['quotas', 'remotebodyguards'], 1);
-			let remoteporterTarget:    number = _.get(room.memory, ['quotas', 'remoteporters'	], 2);
+			let remotehaulerTarget:    number = _.get(room.memory, ['quotas', 'remotehaulers'	], 2);
 
 			// pull current amount of creeps alive by RFQ (Role For Quota)
 			// with RFQ, this separates execution code from identity, so reassigning
@@ -417,11 +425,11 @@ export const loop = ErrorMapper.wrapLoop(() => {
 			let builders: 	Creep[]	= _.filter(Game.creeps, (creep) => (creep.memory.RFQ == 'builder' 	|| creep.memory.role == 'builder') 	 && creep.memory.home == roomName);
 			let repairers: 	Creep[]	= _.filter(Game.creeps, (creep) => (creep.memory.RFQ == 'repairer' 	|| creep.memory.role == 'repairer')  && creep.memory.home == roomName);
 			let reservers: 	Creep[]	= _.filter(Game.creeps, (creep) => (creep.memory.RFQ == 'reserver' 	|| creep.memory.role == 'reserver')  && creep.memory.home == roomName);
-			let runners: 	Creep[]	= _.filter(Game.creeps, (creep) => (creep.memory.RFQ == 'runner' 	|| creep.memory.role == 'runner') 	 && creep.memory.home == roomName);
+			let haulers: 	Creep[]	= _.filter(Game.creeps, (creep) => (creep.memory.RFQ == 'hauler' 	|| creep.memory.role == 'hauler') 	 && creep.memory.home == roomName);
 
 			let remoteharvesters: Creep[] = _.filter(Game.creeps, (creep) => (creep.memory.RFQ == 'remoteharvester' || creep.memory.role == 'remoteharvester') && creep.memory.home == roomName);
 			let remotebodyguards: Creep[] = _.filter(Game.creeps, (creep) => (creep.memory.RFQ == 'remotebodyguard' || creep.memory.role == 'remotebodyguard') && creep.memory.home == roomName);
-			let remoteporters: 	  Creep[] = _.filter(Game.creeps, (creep) => (creep.memory.RFQ == 'remoteporter' 	|| creep.memory.role == 'remoteporter')    && creep.memory.home == roomName);
+			let remotehaulers: 	  Creep[] = _.filter(Game.creeps, (creep) => (creep.memory.RFQ == 'remotehauler' 	|| creep.memory.role == 'remotehauler')    && creep.memory.home == roomName);
 
 			const spawns = room.find(FIND_MY_STRUCTURES, {filter: (i) => i.structureType === STRUCTURE_SPAWN });
 
@@ -487,6 +495,30 @@ export const loop = ErrorMapper.wrapLoop(() => {
 								else
 									console.log(`${spawn.name}: Failed to spawn Filler: ${result}`);
 							}
+							//# Spawn Haulers
+							else if (spawn.room.storage && haulers.length < haulerTarget) {
+								const body = spawn.determineBodyParts('hauler', spawn.room.energyCapacityAvailable);
+								let countMod = 1;
+								let name = `Col${1}_Hauler${haulers.length + countMod}`;
+								let result = spawn.spawnCreep(body, name, { memory: { role: 'hauler', RFQ: 'hauler', home: room.name, room: room.name, working: false, disable: false, rally: 'none' } });
+								while (result == ERR_NAME_EXISTS) {
+									countMod++;
+									name = `Col${1}_Hauler${haulers.length + countMod}`;
+									result = spawn.spawnCreep(body, name, { memory: { role: 'hauler', RFQ: 'hauler', home: room.name, room: room.name, working: false, disable: false, rally: 'none' } });
+								}
+								if (result === OK) {
+									console.log(`${spawn.name}: Spawning new Hauler ${name} in ${room.name}`);
+									if (spawn.room.memory.data.logisticalPairs)
+										Game.creeps[name].assignLogisticalPair();
+									else {
+										spawn.room.registerLogisticalPairs();
+										Game.creeps[name].assignLogisticalPair();
+									}
+								}
+								else
+									console.log(`${spawn.name}: Failed to spawn Hauler: ${result}`);
+							}
+
 						//! Spawn other creep types if harvesters & fillers fulfilled
 						} else {
 							//# Spawn Upgraders
@@ -591,7 +623,7 @@ export const loop = ErrorMapper.wrapLoop(() => {
 			if (tickInterval !== 0 && tickCount % tickInterval === 0) {
 				console.log(room.link() + energy + storageInfo + ' Tick: ' + tickCount);
 				console.log(room.link() + `H: ${harvesters.length}, F: ${fillers.length}/${fillerTarget}, U: ${upgraders.length}/${upgraderTarget}, B: ${builders.length}/${builderTarget}, R: ${repairers.length}/${repairerTarget}, Rsv: ${reservers.length}/${reserverTarget}`);
-				console.log(room.link() + `RH: ${remoteharvesters.length}, RG: ${remotebodyguards.length}, RP: ${remoteporters.length}`);
+				console.log(room.link() + `RH: ${remoteharvesters.length}, RG: ${remotebodyguards.length}, RP: ${remotehaulers.length}`);
 			}
 
 			if (room.controller.level >= 1) visualRCProgress(room.controller);

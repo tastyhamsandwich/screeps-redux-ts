@@ -116,7 +116,7 @@ StructureSpawn.prototype.determineBodyParts = function (role: string, maxEnergy?
 		log(`Cost for '${role}' with ${bodyParts} is ${calcBodyCost(bodyParts)}`);
       return bodyParts;
 		}
-    case 'porter':
+    case 'hauler':
 
       const pickupPos: RoomPosition = (Game.getObjectById(extras?.pickup)! as unknown as Structure).pos;
       const dropoffPos: RoomPosition = (Game.getObjectById(extras?.dropoff)! as unknown as Structure).pos;

@@ -325,7 +325,7 @@ export function determineBodyParts(role: string, maxEnergy: number, extras?: { [
 				totalBodyParts.push(...bodyPartSegment);
 
 			return totalBodyParts;
-		case 'porter':
+		case 'hauler':
 
 			const pickupPos: RoomPosition = (Game.getObjectById(extras?.pickup)! as unknown as Structure).pos;
 			const dropoffPos: RoomPosition = (Game.getObjectById(extras?.dropoff)! as unknown as Structure).pos;

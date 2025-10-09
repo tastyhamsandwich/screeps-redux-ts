@@ -8,13 +8,13 @@ export const pathing: { [key: string]: MoveToOpts } = {
 	},
 	fillerPathing: {
 		visualizePathStyle: { stroke: "#44ffaa", opacity: 0.3, lineStyle: "dotted" },
-		reusePath: cSet.runner.reusePathValue,
+		reusePath: cSet.hauler.reusePathValue,
 		ignoreCreeps: false //cSet.filler.ignoreCreeps
 	},
-	porterPathing: {
+	haulerPathing: {
 		visualizePathStyle: { stroke: "#880088", opacity: 0.3, lineStyle: "dotted" },
-		reusePath: cSet.runner.reusePathValue,
-		ignoreCreeps: false //cSet.porter.ignoreCreeps
+		reusePath: cSet.hauler.reusePathValue,
+		ignoreCreeps: false //cSet.hauler.ignoreCreeps
 	},
 	harvesterPathing: {
 		visualizePathStyle: { stroke: "#00ff00", opacity: 0.5, lineStyle: "dashed" },
@@ -36,10 +36,10 @@ export const pathing: { [key: string]: MoveToOpts } = {
 		reusePath: cSet.remoteharvester.reusePathValue,
 		ignoreCreeps: false //cSet.remoteharvester.ignoreCreeps
 	},
-	remotePorterPathing: {
+	remoteHaulerPathing: {
 		visualizePathStyle: { stroke: "#880088", opacity: 0.3, lineStyle: "dotted" },
-		reusePath: cSet.remoterunner.reusePathValue,
-		ignoreCreeps: false //cSet.remoteporter.ignoreCreeps
+		reusePath: cSet.remotehauler.reusePathValue,
+		ignoreCreeps: false //cSet.remotehauler.ignoreCreeps
 	},
 	repairerPathing: {
 		visualizePathStyle: { stroke: "#ff6600", opacity: 0.3, lineStyle: "dotted" },

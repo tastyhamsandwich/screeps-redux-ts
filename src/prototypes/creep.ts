@@ -22,6 +22,7 @@ declare global {
 		cacheLocalObjects(): void;
 		cacheLocalOutpost(): void;
 		executeDirective(): boolean;
+		assignLogisticalPair(): boolean;
 		hasWorked: boolean;
 	}
 }
@@ -567,13 +568,52 @@ if (typeof Creep !== 'undefined') {
 
 			case 'boost':
 				break;
-
-
-
 		}
-
-
 		return false;
 	}
 
+	Creep.prototype.assignLogisticalPair = function (): boolean {
+
+		try {
+			if (!this.room.memory.data) this.room.initRoom();
+			if (this.room.memory.data.logisticalPairs === undefined) this.room.registerLogisticalPairs();
+			if (this.room.memory.data.pairCounter === undefined) this.room.memory.data.pairCounter = 0;
+
+			const assignedPair: LogisticsPair = this.room.memory.data.logisticalPairs[this.room.memory.data.pairCounter];
+
+			this.room.memory.data.pairCounter += 1;
+
+			if (this.room.memory.data.pairCounter >= this.room.memory.data.logisticalPairs.length)
+				this.room.memory.data.pairCounter = 0;
+
+			if (this.room.memory.data.logisticalPairs.length == 0) {
+				console.log(this.room.link() + 'No pairs available to assign. Set \'none\'.');
+				return false;
+			} else if (!assignedPair) {
+				console.log(this.room.link() + 'No pairs to assign.');
+				return false;
+			}
+			else if (assignedPair) {
+				this.memory.pickup = assignedPair.source;
+				this.memory.dropoff = assignedPair.destination;
+				this.memory.cargo = assignedPair.resource;
+				this.memory.pathLength = assignedPair.distance;
+				this.memory.locality = assignedPair.locality;
+				if (assignedPair.descriptor === 'storage to upgrader')
+					this.memory.limiter = true;
+				else
+					this.memory.limiter = false;
+
+				console.log(this.room.link() + 'Assigned pair (PICKUP: ' + assignedPair.source + ') | (DROPOFF: ' + assignedPair.destination + ') | (CARGO: ' + assignedPair.resource + ') | (LOCALITY: ' + assignedPair.locality + ')');
+				return true;
+			} else {
+				console.log(this.room.link() + 'Unable to assign pair for creep \'' + this.name + '\'.');
+				return false;
+			}
+		} catch (e: any) {
+			console.log(e);
+			console.log(e.stack);
+			return false;
+		}
+	}
 }
