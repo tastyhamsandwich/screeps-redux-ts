@@ -1,9 +1,9 @@
-import { ErrorMapper } from "utils/ErrorMapper";
+import { ErrorMapper } from "functions/utils/ErrorMapper";
 import RoomManager from "./managers/RoomManager_v2";
 import OutpostSourceCounter from "classes/OutpostSourceCounter";
 import roomDefense from './tower';
-import { needMoreHarvesters, visualRCProgress, calcTickTime } from "./utils/globalFuncs";
-import { buildProgress, repairProgress } from 'utils/visuals';
+import { needMoreHarvesters, visualRCProgress, calcTickTime } from "./functions/utils/globalFuncs";
+import { buildProgress, repairProgress } from 'functions/utils/visuals';
 import * as CreepAI from 'creeps';
 
 import 'prototypes/creep';
@@ -433,7 +433,7 @@ export const loop = ErrorMapper.wrapLoop(() => {
 
 			const spawns = room.find(FIND_MY_STRUCTURES, {filter: (i) => i.structureType === STRUCTURE_SPAWN });
 
-			const harvesters_and_fillers_satisfied = (harvesters.length >= room.memory.objects.sources.length && fillers.length - fillerTarget === 0);
+			const harvesters_fillers_haulers_satisfied = (harvesters.length >= room.memory.objects.sources.length && fillers.length - fillerTarget === 0 && haulers.length - haulerTarget === 0);
 
 			if (spawns.length) {
 
@@ -448,7 +448,7 @@ export const loop = ErrorMapper.wrapLoop(() => {
 					if (!spawn.spawning) {
 
 						//! Spawn Harvesters and Fillers before anything else
-						if (!harvesters_and_fillers_satisfied) {
+						if (!harvesters_fillers_haulers_satisfied) {
 							//# Spawn Harvesters
 							if (needMoreHarvesters(spawn.room)) { // Determine if we have enough harvesters (by work parts per total sources in room)
 								const body = spawn.determineBodyParts('harvester', cap);
@@ -496,7 +496,9 @@ export const loop = ErrorMapper.wrapLoop(() => {
 									console.log(`${spawn.name}: Failed to spawn Filler: ${result}`);
 							}
 							//# Spawn Haulers
+
 							else if (spawn.room.storage && haulers.length < haulerTarget) {
+								console.log(`inside hauler logic`);
 								const body = spawn.determineBodyParts('hauler', spawn.room.energyCapacityAvailable);
 								let countMod = 1;
 								let name = `Col${1}_Hauler${haulers.length + countMod}`;
@@ -622,8 +624,8 @@ export const loop = ErrorMapper.wrapLoop(() => {
 			const energy: string = 'NRG: ' + room.energyAvailable + '/' + room.energyCapacityAvailable + '(' + (room.energyAvailable / room.energyCapacityAvailable * 100).toFixed(0) + '%) ';
 			if (tickInterval !== 0 && tickCount % tickInterval === 0) {
 				console.log(room.link() + energy + storageInfo + ' Tick: ' + tickCount);
-				console.log(room.link() + `H: ${harvesters.length}, F: ${fillers.length}/${fillerTarget}, U: ${upgraders.length}/${upgraderTarget}, B: ${builders.length}/${builderTarget}, R: ${repairers.length}/${repairerTarget}, Rsv: ${reservers.length}/${reserverTarget}`);
-				console.log(room.link() + `RH: ${remoteharvesters.length}, RG: ${remotebodyguards.length}, RP: ${remotehaulers.length}`);
+				console.log(room.link() + `H: ${harvesters.length}, F: ${fillers.length}/${fillerTarget}, Haul: ${haulers.length}/${haulerTarget}, U: ${upgraders.length}/${upgraderTarget}, B: ${builders.length}/${builderTarget}, R: ${repairers.length}/${repairerTarget}, Rsv: ${reservers.length}/${reserverTarget}`);
+				console.log(room.link() + `RH: ${remoteharvesters.length}/${remoteharvesterTarget}, RG: ${remotebodyguards.length}/${remotebodyguardTarget}, RHaul: ${remotehaulers.length}/${remotehaulerTarget}`);
 			}
 
 			if (room.controller.level >= 1) visualRCProgress(room.controller);

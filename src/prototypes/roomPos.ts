@@ -1,5 +1,5 @@
 // Will find room positions of creeps and organize them into an array
-import { log } from '../utils/globalFuncs';
+import { log } from '../functions/utils/globalFuncs';
 
 declare global {
 	// PROTODEF: Room Position Prototype Extension

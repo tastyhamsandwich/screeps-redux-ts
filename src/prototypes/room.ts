@@ -1,4 +1,4 @@
-import { log, roomExitsTo, calcPath } from '../utils/globalFuncs';
+import { log, roomExitsTo, calcPath } from '../functions/utils/globalFuncs';
 import OutpostSourceCounter from '../classes/OutpostSourceCounter';
 
 type SourceAssignmentUpdate = {
@@ -639,12 +639,16 @@ Room.prototype.registerLogisticalPairs = function (): boolean {
 	const linkDrops: StructureLink[] = this.find(FIND_STRUCTURES, { filter: (i) => i.structureType == STRUCTURE_LINK && (i.pos.x <= 2 || i.pos.x >= 47 || i.pos.y <= 2 || i.pos.y >= 47) });
 	const extractor: StructureExtractor[] = this.find(FIND_STRUCTURES, { filter: { structureType: STRUCTURE_EXTRACTOR } });
 	let extractorBuilt: boolean = false;
-	let mineralOutbox: Id<StructureContainer> | null = (minerals) ? minerals[0].pos.findInRange(FIND_STRUCTURES, 2, { filter: { structureType: STRUCTURE_CONTAINER } })[0].id as Id<StructureContainer> : null;
+	const mineralContainers: StructureContainer[] =  minerals[0].pos.findInRange(FIND_STRUCTURES, 2, { filter: { structureType: STRUCTURE_CONTAINER } });
+	let mineralOutbox;
 	let energyInbox: Id<StructureContainer>;
 	let logisticalPairs: LogisticsPair[] = [];
 
 	if (extractor.length)
 		extractorBuilt = true;
+
+	if (mineralContainers.length)
+		mineralOutbox = mineralContainers[0].id;
 
 	//* If there is a container by the controller, put it's ID in the energyInbox
 	const energyInboxArray: StructureContainer[] | undefined = this.controller?.pos.findInRange(FIND_STRUCTURES, 3, { filter: { structureType: STRUCTURE_CONTAINER } });
@@ -685,62 +689,64 @@ Room.prototype.registerLogisticalPairs = function (): boolean {
 			else log('Malformed Pair: ' + onePair, this);
 		}
 
+		/*
 		if (this.memory.outposts) {
-
-			const remoteLinks = this.memory.data.linkRegistry.remotes;
-
-			if (remoteLinks.north) {
-				const northContainers = Game.rooms[roomExitsTo(this.name, 1)].memory.objects.containers;
-
-				for (let i = 0; i < northContainers.length; i++) {
-					const remotePair: LogisticsPair = { source: northContainers[i], destination: remoteLinks.north, resource: 'energy', locality: 'remote', descriptor: 'north source to homelink' };
-					logisticalPairs.push(remotePair);
+			if (this.memory.data.linkRegistry) {
+				const remoteLinks = this.memory.data.linkRegistry.remotes;
+				if (remoteLinks.north) {
+					const northContainers = Game.rooms[roomExitsTo(this.name, 1)].memory.objects.containers;
+					for (let i = 0; i < northContainers.length; i++) {
+						const remotePair: LogisticsPair = { source: northContainers[i], destination: remoteLinks.north, resource: 'energy', locality: 'remote', descriptor: 'north source to homelink' };
+						logisticalPairs.push(remotePair);
+					}
 				}
-			} else if (Game.rooms[roomExitsTo(this.name, 1)].memory.objects.containers) {
-				for (let i = 0; i < Game.rooms[roomExitsTo(this.name, 1)].memory.objects.containers.length; i++) {
-					const remotePair: LogisticsPair = { source: Game.rooms[roomExitsTo(this.name, 1)].memory.objects.containers[i], destination: this.storage.id, resource: 'energy', locality: 'remote', descriptor: 'north source to storage' };
-					logisticalPairs.push(remotePair);
+				if (remoteLinks.east) {
+					const eastContainers = Game.rooms[roomExitsTo(this.name, 3)].memory.objects.containers;
+					for (let i = 0; i < eastContainers.length; i++) {
+						const remotePair: LogisticsPair = { source: eastContainers[i], destination: remoteLinks.east, resource: 'energy', locality: 'remote', descriptor: 'east source to homelink' };
+						logisticalPairs.push(remotePair);
+					}
+				}
+				if (remoteLinks.south) {
+					const southContainers = Game.rooms[roomExitsTo(this.name, 5)].memory.objects.containers;
+					for (let i = 0; i < southContainers.length; i++) {
+						const remotePair: LogisticsPair = { source: southContainers[i], destination: remoteLinks.south, resource: 'energy', locality: 'remote', descriptor: 'south source to homelink' };
+						logisticalPairs.push(remotePair);
+					}
+				}
+				if (remoteLinks.west) {
+					const westContainers = Game.rooms[roomExitsTo(this.name, 7)].memory.objects.containers;
+					for (let i = 0; i < westContainers.length; i++) {
+						const remotePair: LogisticsPair = { source: westContainers[i], destination: remoteLinks.west, resource: 'energy', locality: 'remote', descriptor: 'west source to homelink' };
+					}
+				}
+			} else {
+				if (Game.rooms[roomExitsTo(this.name, 1)].memory.objects.containers) {
+					for (let i = 0; i < Game.rooms[roomExitsTo(this.name, 1)].memory.objects.containers.length; i++) {
+						const remotePair: LogisticsPair = { source: Game.rooms[roomExitsTo(this.name, 1)].memory.objects.containers[i], destination: this.storage.id, resource: 'energy', locality: 'remote', descriptor: 'north source to storage' };
+						logisticalPairs.push(remotePair);
+					}
+				}
+				if (Game.rooms[roomExitsTo(this.name, 3)].memory.objects.containers) {
+					for (let i = 0; i < Game.rooms[roomExitsTo(this.name, 3)].memory.objects.containers.length; i++) {
+						const remotePair: LogisticsPair = { source: Game.rooms[roomExitsTo(this.name, 3)].memory.objects.containers[i], destination: this.storage.id, resource: 'energy', locality: 'remote', descriptor: 'east source to storage' };
+						logisticalPairs.push(remotePair);
+					}
+				}
+				if (Game.rooms[roomExitsTo(this.name, 5)].memory.objects.containers) {
+					for (let i = 0; i < Game.rooms[roomExitsTo(this.name, 5)].memory.objects.containers.length; i++) {
+						const remotePair: LogisticsPair = { source: Game.rooms[roomExitsTo(this.name, 5)].memory.objects.containers[i], destination: this.storage.id, resource: 'energy', locality: 'remote', descriptor: 'south source to storage' };
+						logisticalPairs.push(remotePair);
+					}
+				}
+				if (Game.rooms[roomExitsTo(this.name, 7)].memory.objects.containers) {
+					for (let i = 0; i < Game.rooms[roomExitsTo(this.name, 7)].memory.objects.containers.length; i++) {
+						const remotePair: LogisticsPair = { source: Game.rooms[roomExitsTo(this.name, 7)].memory.objects.containers[i], destination: this.storage.id, resource: 'energy', locality: 'remote', descriptor: 'west source to storage' };
+						logisticalPairs.push(remotePair);
+					}
 				}
 			}
-			if (remoteLinks.east) {
-				const eastContainers = Game.rooms[roomExitsTo(this.name, 3)].memory.objects.containers;
-
-				for (let i = 0; i < eastContainers.length; i++) {
-					const remotePair: LogisticsPair = { source: eastContainers[i], destination: remoteLinks.east, resource: 'energy', locality: 'remote', descriptor: 'east source to homelink' };
-					logisticalPairs.push(remotePair);
-				}
-			} else if (Game.rooms[roomExitsTo(this.name, 3)].memory.objects.containers) {
-				for (let i = 0; i < Game.rooms[roomExitsTo(this.name, 3)].memory.objects.containers.length; i++) {
-					const remotePair: LogisticsPair = { source: Game.rooms[roomExitsTo(this.name, 3)].memory.objects.containers[i], destination: this.storage.id, resource: 'energy', locality: 'remote', descriptor: 'east source to storage' };
-					logisticalPairs.push(remotePair);
-				}
-			}
-			if (remoteLinks.south) {
-				const southContainers = Game.rooms[roomExitsTo(this.name, 5)].memory.objects.containers;
-
-				for (let i = 0; i < southContainers.length; i++) {
-					const remotePair: LogisticsPair = { source: southContainers[i], destination: remoteLinks.south, resource: 'energy', locality: 'remote', descriptor: 'south source to homelink' };
-					logisticalPairs.push(remotePair);
-				}
-			} else if (Game.rooms[roomExitsTo(this.name, 5)].memory.objects.containers) {
-				for (let i = 0; i < Game.rooms[roomExitsTo(this.name, 5)].memory.objects.containers.length; i++) {
-					const remotePair: LogisticsPair = { source: Game.rooms[roomExitsTo(this.name, 5)].memory.objects.containers[i], destination: this.storage.id, resource: 'energy', locality: 'remote', descriptor: 'south source to storage' };
-					logisticalPairs.push(remotePair);
-				}
-			}
-			if (remoteLinks.west) {
-				const westContainers = Game.rooms[roomExitsTo(this.name, 7)].memory.objects.containers;
-
-				for (let i = 0; i < westContainers.length; i++) {
-					const remotePair: LogisticsPair = { source: westContainers[i], destination: remoteLinks.west, resource: 'energy', locality: 'remote', descriptor: 'west source to homelink' };
-				}
-			} else if (Game.rooms[roomExitsTo(this.name, 7)].memory.objects.containers) {
-				for (let i = 0; i < Game.rooms[roomExitsTo(this.name, 7)].memory.objects.containers.length; i++) {
-					const remotePair: LogisticsPair = { source: Game.rooms[roomExitsTo(this.name, 7)].memory.objects.containers[i], destination: this.storage.id, resource: 'energy', locality: 'remote', descriptor: 'west source to storage' };
-					logisticalPairs.push(remotePair);
-				}
-			}
-		}
+		} */
 
 		//* Build the storage to upgrader box pair
 		if (energyInboxArray && energyInboxArray.length > 0) {
@@ -827,9 +833,10 @@ Room.prototype.registerLogisticalPairs = function (): boolean {
 
 Room.prototype.setQuota = function (roleTarget: CreepRole, newTarget: number) {
 
-	const oldTarget = this.memory.quotas[roleTarget];
-	this.memory.quotas[roleTarget] = newTarget;
+	const pluralRoleTarget: string = roleTarget + 's';
+	const oldTarget = this.memory.quotas[pluralRoleTarget];
+	this.memory.quotas[pluralRoleTarget] = newTarget;
 
-	log('Set role \'' + roleTarget + '\' quota to ' + newTarget + ' (was ' + oldTarget + ').', this);
+	log('Set role \'' + pluralRoleTarget + '\' quota to ' + newTarget + ' (was ' + oldTarget + ').', this);
 	return;
 }

@@ -1,5 +1,5 @@
-import { calcBodyCost, log } from "utils/globalFuncs";
-import { PART_COST } from 'utils/constants';
+import { calcBodyCost, log } from "functions/utils/globalFuncs";
+import { PART_COST } from 'functions/utils/constants';
 
 // PROTODEF: Spawn Structure Prototype Extension
 declare global {
@@ -116,26 +116,80 @@ StructureSpawn.prototype.determineBodyParts = function (role: string, maxEnergy?
 		log(`Cost for '${role}' with ${bodyParts} is ${calcBodyCost(bodyParts)}`);
       return bodyParts;
 		}
-    case 'hauler':
+    case 'hauler': {
 
-      const pickupPos: RoomPosition = (Game.getObjectById(extras?.pickup)! as unknown as Structure).pos;
-      const dropoffPos: RoomPosition = (Game.getObjectById(extras?.dropoff)! as unknown as Structure).pos;
+		  const maxCarryCost: number = Math.round((maxEnergy / 3) * 2 / 50) * 50;
+		  const maxMoveCost: number = Math.ceil(maxEnergy / 3 / 50) * 50;
+		  let maxCarryParts: number = Math.floor(maxCarryCost / 50);
+		  let maxMoveParts: number = Math.floor(maxMoveCost / 50);
 
-      const path = PathFinder.search(pickupPos, dropoffPos).path;
+		  const locality: string = this.room.memory.data.logisticalPairs[this.room.memory.data.pairCounter].locality;
+		  const pathLen: number = this.room.memory.data.logisticalPairs[this.room.memory.data.pairCounter].distance;
+		  const carryParts: number = Math.ceil(pathLen / 5) * 2;
+		  const moveParts: number = Math.ceil(carryParts / 2);
+		  let carryArray: BodyPartConstant[] = [];
+		  let moveArray: BodyPartConstant[] = [];
 
-      const pathLength = path.length;
-      const energyGeneratedRoundTrip = pathLength * 5 * 2;
+		  if (maxCarryParts > carryParts) maxCarryParts = carryParts;
+		  if (maxMoveParts > moveParts) maxMoveParts = moveParts;
 
-      const carryPartsNeeded = Math.ceil(energyGeneratedRoundTrip / 50);
-      const movePartsNeeded = Math.ceil(carryPartsNeeded / 2);
+		  for (let i = 0; i < maxCarryParts; i++) carryArray.push(CARRY);
+		  for (let i = 0; i < maxMoveParts; i++) moveArray.push(MOVE);
 
-      for (let i = 0; i < carryPartsNeeded; i++)
-        totalBodyParts.push(CARRY);
+		  let currCarryCost: number = carryArray.length * 50;
+		  let currMoveCost: number = moveArray.length * 50;
+		  let partCost: number = currCarryCost + currMoveCost;
 
-      for (let i = 0; i < movePartsNeeded; i++)
-        totalBodyParts.push(MOVE);
+		  if (maxEnergy - partCost >= 50) carryArray.push(CARRY);
+		  if (maxEnergy - partCost >= 100 && carryArray.length % 2 == 1) moveArray.push(MOVE);
 
-      return totalBodyParts;
+		  currCarryCost = carryArray.length * 50;
+		  currMoveCost = moveArray.length * 50;
+		  partCost = currCarryCost + currMoveCost;
+
+		  let bodyArray: BodyPartConstant[] = carryArray.concat(moveArray);
+		  let finalCost: number = bodyArray.length * 50;
+
+		  if (locality == 'remote') {
+			  let isEven = carryArray.length % 2;
+			  if (isEven) {
+				  if (maxEnergy - partCost >= 150) {
+					  bodyArray.push(WORK);
+					  bodyArray.push(MOVE);
+					  finalCost += 150
+				  } else if (maxEnergy - partCost >= 50) {
+					  bodyArray.shift();
+					  bodyArray.push(WORK);
+					  finalCost += 50
+				  } else {
+					  bodyArray.pop();
+					  bodyArray.shift();
+					  bodyArray.push(WORK);
+				  }
+			  } else {
+				  if (maxEnergy - partCost >= 100) {
+					  bodyArray.push(WORK);
+					  finalCost += 100;
+				  }
+				  else if (maxEnergy - partCost >= 50) {
+					  bodyArray.shift();
+					  bodyArray.push(WORK);
+					  finalCost += 50;
+				  }
+			  }
+		  }
+		  let finalCarry: number = 0;
+		  let finalMove: number = 0;
+		  let finalWork: number = 0;;
+
+		  _.forEach(bodyArray, (part: BodyPartConstant) => {
+			  if (part === CARRY) finalCarry++;
+			  else if (part === MOVE) finalMove++;
+			  else if (part === WORK) finalWork++;
+		  });
+
+		  return bodyArray;
+		}
 	case 'reserver':
 		if (maxEnergy >= 1400)
 			return [CLAIM, CLAIM, MOVE, MOVE];

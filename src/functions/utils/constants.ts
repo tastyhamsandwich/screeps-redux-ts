@@ -1,5 +1,16 @@
 const cSet = Memory.globalSettings.creepSettings;
 
+export const PART_COST: Record<BodyPartConstant, number> = {
+	[MOVE]: 50,
+	[WORK]: 100,
+	[CARRY]: 50,
+	[ATTACK]: 80,
+	[RANGED_ATTACK]: 150,
+	[HEAL]: 250,
+	[CLAIM]: 600,
+	[TOUGH]: 10
+};
+
 export const pathing: { [key: string]: MoveToOpts } = {
 	builderPathing: {
 		visualizePathStyle: { stroke: "#0000ff", opacity: 0.3, lineStyle: "dotted" },
@@ -26,10 +37,10 @@ export const pathing: { [key: string]: MoveToOpts } = {
 		reusePath: cSet.remotebuilder.reusePathValue,
 		ignoreCreeps: false //cSet.remotebuilder.ignoreCreeps
 	},
-	remoteGuardPathing: {
+	remoteBodyguardPathing: {
 		visualizePathStyle: { stroke: "#ff0000", opacity: 0.3, lineStyle: "dashed" },
-		reusePath: cSet.remoteguard.reusePathValue,
-		ignoreCreeps: false //cSet.remoteguard.ignoreCreeps
+		reusePath: cSet.remotebodyguard.reusePathValue,
+		ignoreCreeps: false //cSet.remotebodyguard.ignoreCreeps
 	},
 	remoteHarvesterPathing: {
 		visualizePathStyle: { stroke: "#98dd44", opacity: 0.5, lineStyle: "dashed" },
@@ -51,11 +62,6 @@ export const pathing: { [key: string]: MoveToOpts } = {
 		reusePath: cSet.reserver.reusePathValue,
 		ignoreCreeps: false //cSet.reserver.ignoreCreeps
 	},
-	scoutPathing: {
-		visualizePathStyle: { stroke: "#ff00ff", opacity: 0.5, lineStyle: "solid" },
-		reusePath: cSet.scout.reusePathValue,
-		ignoreCreeps: false //cSet.scout.ignoreCreeps
-	},
 	upgraderPathing: {
 		visualizePathStyle: { stroke: "#ffff00", opacity: 0.3, lineStyle: "dotted" },
 		reusePath: cSet.upgrader.reusePathValue,
@@ -71,15 +77,4 @@ export const pathing: { [key: string]: MoveToOpts } = {
 		reusePath: Memory.globalSettings.reusePathValue,
 		ignoreCreeps: false
 	}
-};
-
-export const PART_COST: Record<BodyPartConstant, number> = {
-	[MOVE]: 50,
-	[WORK]: 100,
-	[CARRY]: 50,
-	[ATTACK]: 80,
-	[RANGED_ATTACK]: 150,
-	[HEAL]: 250,
-	[CLAIM]: 600,
-	[TOUGH]: 10
 };

@@ -1,5 +1,5 @@
-import { log } from '../utils/globalFuncs';
-import { pathing } from '../utils/constants';
+import { log } from '../functions/utils/globalFuncs';
+import { pathing } from '../functions/utils/constants';
 
 declare global {
 

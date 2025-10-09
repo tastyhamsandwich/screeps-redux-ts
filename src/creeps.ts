@@ -1,7 +1,7 @@
-import { log, initGlobal } from './utils/globalFuncs';
-import { pathing } from './utils/constants';
-import { buildProgress, repairProgress } from './utils/visuals';
-import './utils/globalFuncs';
+import { log, initGlobal } from './functions/utils/globalFuncs';
+import { pathing } from './functions/utils/constants';
+import { buildProgress, repairProgress } from './functions/utils/visuals';
+import './functions/utils/globalFuncs';
 import 'prototypes/creep';
 
 /**
@@ -427,7 +427,7 @@ export const Repairer = {
 				//! Find energy reserves
 				if (creep.store.getUsedCapacity(RESOURCE_ENERGY) === 0) {
 					creep.memory.working = false;
-					if (room.storage) {
+					if (room.storage && room.storage.store.getUsedCapacity(RESOURCE_ENERGY) >= creep.store.getCapacity() + 1000) {
 						if (creep.withdraw(room.storage, RESOURCE_ENERGY) === ERR_NOT_IN_RANGE)
 							creep.moveTo(room.storage, pathing.repairerPathing);
 					} else {

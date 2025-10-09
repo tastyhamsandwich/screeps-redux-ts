@@ -15,15 +15,16 @@
     "allowUnreachableCode": false
   },
   "include": [
-	"src/**/*.ts", "src/**/*.d.ts"
+	"src/**/*.ts", "src/**/*.d.ts", "src/functions/**/*.ts"
   ],
   "exclude": [
     "node_modules"
   ],
 	"paths": {
-		"@globals": ["./src/utils/globalFuncs"],
+		"@globals": ["./src/functions/utils/globalFuncs"],
 		"@protos/*": ["./src/prototypes/*"],
 		"@managers/*": ["./src/managers/*"],
-		"@utils/*": ["./src/utils/*"],
+		"@utils/*": ["./src/functions/utils/*"],
+		"@functions/*": ["./src/functions/*"],
 	}
 }
