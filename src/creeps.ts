@@ -1,7 +1,7 @@
-import { log, initGlobal } from './functions/utils/globalFuncs';
+import { log, initGlobal } from './functions/utils/globals';
 import { pathing } from './functions/utils/constants';
-import { buildProgress, repairProgress } from './functions/utils/visuals';
-import './functions/utils/globalFuncs';
+import { buildProgress, repairProgress } from './functions/visual/progress';
+import './functions/utils/globals';
 import 'prototypes/creep';
 
 /**

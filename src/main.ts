@@ -2,8 +2,8 @@ import { ErrorMapper } from "functions/utils/ErrorMapper";
 import RoomManager from "./managers/RoomManager_v2";
 import OutpostSourceCounter from "classes/OutpostSourceCounter";
 import roomDefense from './tower';
-import { needMoreHarvesters, visualRCProgress, calcTickTime } from "./functions/utils/globalFuncs";
-import { buildProgress, repairProgress } from 'functions/utils/visuals';
+import { needMoreHarvesters, visualRCProgress, calcTickTime } from "./functions/utils/globals";
+import { buildProgress, repairProgress } from 'functions/visual/progress';
 import * as CreepAI from 'creeps';
 
 import 'prototypes/creep';

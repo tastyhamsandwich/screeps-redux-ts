@@ -1,4 +1,4 @@
-import { log } from '../functions/utils/globalFuncs';
+import { log } from '../functions/utils/globals';
 import { pathing } from '../functions/utils/constants';
 
 declare global {

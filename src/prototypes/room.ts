@@ -1,4 +1,4 @@
-import { log, roomExitsTo, calcPath } from '../functions/utils/globalFuncs';
+import { log, roomExitsTo, calcPath } from '../functions/utils/globals';
 import OutpostSourceCounter from '../classes/OutpostSourceCounter';
 
 type SourceAssignmentUpdate = {

@@ -1,4 +1,4 @@
-import { calcBodyCost, log } from "functions/utils/globalFuncs";
+import { calcBodyCost, log } from "functions/utils/globals";
 import { PART_COST } from 'functions/utils/constants';
 
 // PROTODEF: Spawn Structure Prototype Extension
