@@ -139,7 +139,9 @@ export function determineBodyParts(role: string, maxEnergy: number, room: Room, 
 
 			if (maxEnergy >= 650)
 				totalBodyParts.push(WORK, WORK, WORK, WORK, WORK, CARRY, MOVE, MOVE);
-			else {
+			else if (maxEnergy === 300) {
+				return [WORK, WORK, MOVE, CARRY];
+			} else {
 				let remainingCost = maxEnergy;
 
 				totalBodyParts.push(MOVE);

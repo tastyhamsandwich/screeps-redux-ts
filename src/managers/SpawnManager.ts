@@ -26,14 +26,7 @@ interface EnergyForecast {
 	projectedEnergy: (ticks: number) => number;
 }
 
-/**
- * SpawnManager - Centralized spawning system that manages spawn requests across all rooms
- * @author randomencounter
- * - Priority-based spawn queue with dynamic reordering
- * - Predictive spawning (plans future spawns based on creep lifespan)
- * - Energy forecasting to prevent resource conflicts
- * - Time-based scheduling to avoid spawn conflicts
- */
+/** SpawnManager - Centralized spawning system that manages spawn requests across all rooms */
 export default class SpawnManager {
 	private room: Room;
 	private spawnQueue: SpawnRequest[];
@@ -88,8 +81,7 @@ export default class SpawnManager {
 		this.saveToMemory();
 	}
 
-	/**
-	 * Submit a spawn request to the manager
+	/** Submit a spawn request to the manager
 	 * @returns true if request was accepted, false if rejected
 	 */
 	submitRequest(request: Omit<SpawnRequest, 'id' | 'requestedAt' | 'estimatedSpawnTime' | 'energyCost'>): boolean {
