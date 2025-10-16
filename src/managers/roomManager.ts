@@ -1,17 +1,27 @@
 import RoomDefense from '../tower';
+import { determineBodyParts } from '@funcs/creep';
+import SpawnManager from './SpawnManager';
 
 interface RoomData {
 	sourceOne?: { source: Id<Source>; container: Id<StructureContainer | ConstructionSite> };
 	sourceTwo?: { source: Id<Source>; container: Id<StructureContainer | ConstructionSite> };
 	controllerContainer?: Id<StructureContainer | ConstructionSite>;
 	mineralContainer?: { mineral: Id<Mineral>; container: Id<StructureContainer | ConstructionSite> };
+	lastHarvesterAssigned?: number;
+	controllerLevel?: number;
+	numCSites?: number;
+	logisticalPairs?: any;
 }
 
-interface SpawnRequest {
-	role: string;
-	priority: number;
-	body: BodyPartConstant[];
-	memory: CreepMemory;
+interface SpawnManagerMemory {
+	queue: any[];
+	scheduled: any[];
+	deferred?: any[];
+	lastProcessed: number;
+}
+
+interface RoomMemoryExtension {
+	spawnManager?: SpawnManagerMemory;
 }
 
 interface RoomResources {
@@ -41,13 +51,13 @@ export default class RoomManager {
 	private room: Room;
 	private resources: RoomResources;
 	private stats: RoomStats;
-	private spawnQueue: SpawnRequest[];
+	private spawnManager: SpawnManager;
 
 	constructor(room: Room) {
 		this.room = room;
 		this.resources = this.scanResources();
 		this.stats = this.gatherStats();
-		this.spawnQueue = [];
+		this.spawnManager = new SpawnManager(room);
 
 		// Initialize room memory if needed
 		if (!this.room.memory.data) {
@@ -62,6 +72,9 @@ export default class RoomManager {
 		this.resources = this.scanResources();
 		this.stats = this.gatherStats();
 
+		// Run spawn manager
+		this.spawnManager.run();
+
 		// Assess need for bootstrapping mode
 		this.updateBootstrapState();
 
@@ -74,11 +87,8 @@ export default class RoomManager {
 		if (this.stats.controllerLevel >= 6)
 			this.planMineralContainer();
 
-		// Assess creep needs and populate spawn queue
+		// Assess creep needs and submit spawn requests
 		this.assessCreepNeeds();
-
-		// Process spawn queue
-		this.processSpawnQueue();
 
 		// Assign tasks to worker creeps
 		this.assignCreepTasks();
@@ -170,99 +180,265 @@ export default class RoomManager {
 		return 50 - hitsPercent * 100;
 	}
 
-	/** Assesses which creeps are needed and adds spawn requests to queue */
+	/** Assesses which creeps are needed and submits spawn requests to SpawnManager */
 	private assessCreepNeeds(): void {
-		const creeps = this.room.find(FIND_MY_CREEPS);
-		const creepsByRole = this.groupCreepsByRole(creeps);
+		const roomName = this.room.name;
+		const rMem = this.room.memory;
 
-		// Count creeps by role
-		const harvesterCount = creepsByRole['harvester']?.length || 0;
-		const haulerCount = creepsByRole['hauler']?.length || 0;
-		const builderCount = creepsByRole['builder']?.length || 0;
-		const upgraderCount = creepsByRole['upgrader']?.length || 0;
-		const repairerCount = creepsByRole['repairer']?.length || 0;
+		// Pull creep role caps from room memory, or set to default value if none are set
+		const harvesterTarget = _.get(rMem, ['quotas', 'harvesters'], 2);
+		const fillerTarget = _.get(rMem, ['quotas', 'fillers'], 2);
+		const upgraderTarget = _.get(rMem, ['quotas', 'upgraders'], 2);
+		const builderTarget = _.get(rMem, ['quotas', 'builders'], 2);
+		const repairerTarget = _.get(rMem, ['quotas', 'repairers'], 0);
+		const reserverTarget = _.get(rMem, ['quotas', 'reservers'], 1);
+		const haulerTarget = _.get(rMem, ['quotas', 'haulers'], 2);
+		const remoteharvesterTarget = _.get(rMem, ['quotas', 'remoteharvesters'], 2);
+		const remotebodyguardTarget = _.get(rMem, ['quotas', 'remotebodyguards'], 1);
+		const remotehaulerTarget = _.get(rMem, ['quotas', 'remotehaulers'], 2);
 
-		// Determine needs based on room state
-		const sourceCount = this.resources.sources.length;
-		const hasContainer = this.resources.containers.length > 0;
+		// Pull current amount of creeps alive by RFQ (Role For Quota)
+		const harvesters = _.filter(Game.creeps, (c) => (c.memory.RFQ == 'harvester' || c.memory.role == 'harvester') && c.memory.home == roomName);
+		const fillers = _.filter(Game.creeps, (c) => (c.memory.RFQ == 'filler' || c.memory.role == 'filler') && c.memory.home == roomName);
+		const upgraders = _.filter(Game.creeps, (c) => (c.memory.RFQ == 'upgrader' || c.memory.role == 'upgrader') && c.memory.home == roomName);
+		const builders = _.filter(Game.creeps, (c) => (c.memory.RFQ == 'builder' || c.memory.role == 'builder') && c.memory.home == roomName);
+		const repairers = _.filter(Game.creeps, (c) => (c.memory.RFQ == 'repairer' || c.memory.role == 'repairer') && c.memory.home == roomName);
+		const reservers = _.filter(Game.creeps, (c) => (c.memory.RFQ == 'reserver' || c.memory.role == 'reserver') && c.memory.home == roomName);
+		const haulers = _.filter(Game.creeps, (c) => (c.memory.RFQ == 'hauler' || c.memory.role == 'hauler') && c.memory.home == roomName);
+		const remoteharvesters = _.filter(Game.creeps, (c) => (c.memory.RFQ == 'remoteharvester' || c.memory.role == 'remoteharvester') && c.memory.home == roomName);
+		const remotebodyguards = _.filter(Game.creeps, (c) => (c.memory.RFQ == 'remotebodyguard' || c.memory.role == 'remotebodyguard') && c.memory.home == roomName);
+		const remotehaulers = _.filter(Game.creeps, (c) => (c.memory.RFQ == 'remotehauler' || c.memory.role == 'remotehauler') && c.memory.home == roomName);
 
-		// Emergency: need at least one harvester
-		if (harvesterCount === 0) {
-			this.addSpawnRequest('harvester', 100, this.getHarvesterBody(), { role: 'harvester', home: this.room.name, room: this.room.name });
+		const harvesters_fillers_haulers_satisfied = (
+			harvesters.length >= (rMem.objects?.sources?.length || 2) &&
+			fillers.length >= fillerTarget &&
+			haulers.length >= haulerTarget
+		);
+
+		// Use energyCapacityAvailable unless we have no harvesters (emergency)
+		let cap = this.stats.energyCapacityAvailable;
+		if (harvesters.length === 0) {
+			cap = this.stats.energyAvailable;
 		}
 
-		// Need harvesters for each source
-		if (harvesterCount < sourceCount) {
-			this.addSpawnRequest('harvester', 90, this.getHarvesterBody(), { role: 'harvester', home: this.room.name, room: this.room.name });
-		}
+		// Priority spawning logic - submit requests to SpawnManager
+		if (!harvesters_fillers_haulers_satisfied) {
+			// Request Harvesters first
+			if (this.needMoreHarvesters()) {
+				const body = determineBodyParts('harvester', cap, this.room);
+				if (body) {
+					let lastHarvesterAssigned = rMem.data?.lastHarvesterAssigned || 0;
+					let sourceID: Id<Source> | undefined;
+					let containerID: string | undefined;
 
-		// Need haulers if we have containers
-		if (hasContainer && haulerCount < Math.max(2, sourceCount)) {
-			this.addSpawnRequest('hauler', 85, this.getHaulerBody(), { role: 'hauler', home: this.room.name, room: this.room.name });
-		}
+					if (lastHarvesterAssigned === 0 && rMem.objects?.sources) {
+						sourceID = rMem.objects.sources[0] as Id<Source>;
+						containerID = rMem.containers?.sourceOne;
+					} else if (rMem.objects?.sources) {
+						sourceID = rMem.objects.sources[1] as Id<Source>;
+						containerID = rMem.containers?.sourceTwo;
+					}
 
-		// Need builders if there are construction sites
-		if (this.stats.constructionSites.length > 0 && builderCount < 2) {
-			this.addSpawnRequest('builder', 70, this.getWorkerBody(), { role: 'builder', home: this.room.name, room: this.room.name });
-		}
-
-		// Need repairers if there are damaged structures
-		if (this.stats.damagedStructures.length > 3 && repairerCount < 1) {
-			this.addSpawnRequest('repairer', 65, this.getWorkerBody(), { role: 'repairer', home: this.room.name, room: this.room.name });
-		}
-
-		// Always need upgraders
-		const desiredUpgraders = this.stats.controllerLevel < 4 ? 2 : 3;
-		if (upgraderCount < desiredUpgraders) {
-			this.addSpawnRequest('upgrader', 60, this.getWorkerBody(), { role: 'upgrader', home: this.room.name, room: this.room.name });
-		}
-	}
-
-	/** Groups creeps by their role */
-	private groupCreepsByRole(creeps: Creep[]): Record<string, Creep[]> {
-		const grouped: Record<string, Creep[]> = {};
-
-		for (const creep of creeps) {
-			const role = creep.memory.role;
-			if (!grouped[role]) {
-				grouped[role] = [];
+					this.spawnManager.submitRequest({
+						role: 'harvester',
+						priority: 100,
+						body: body,
+						memory: {
+							role: 'harvester',
+							RFQ: 'harvester',
+							home: roomName,
+							room: roomName,
+							working: false,
+							disable: false,
+							rally: 'none',
+							source: sourceID,
+							bucket: containerID
+						},
+						roomName: roomName,
+						urgent: harvesters.length === 0
+					});
+				}
 			}
-			grouped[role].push(creep);
-		}
+			// Request Fillers
+			else if (fillers.length < fillerTarget) {
+				const body = determineBodyParts('filler', cap, this.room);
+				if (body) {
+					this.spawnManager.submitRequest({
+						role: 'filler',
+						priority: 95,
+						body: body,
+						memory: {
+							role: 'filler',
+							RFQ: 'filler',
+							home: roomName,
+							room: roomName,
+							working: false,
+							disable: false,
+							rally: 'none'
+						},
+						roomName: roomName,
+						urgent: false
+					});
+				}
+			}
+			// Request Haulers
+			else if (this.resources.storage && haulers.length < haulerTarget) {
+				const body = determineBodyParts('hauler', cap, this.room);
+				if (body) {
+					this.spawnManager.submitRequest({
+						role: 'hauler',
+						priority: 90,
+						body: body,
+						memory: {
+							role: 'hauler',
+							RFQ: 'hauler',
+							home: roomName,
+							room: roomName,
+							working: false,
+							disable: false,
+							rally: 'none'
+						},
+						roomName: roomName,
+						urgent: false
+					});
+				}
+			}
+		} else {
+			// Request other creep types if harvesters & fillers fulfilled
+			// Request Upgraders
+			if (upgraders.length < upgraderTarget) {
+				const body = determineBodyParts('upgrader', cap, this.room);
+				if (body) {
+					this.spawnManager.submitRequest({
+						role: 'upgrader',
+						priority: 70,
+						body: body,
+						memory: {
+							role: 'upgrader',
+							RFQ: 'upgrader',
+							home: roomName,
+							room: roomName,
+							working: false,
+							disable: false,
+							rally: 'none'
+						},
+						roomName: roomName,
+						urgent: false
+					});
+				}
+			}
+			// Request Builders
+			else if (this.stats.constructionSites.length > 0 && builders.length < builderTarget) {
+				const body = determineBodyParts('builder', cap, this.room);
+				if (body) {
+					this.spawnManager.submitRequest({
+						role: 'builder',
+						priority: 65,
+						body: body,
+						memory: {
+							role: 'builder',
+							RFQ: 'builder',
+							home: roomName,
+							room: roomName,
+							working: false,
+							disable: false,
+							rally: 'none'
+						},
+						roomName: roomName,
+						urgent: false
+					});
+				}
+			}
+			// Request Repairers
+			else if (repairers.length < repairerTarget) {
+				const body = determineBodyParts('repairer', cap, this.room);
+				if (body) {
+					this.spawnManager.submitRequest({
+						role: 'repairer',
+						priority: 60,
+						body: body,
+						memory: {
+							role: 'repairer',
+							RFQ: 'repairer',
+							home: roomName,
+							room: roomName,
+							working: false,
+							disable: false,
+							rally: 'none'
+						},
+						roomName: roomName,
+						urgent: false
+					});
+				}
+			}
+			// Request Reservers
+			else if (cap >= 800 && reservers.length < reserverTarget) {
+				const body = determineBodyParts('reserver', cap, this.room);
+				if (body) {
+					this.spawnManager.submitRequest({
+						role: 'reserver',
+						priority: 55,
+						body: body,
+						memory: {
+							role: 'reserver',
+							RFQ: 'reserver',
+							home: roomName,
+							room: roomName,
+							working: false,
+							disable: false,
+							rally: 'none'
+						},
+						roomName: roomName,
+						urgent: false
+					});
+				}
+			}
+			// Request Remote Harvesters
+			else if (rMem.outposts && rMem.outposts.numHarvesters < rMem.outposts.numSources) {
+				const body = determineBodyParts('harvester', cap, this.room);
+				if (body) {
+					const returnObj = this.room.counter?.next();
+					const sourceID = returnObj?.source;
+					const containerID = returnObj?.container;
 
-		return grouped;
+					this.spawnManager.submitRequest({
+						role: 'remoteharvester',
+						priority: 50,
+						body: body,
+						memory: {
+							role: 'remoteharvester',
+							RFQ: 'remoteharvester',
+							home: roomName,
+							room: roomName,
+							working: false,
+							disable: false,
+							rally: 'none',
+							source: sourceID,
+							bucket: containerID
+						},
+						roomName: roomName,
+						urgent: false
+					});
+				}
+			}
+		}
 	}
 
-	/** Adds a spawn request to the queue if it doesn't already exist */
-	private addSpawnRequest(role: string, priority: number, body: BodyPartConstant[], memory: CreepMemory): void {
-		// Check if we already have a request for this role
-		const existingRequest = this.spawnQueue.find(req => req.role === role);
-		if (existingRequest) return;
+	/** Helper method to determine if more harvesters are needed (from main.ts logic) */
+	private needMoreHarvesters(): boolean {
+		const roomName = this.room.name;
+		const harvesters = _.filter(Game.creeps, (c) => (c.memory.RFQ == 'harvester' || c.memory.role == 'harvester') && c.memory.home == roomName);
 
-		this.spawnQueue.push({ role, priority, body, memory });
-		this.spawnQueue.sort((a, b) => b.priority - a.priority);
-	}
+		const sources = this.resources.sources;
+		let totalWorkParts = 0;
 
-	/** Processes the spawn queue and spawns creeps */
-	private processSpawnQueue(): void {
-		if (this.spawnQueue.length === 0) return;
-
-		const availableSpawn = this.resources.spawns.find(spawn => !spawn.spawning);
-		if (!availableSpawn) return;
-
-		const request = this.spawnQueue[0];
-
-		// Check if we can afford this creep
-		const cost = this.calculateBodyCost(request.body);
-		if (this.stats.energyAvailable < cost) return;
-
-		const name = `${request.role}_${Game.time}`;
-		const result = availableSpawn.spawnCreep(request.body, name, { memory: request.memory });
-
-		if (result === OK) {
-			console.log(`${this.room.name}: Spawning ${request.role} (${name})`);
-			this.spawnQueue.shift(); // Remove the request from queue
+		for (const harvester of harvesters) {
+			totalWorkParts += harvester.body.filter(part => part.type === WORK).length;
 		}
+
+		// Each source can support 5 WORK parts (generates 10 energy/tick), need at least that many
+		const neededWorkParts = sources.length * 5;
+		return totalWorkParts < neededWorkParts;
 	}
 
 	/** Assigns tasks to worker creeps based on room needs */
@@ -592,47 +768,6 @@ export default class RoomManager {
 		}
 	}
 
-	/** Generates a harvester body based on available energy */
-	private getHarvesterBody(): BodyPartConstant[] {
-		const energy = this.stats.energyCapacityAvailable;
-
-		if (energy >= 550) {
-			return [WORK, WORK, WORK, WORK, WORK, MOVE];
-		} else if (energy >= 350) {
-			return [WORK, WORK, WORK, MOVE];
-		} else {
-			return [WORK, WORK, MOVE];
-		}
-	}
-
-	/** Generates a hauler body based on available energy */
-	private getHaulerBody(): BodyPartConstant[] {
-		const energy = this.stats.energyCapacityAvailable;
-
-		if (energy >= 600) {
-			return [CARRY, CARRY, CARRY, CARRY, MOVE, MOVE, MOVE, MOVE];
-		} else if (energy >= 400) {
-			return [CARRY, CARRY, CARRY, MOVE, MOVE, MOVE];
-		} else {
-			return [CARRY, CARRY, MOVE, MOVE];
-		}
-	}
-
-	/** Generates a worker body (builder/repairer/upgrader) based on available energy */
-	private getWorkerBody(): BodyPartConstant[] {
-		const energy = this.stats.energyCapacityAvailable;
-
-		if (energy >= 800) {
-			return [WORK, WORK, WORK, WORK, CARRY, CARRY, CARRY, CARRY, MOVE, MOVE, MOVE, MOVE];
-		} else if (energy >= 550) {
-			return [WORK, WORK, WORK, CARRY, CARRY, CARRY, MOVE, MOVE, MOVE];
-		} else if (energy >= 350) {
-			return [WORK, WORK, CARRY, CARRY, MOVE, MOVE];
-		} else {
-			return [WORK, CARRY, MOVE, MOVE];
-		}
-	}
-
 	/** Calculates the energy cost of a body configuration */
 	private calculateBodyCost(body: BodyPartConstant[]): number {
 		return body.reduce((cost, part) => cost + BODYPART_COST[part], 0);
@@ -648,9 +783,9 @@ export default class RoomManager {
 		return this.stats;
 	}
 
-	/** Gets the current spawn queue (for external access) */
-	getSpawnQueue(): SpawnRequest[] {
-		return this.spawnQueue;
+	/** Gets the SpawnManager instance (for external access) */
+	getSpawnManager(): SpawnManager {
+		return this.spawnManager;
 	}
 
 	/** Draws planned structures (like extensions) on the room using RoomVisuals. */

@@ -1,13 +1,3 @@
-/**
- * SpawnManager - Centralized spawning system that manages spawn requests across all rooms
- *
- * Features:
- * - Priority-based spawn queue with dynamic reordering
- * - Predictive spawning (plans future spawns based on creep lifespan)
- * - Energy forecasting to prevent resource conflicts
- * - Time-based scheduling to avoid spawn conflicts
- */
-
 interface SpawnRequest {
 	id: string;
 	role: string;
@@ -36,6 +26,14 @@ interface EnergyForecast {
 	projectedEnergy: (ticks: number) => number;
 }
 
+/**
+ * SpawnManager - Centralized spawning system that manages spawn requests across all rooms
+ * @author randomencounter
+ * - Priority-based spawn queue with dynamic reordering
+ * - Predictive spawning (plans future spawns based on creep lifespan)
+ * - Energy forecasting to prevent resource conflicts
+ * - Time-based scheduling to avoid spawn conflicts
+ */
 export default class SpawnManager {
 	private room: Room;
 	private spawnQueue: SpawnRequest[];
