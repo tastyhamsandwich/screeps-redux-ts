@@ -1,7 +1,9 @@
-import { PART_COST } from "./constants";
+import { PART_COST } from "@utils/constants";
 
 declare global {
 	interface Global {
+		splitRoomName(roomName: string): [string, number, string, number];
+		roomExitsTo(roomName: string, direction: DirectionConstant | number | string): string;
 		calcPath(startPos: RoomPosition, endPos: RoomPosition): { path: RoomPosition[], length: number, ops: number, cost: number, incomplete: boolean };
 		calcPathLength(startPos: RoomPosition, endPos: RoomPosition): number;
 		asRoomPosition(value: RoomPosition | { pos?: RoomPosition } | undefined | null): RoomPosition | null;
@@ -182,6 +184,12 @@ export function log(logMsg: string | string[], room: Room | false = false): void
 	}
 }
 
+/**
+ * Creates a flag named after the room at room's center, or at controler if present
+ * @author randomencounter
+ * @param {string} room The name of the room to create the flag in
+ * @return {string | null} Returns either the name of the flag or null if it failed
+ */
 export function createRoomFlag(room: string): string | null { // creates a flag named after room at room's center, or at controller if present
 
 	let flagX: number;
@@ -376,10 +384,26 @@ export function initGlobal(override: boolean = false): boolean {
 				upgrader: {
 					reusePathValue: 3,
 					ignoreCreeps: true
+				},
+				repairer: {
+					reusePathValue: 3,
+					ignoreCreeps: true
+				},
+				hauler: {
+					reusePathValue: 3,
+					ignoreCreeps: true
+				},
+				remotebodyguard: {
+					reusePathValue: 3,
+					ignoreCreeps: true
+				},
+				reserver: {
+					reusePathValue: 3,
+					ignoreCreeps: true
 				}
 			}
 		}
-
+		console.log(`Initialized global settings!`);
 		return true;
 	} else
 		return false;
@@ -387,14 +411,14 @@ export function initGlobal(override: boolean = false): boolean {
 
 /**
  * Calculate the total energy cost of a body array.
- * Returns 0 for empty/undefined bodies and ignores unknown parts.
+ * @param {BodyPartConstant[] | undefined | null} body An array of parts to calculate the cost of.
+ * @returns {number} Returns 0 for empty/undefined bodies and ignores unknown parts.
+ * @example const bodyCost: number = calcBodyCost([MOVE,MOVE,WORK,WORK,CARRY])
  */
 export function calcBodyCost(body: BodyPartConstant[] | undefined | null): number {
     if (!body || body.length === 0) return 0;
     return body.reduce((sum, part) => sum + (PART_COST[part] ?? 0), 0);
 }
-
-
 
 export function needMoreHarvesters(room: Room): boolean {
 	const numSources = room.find(FIND_SOURCES).length;
@@ -429,6 +453,15 @@ export function needMoreHarvesters(room: Room): boolean {
 	return sourcesSatisfied < numSources;
 }
 
+/**
+ * Call in the loop for your colony rooms, it will show controller upgrade progress overlay
+ *
+ * Shows: Current Level, Progress/TotalNeeded (and %), Average Progress Per Tick, and estimated Time to Upgrade
+ * @author randomencounter
+ * @param {StructureController} controller
+ * @return {void}
+ * @example visualRCProgress(room.controller);
+ */
 export function visualRCProgress(controller: StructureController): void {
 
 	function add(acc: number, a: number) { return acc + a; }
@@ -529,9 +562,9 @@ export function visualRCProgress(controller: StructureController): void {
 }
 
 /**
- *  Takes a number array as input and returns the average
- * @param array The array used for calculation
- * @returns The array's average value
+ * Takes a number array as input and returns the average
+ * @param {number[]} array The array used for calculation
+ * @returns {number[]} The array's average value
  */
 function avgArray(array: number[]): number[] {
 

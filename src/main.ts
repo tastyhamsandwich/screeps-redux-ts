@@ -1,9 +1,9 @@
-import { ErrorMapper } from "functions/utils/ErrorMapper";
-import RoomManager from "./managers/RoomManager_v2";
+import { wrapErrorMapper } from "@utils/errorMapper";
+import RoomManager from "@managers/RoomManager";
 import OutpostSourceCounter from "classes/OutpostSourceCounter";
 import roomDefense from './tower';
-import { needMoreHarvesters, visualRCProgress, calcTickTime } from "./functions/utils/globals";
-import { buildProgress, repairProgress } from 'functions/visual/progress';
+import { needMoreHarvesters, visualRCProgress, calcTickTime } from "@globals";
+import { buildProgress, repairProgress } from '@funcs/visual/progress';
 import * as CreepAI from 'creeps';
 
 import 'prototypes/creep';
@@ -13,6 +13,10 @@ import 'prototypes/spawn';
 import { last } from "lodash";
 
 declare global {
+
+	interface Global {
+		roomManagers: { [roomName: string]: RoomManager };
+	}
 
 	// INTERFACE: Base Memory Extension
 	interface Memory {
@@ -54,7 +58,14 @@ declare global {
 		};
 		quotas: { [key: string]: number };
 		hostColony?: string;
-		//orderQueue: WorkOrder[]
+		remoteSources?: { [key: string]: RemoteSourceData };
+		flags: RoomFlags;
+		spawnManager: {
+			queue: SpawnRequest[];
+			scheduled: ScheduledSpawn[];
+			deferred?: SpawnRequest[];
+			lastProcessed: number;
+		}
 	}
 
 	// INTERFACE: Creep Memory Extension
@@ -73,13 +84,27 @@ declare global {
 
 
 	//! STANDARD INTERFACE DEFINITIONS
-	interface SpawnOrder {
-		role: CreepRole;
+	interface SpawnRequest {
+		id: string;
+		role: string;
+		priority: number;
 		body: BodyPartConstant[];
 		memory: CreepMemory;
-		name: string;
-		critical: boolean;
+		roomName: string;
+		urgent: boolean;
+		requestedAt: number;
+		estimatedSpawnTime?: number;
+		energyCost?: number;
 	}
+
+	interface ScheduledSpawn {
+		role: string;
+		scheduledTick: number;
+		duration: number;
+		energyCost: number;
+		priority: number;
+	}
+
 
 	interface GlobalSettings {
 		consoleSpawnInterval: number;
@@ -95,6 +120,7 @@ declare global {
 	}
 
 	interface RoomFlags {
+		bootstrap?: boolean;
 		boostUpgraders?: boolean;
 		centralStorageLogic?: boolean;
 		closestConSites?: boolean;
@@ -130,6 +156,13 @@ declare global {
 		sourceAssignmentMap: SourceAssignment[];
 	}
 
+	interface RemoteSourceData {
+		pos: { x: number, y: number, roomName: string };
+		assignedHarvester: string | null;
+		containerId: string | null;
+		containerPos: { x: number, y: number, roomName: string } | null;
+		lastChecked: number;
+	}
 	interface SourceAssignment {
 		source: Id<Source>;
 		container: Id<StructureContainer> | null;
@@ -269,7 +302,26 @@ declare global {
 	// Syntax for adding properties to `global` (ex "global.log")
 	namespace NodeJS {
 		interface Global {
+			roomManagers: { [roomName: string]: RoomManager };
+			splitRoomName(roomName: string): [string, number, string, number];
+			roomExitsTo(roomName: string, direction: DirectionConstant | number | string): string;
+			calcPath(startPos: RoomPosition, endPos: RoomPosition): { path: RoomPosition[], length: number, ops: number, cost: number, incomplete: boolean };
+			calcPathLength(startPos: RoomPosition, endPos: RoomPosition): number;
+			asRoomPosition(value: RoomPosition | { pos?: RoomPosition } | undefined | null): RoomPosition | null;
+			log(logMsg: string | string[], room: Room | false): void;
+			createRoomFlag(room: string): string | null;
+			validateRoomName(roomName: string): RoomName;
+			randomInt(min: number, max: number): number;
+			randomColor(): ColorConstant;
+			randomColorAsInt(): number;
+			determineBodyParts(role: string, maxEnergy: number, extras?: { [key: string]: any }): BodyPartConstant[] | undefined;
+			initGlobal(override?: boolean): boolean;
+			calcBodyCost(body: BodyPartConstant[] | undefined | null): number;
+			PART_COST: Record<BodyPartConstant, number>;
+			pathing: { [key: string]: any };
+			log(): void;
 			tickTime: number;
+			tickCount:  number;
 		}
 	}
 }
@@ -279,7 +331,9 @@ let tickCount = 0;
 
 // When compiling TS to JS and bundling with rollup, the line numbers and file names in error messages change
 // This utility uses source maps to get the line numbers and file names of the original, TS source code
-export const loop = ErrorMapper.wrapLoop(() => {
+export const loop = () => {
+
+	if (!Memory.globalSettings) global.initGlobal();
 
 	calcTickTime();
 
@@ -326,8 +380,13 @@ export const loop = ErrorMapper.wrapLoop(() => {
 				break;
 			case 'reserver':
 				CreepAI.Reserver.run(creep);
+				break;
 			case 'remoteharvester':
 				CreepAI.Harvester.runremote(creep);
+				break;
+			case 'scout':
+				CreepAI.Scout.run(creep);
+				break;
 			default:
 				break;
 		}
@@ -339,6 +398,17 @@ export const loop = ErrorMapper.wrapLoop(() => {
 
 		const roomName = room.name;
 		const rMem = room.memory;
+
+		if (!global.roomManagers) global.roomManagers = {};
+
+		if (!global.roomManagers[roomName]) {
+			global.roomManagers[roomName] = new RoomManager(room);
+		}
+
+		const manager = global.roomManagers[roomName];
+
+		manager.run();
+
 
 		if (rMem.data === undefined)
 			rMem.data = { numCSites: 0};
@@ -359,10 +429,6 @@ export const loop = ErrorMapper.wrapLoop(() => {
 
 		//! From here, only rooms where we own the controller have this code ran
 		if (room.controller && room.controller.my) {
-
-			new RoomManager(room);
-
-			roomDefense(room);
 
 			if (room.controller.level !== room.memory.data.controllerLevel) {
 				const newLevel = room.controller.level;
@@ -402,6 +468,7 @@ export const loop = ErrorMapper.wrapLoop(() => {
 				}
 			}
 
+			/* POTENTIALLY DEPRECATED
 			// pull creep role caps from room memory, or set to default value if none are set
 			let harvesterTarget: number = _.get(room.memory,  ['quotas', 'harvesters'] , 2);
 			let fillerTarget: 	 number = _.get(room.memory,  ['quotas', 'fillers'	 ] , 2);
@@ -431,9 +498,10 @@ export const loop = ErrorMapper.wrapLoop(() => {
 			let remotebodyguards: Creep[] = _.filter(Game.creeps, (creep) => (creep.memory.RFQ == 'remotebodyguard' || creep.memory.role == 'remotebodyguard') && creep.memory.home == roomName);
 			let remotehaulers: 	  Creep[] = _.filter(Game.creeps, (creep) => (creep.memory.RFQ == 'remotehauler' 	|| creep.memory.role == 'remotehauler')    && creep.memory.home == roomName);
 
+
 			const spawns = room.find(FIND_MY_STRUCTURES, {filter: (i) => i.structureType === STRUCTURE_SPAWN });
 
-			const harvesters_fillers_haulers_satisfied = (harvesters.length >= room.memory.objects.sources.length && fillers.length - fillerTarget === 0 && haulers.length - haulerTarget === 0);
+			const harvesters_fillers_haulers_satisfied = (harvesters.length >= room.memory.objects.sources.length && fillers.length - fillerTarget === 0 && haulers.length - haulerTarget >= 0);
 
 			if (spawns.length) {
 
@@ -447,6 +515,7 @@ export const loop = ErrorMapper.wrapLoop(() => {
 						cap = spawn.room.energyAvailable;
 					if (!spawn.spawning) {
 
+						console.log(harvesters_fillers_haulers_satisfied);
 						//! Spawn Harvesters and Fillers before anything else
 						if (!harvesters_fillers_haulers_satisfied) {
 							//# Spawn Harvesters
@@ -498,7 +567,6 @@ export const loop = ErrorMapper.wrapLoop(() => {
 							//# Spawn Haulers
 
 							else if (spawn.room.storage && haulers.length < haulerTarget) {
-								console.log(`inside hauler logic`);
 								const body = spawn.determineBodyParts('hauler', spawn.room.energyCapacityAvailable);
 								let countMod = 1;
 								let name = `Col${1}_Hauler${haulers.length + countMod}`;
@@ -540,7 +608,7 @@ export const loop = ErrorMapper.wrapLoop(() => {
 									console.log(`${spawn.name}: Failed to spawn Upgrader: ${result}`);
 							}
 							//# Spawn Builders
-							else if (builders.length < builderTarget)  {
+							else if (numCSites > 0 && builders.length < builderTarget)  {
 								const body = spawn.determineBodyParts('builder', spawn.room.energyCapacityAvailable);
 								let countMod = 1;
 								let name = `Col${1}_B${builders.length + countMod}`;
@@ -571,7 +639,7 @@ export const loop = ErrorMapper.wrapLoop(() => {
 								else
 									console.log(`${spawn.name}: Failed to spawn Repairer: ${result}`);
 							}
-
+							//# Spawn Reservers
 							else if (spawn.room.energyCapacityAvailable >= 800 && reservers.length < reserverTarget) {
 								const body = spawn.determineBodyParts('reserver', spawn.room.energyCapacityAvailable);
 								let countMod = 1;
@@ -587,7 +655,7 @@ export const loop = ErrorMapper.wrapLoop(() => {
 								else
 									console.log(`${spawn.name}: Failed to spawn Reserver: ${result}`);
 							}
-
+							//# Spawn Remote Harvesters
 							else if (spawn.room.memory.outposts.numHarvesters < spawn.room.memory.outposts.numSources) { // Determine if we have enough harvesters (by work parts per total sources in room)
 								const body = spawn.determineBodyParts('harvester', cap);
 								const ticksToSpawn = body.length * 3; // unused atm, will later be used to coordinate spawn times more accurately
@@ -615,18 +683,8 @@ export const loop = ErrorMapper.wrapLoop(() => {
 					}
 				});
 			} //! end of if (spawns.length) {}
+			*/
 
-			// Show some basic energy and quota information every few ticks in the console
-			const tickInterval: number = Memory.globalSettings.consoleSpawnInterval;
-			let storageInfo = '';
-			if (room.storage)
-				storageInfo = '<' + room.storage.store[RESOURCE_ENERGY].toString() + '> ';
-			const energy: string = 'NRG: ' + room.energyAvailable + '/' + room.energyCapacityAvailable + '(' + (room.energyAvailable / room.energyCapacityAvailable * 100).toFixed(0) + '%) ';
-			if (tickInterval !== 0 && tickCount % tickInterval === 0) {
-				console.log(room.link() + energy + storageInfo + ' Tick: ' + tickCount);
-				console.log(room.link() + `H: ${harvesters.length}, F: ${fillers.length}/${fillerTarget}, Haul: ${haulers.length}/${haulerTarget}, U: ${upgraders.length}/${upgraderTarget}, B: ${builders.length}/${builderTarget}, R: ${repairers.length}/${repairerTarget}, Rsv: ${reservers.length}/${reserverTarget}`);
-				console.log(room.link() + `RH: ${remoteharvesters.length}/${remoteharvesterTarget}, RG: ${remotebodyguards.length}/${remotebodyguardTarget}, RHaul: ${remotehaulers.length}/${remotehaulerTarget}`);
-			}
 
 			if (room.controller.level >= 1) visualRCProgress(room.controller);
 		} //! end of if (room.controller && room.controller.my) {}
@@ -634,5 +692,6 @@ export const loop = ErrorMapper.wrapLoop(() => {
 	}) //! end of _.forEach(Game.rooms, room => {}) loop
 
 	tickCount++;
+	global.tickCount = tickCount;
 
-}); //! End of entire main loop (wrapped in ErrorMapper)
+}; //! End of entire main loop (wrapped in ErrorMapper)

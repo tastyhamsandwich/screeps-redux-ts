@@ -26,14 +26,14 @@ declare global {
 		getSourcePositions(sourceID: string): RoomPosition[];
 		link(): string;
 		cacheObjects(): void;
-		newSpawnQueue(spawnOrder: SpawnOrder): void;
+		//newSpawnQueue(spawnOrder: SpawnOrder): void;
 		initOutpost(roomName: string): void;
 		initRoom(): void;
 		initFlags(): void;
 		updateSourceAssignment(roomToUpdate: string, updateObject: SourceAssignmentUpdate);
 		registerLogisticalPairs(): void;
 		setQuota(roleTarget: CreepRole, newTarget: number);
-		roomSpawnQueue: SpawnOrder[];
+		//roomSpawnQueue: SpawnOrder[];
 		counter: OutpostSourceCounter;
 	}
 
@@ -88,30 +88,6 @@ Room.prototype.link = function(): string {
 	return `<span color='red'>[<a href="#!/room/${Game.shard.name}/${this.name}">${this.name}</a></span>]: `;
 }
 
-
-// Note: this function is flexible and accepts either a SpawnOrder object (legacy declaration) or positional parameters.
-Room.prototype.newSpawnQueue = function(role: any, critical: boolean = false, maxEnergy?: number, name?: string): void {
-
-	if (maxEnergy === undefined) maxEnergy = this.energyCapacityAvailable;
-	const colonyNum = this.memory.data.colonyNumber;
-
-	const spawnOrder = {
-		role: role,
-		body: [], // body can be determined later by the spawn using determineBodyParts
-		memory: {
-			role: role,
-			home: this.name,
-			room: this.name,
-			working: false
-		} as CreepMemory,
-		name: name || `${role}_${Game.time}_${Math.floor(Math.random() * 1000)}`,
-		critical: critical
-	}
-
-	if (!this.roomSpawnQueue) this.roomSpawnQueue = [];
-	this.roomSpawnQueue.push(spawnOrder as SpawnOrder);
-}
-
 Room.prototype.cacheObjects = function () {
 
 	// declare storage array for objects to cache
@@ -156,10 +132,8 @@ Room.prototype.cacheObjects = function () {
 			storageArray.push(sources[i].id);
 		if (storageArray.length) {
 			this.memory.objects.sources = storageArray;
-			if (this.memory.hostColony !== undefined) {
-				Game.rooms[this.memory.hostColony].memory.outposts.numSources += storageArray.length;
+			if (this.memory.hostColony !== undefined)
 				Game.rooms[this.memory.hostColony].memory.outposts.list[this.name].sourceIDs = storageArray;
-			}
 			if (storageArray.length > 1)
 				log('Cached ' + storageArray.length + ' sources.', this);
 			else
@@ -303,7 +277,7 @@ Room.prototype.cacheObjects = function () {
 			let updateInfo = '';
 			if (this.memory.hostColony) {
 				const hostRoom = this.memory.hostColony;
-				this.memory.outposts.list[hostRoom].containerIDs = storageArray;
+				Game.rooms[hostRoom].memory.outposts.list[this.name].containerIDs = storageArray;
 				this.memory.objects.containers = storageArray;
 				updateInfo = "\n>>> NOTICE: Room is an outpost of a main colony. Updated outpost info with new container IDs.";
 			}
@@ -311,7 +285,7 @@ Room.prototype.cacheObjects = function () {
 			if (storageArray.length > 1)
 				log('Cached ' + storageArray.length + ' containers.' + updateInfo, this);
 			else
-				log('Cached 1 container.', this);
+				log('Cached 1 container.' + updateInfo, this);
 		}
 		storageArray = [];
 	}
@@ -526,6 +500,9 @@ Room.prototype.initRoom = function () {
 	if (!this.memory.outposts) this.memory.outposts = { list: {}, array: [], reserverLastAssigned: 0, numSources: 0, numHarvesters: 0, counter: 0 };
 	if (!this.memory.stats) this.memory.stats = { energyHarvested: 0, controlPoints: 0, constructionPoints: 0, creepsSpawned: 0, creepPartsSpawned: 0,
 		mineralsHarvested: mineralsHarvested, controllerLevelReached: 0, npcInvadersKilled: 0, hostilePlayerCreepsKilled: 0, labStats: labStats };
+	if (!this.memory.flags) this.memory.flags = {};
+
+	this.cacheObjects();
 }
 
 Room.prototype.initOutpost = function (roomName): void {
@@ -840,3 +817,29 @@ Room.prototype.setQuota = function (roleTarget: CreepRole, newTarget: number) {
 	log('Set role \'' + pluralRoleTarget + '\' quota to ' + newTarget + ' (was ' + oldTarget + ').', this);
 	return;
 }
+
+
+/* POTENTIALLY DEPRECATED
+// Note: this function is flexible and accepts either a SpawnOrder object (legacy declaration) or positional parameters.
+Room.prototype.newSpawnQueue = function(role: any, critical: boolean = false, maxEnergy?: number, name?: string): void {
+
+	if (maxEnergy === undefined) maxEnergy = this.energyCapacityAvailable;
+	const colonyNum = this.memory.data.colonyNumber;
+
+	const spawnOrder = {
+		role: role,
+		body: [], // body can be determined later by the spawn using determineBodyParts
+		memory: {
+			role: role,
+			home: this.name,
+			room: this.name,
+			working: false
+		} as CreepMemory,
+		name: name || `${role}_${Game.time}_${Math.floor(Math.random() * 1000)}`,
+		critical: critical
+	}
+
+	if (!this.roomSpawnQueue) this.roomSpawnQueue = [];
+	this.roomSpawnQueue.push(spawnOrder as SpawnOrder);
+}
+*/

@@ -595,7 +595,9 @@ if (typeof Creep !== 'undefined') {
 			}
 			else if (assignedPair) {
 				this.memory.pickup = assignedPair.source;
+				this.memory.pickupPos = Game.getObjectById(assignedPair.source)!.pos;
 				this.memory.dropoff = assignedPair.destination;
+				this.memory.dropoffPos = Game.getObjectById(assignedPair.destination)!.pos;
 				this.memory.cargo = assignedPair.resource;
 				this.memory.pathLength = assignedPair.distance;
 				this.memory.locality = assignedPair.locality;

@@ -1,3 +1,7 @@
+import { initGlobal } from './globals';
+
+if (!Memory.globalSettings) initGlobal();
+if (!Memory.globalSettings.creepSettings) Memory.globalSettings.creepSettings = {};
 const cSet = Memory.globalSettings.creepSettings;
 
 export const PART_COST: Record<BodyPartConstant, number> = {
@@ -14,67 +18,67 @@ export const PART_COST: Record<BodyPartConstant, number> = {
 export const pathing: { [key: string]: MoveToOpts } = {
 	builderPathing: {
 		visualizePathStyle: { stroke: "#0000ff", opacity: 0.3, lineStyle: "dotted" },
-		reusePath: cSet.builder.reusePathValue,
+		reusePath: cSet.builder.reusePathValue || 3,
 		ignoreCreeps: false //cSet.builder.ignoreCreeps
 	},
 	fillerPathing: {
 		visualizePathStyle: { stroke: "#44ffaa", opacity: 0.3, lineStyle: "dotted" },
-		reusePath: cSet.hauler.reusePathValue,
+		reusePath: cSet.hauler.reusePathValue || 3,
 		ignoreCreeps: false //cSet.filler.ignoreCreeps
 	},
 	haulerPathing: {
 		visualizePathStyle: { stroke: "#880088", opacity: 0.3, lineStyle: "dotted" },
-		reusePath: cSet.hauler.reusePathValue,
+		reusePath: cSet.hauler.reusePathValue || 3,
 		ignoreCreeps: false //cSet.hauler.ignoreCreeps
 	},
 	harvesterPathing: {
 		visualizePathStyle: { stroke: "#00ff00", opacity: 0.5, lineStyle: "dashed" },
-		reusePath: cSet.harvester.reusePathValue,
+		reusePath: cSet.harvester.reusePathValue || 3,
 		ignoreCreeps: false //cSet.harvester.ignoreCreeps
 	},
 	remoteBuilderPathing: {
 		visualizePathStyle: { stroke: "#ffff00", opacity: 0.3, lineStyle: "dotted" },
-		reusePath: cSet.remotebuilder.reusePathValue,
+		reusePath: cSet.builder.reusePathValue || 3,
 		ignoreCreeps: false //cSet.remotebuilder.ignoreCreeps
 	},
 	remoteBodyguardPathing: {
 		visualizePathStyle: { stroke: "#ff0000", opacity: 0.3, lineStyle: "dashed" },
-		reusePath: cSet.remotebodyguard.reusePathValue,
+		reusePath: cSet.remotebodyguard.reusePathValue || 3,
 		ignoreCreeps: false //cSet.remotebodyguard.ignoreCreeps
 	},
 	remoteHarvesterPathing: {
 		visualizePathStyle: { stroke: "#98dd44", opacity: 0.5, lineStyle: "dashed" },
-		reusePath: cSet.remoteharvester.reusePathValue,
+		reusePath: cSet.harvester.reusePathValue || 3,
 		ignoreCreeps: false //cSet.remoteharvester.ignoreCreeps
 	},
 	remoteHaulerPathing: {
 		visualizePathStyle: { stroke: "#880088", opacity: 0.3, lineStyle: "dotted" },
-		reusePath: cSet.remotehauler.reusePathValue,
+		reusePath: cSet.hauler.reusePathValue || 3,
 		ignoreCreeps: false //cSet.remotehauler.ignoreCreeps
 	},
 	repairerPathing: {
 		visualizePathStyle: { stroke: "#ff6600", opacity: 0.3, lineStyle: "dotted" },
-		reusePath: cSet.repairer.reusePathValue,
+		reusePath: cSet.repairer.reusePathValue || 3,
 		ignoreCreeps: false //cSet.repairer.ignoreCreeps
 	},
 	reserverPathing: {
 		visualizePathStyle: { stroke: "#ffffff", opacity: 0.3, lineStyle: "dashed" },
-		reusePath: cSet.reserver.reusePathValue,
+		reusePath: cSet.reserver.reusePathValue || 3,
 		ignoreCreeps: false //cSet.reserver.ignoreCreeps
 	},
 	upgraderPathing: {
 		visualizePathStyle: { stroke: "#ffff00", opacity: 0.3, lineStyle: "dotted" },
-		reusePath: cSet.upgrader.reusePathValue,
+		reusePath: cSet.upgrader.reusePathValue || 3,
 		ignoreCreeps: false //cSet.upgrader.ignoreCreeps
 	},
 	rallyPointPathing: {
 		visualizePathStyle: { stroke: "#ffffff", opacity: 1.0, lineStyle: "solid" },
-		reusePath: Memory.globalSettings.reusePathValue,
+		reusePath: Memory.globalSettings.reusePathValue || 3,
 		ignoreCreeps: Memory.globalSettings.ignoreCreeps
 	},
 	subordinatePathing: {
 		visualizePathStyle: { stroke: '#880000', opacity: 1.0, lineStyle: "dashed" },
-		reusePath: Memory.globalSettings.reusePathValue,
+		reusePath: Memory.globalSettings.reusePathValue || 3,
 		ignoreCreeps: false
 	}
 };

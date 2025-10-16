@@ -17,13 +17,12 @@ export const Harvester = {
 		const rMem: RoomMemory = Game.rooms[cMem.home].memory;
 		const pos: RoomPosition = creep.pos;
 
-		if (cMem.disable === undefined) cMem.disable = false;
-		if (cMem.rally === undefined) cMem.rally = 'none';
-		if (cMem.returnEnergy === undefined) cMem.returnEnergy = false;
+		cMem.disable ??= false;
+		cMem.rally ??= 'none';
+		cMem.returnEnergy ??= false;
 		if (!cMem.source) creep.assignHarvestSource('local', true, false);
 
 		if (!cMem.disable) {
-
 			if (cMem.rally == 'none') {
 
 				if (pos.x == 49) creep.move(LEFT);
@@ -37,42 +36,51 @@ export const Harvester = {
 				}
 
 				let source: Source;
+
+				const isBootstrap = creep.room.memory.flags.bootstrap;
+
 				if (creep.getActiveBodyparts(CARRY) === 0) {
-
-
 					source = Game.getObjectById(cMem.source) as unknown as Source;
-					if (!pos.isNearTo(source))
-						creep.moveTo(source, pathing.harvesterPathing);
+					if (!pos.isNearTo(source)) creep.moveTo(source, pathing.harvesterPathing);
 					else {
 						const containers: StructureContainer[] = source.pos.findInRange(FIND_STRUCTURES, 2, { filter: { structureType: STRUCTURE_CONTAINER } });
 						if (containers.length) {
 							const bucket = pos.findClosestByRange(containers);
 							if (bucket) {
-								if (cMem.bucket === undefined)
-									cMem.bucket = bucket.id;
-								if (!pos.isEqualTo(bucket))
-									creep.moveTo(bucket, pathing.harvesterPathing);
-								else
-									creep.harvestEnergy();
+								if (cMem.bucket === undefined) cMem.bucket = bucket.id;
+								if (!pos.isEqualTo(bucket))	creep.moveTo(bucket, pathing.harvesterPathing);
+								else creep.harvestEnergy();
 							}
-						} else
-							creep.harvestEnergy();
+						} else creep.harvestEnergy();
 					}
 				} else {
 					if (creep.store.getFreeCapacity() == 0 || creep.store.getFreeCapacity() < (creep.getActiveBodyparts(WORK) * 2)) {
 						if (cMem.returnEnergy === true) {
-							if (creep.transfer(Game.spawns['Spawn1'], RESOURCE_ENERGY) === ERR_NOT_IN_RANGE)
+							if (creep.transfer(Game.spawns['Spawn1'], RESOURCE_ENERGY) === ERR_NOT_IN_RANGE) {
 								creep.moveTo(Game.spawns['Spawn1'], pathing.harvesterPathing);
+								return;
+							}
 						} else {
-							if (cMem.bucket) {
-								creep.unloadEnergy(cMem.bucket);
-							} else {
+							if (isBootstrap) {
+								const spawn = creep.pos.findClosestByRange(FIND_MY_STRUCTURES, {
+									filter: (s) =>
+										(s.structureType === STRUCTURE_SPAWN || s.structureType === STRUCTURE_EXTENSION) &&
+										s.store.getFreeCapacity(RESOURCE_ENERGY) > 0
+								});
+								if (spawn) {
+									(creep.transfer(spawn, RESOURCE_ENERGY) === ERR_NOT_IN_RANGE)
+									creep.moveTo(spawn, pathing.harvesterPathing);
+								}
+								return;
+							}
+							if (cMem.bucket) creep.unloadEnergy(cMem.bucket);
+							else {
 								const containers: StructureContainer[] = pos.findInRange(FIND_STRUCTURES, 3, { filter: (i) => { i.structureType === STRUCTURE_CONTAINER } });
 								if (containers.length) {
 									const target: StructureContainer = pos.findClosestByRange(containers)!;
 									if (target) {
 										cMem.bucket = target.id;
-										if (!pos.isNearTo(target)) creep.moveTo(target, pathing.harvesterPathing);
+										if (!pos.isEqualTo(target)) creep.moveTo(target, pathing.harvesterPathing);
 										else if (target.hits < target.hitsMax) creep.repair(target);
 										else {
 											creep.unloadEnergy();
@@ -86,27 +94,20 @@ export const Harvester = {
 										const buildersNearby = room.find(FIND_MY_CREEPS, { filter: (i) => i.memory.role == 'remotebuilder' || i.memory.role == 'builder' });
 										if (buildersNearby.length > 0) {
 											const mySite = pos.findInRange(FIND_CONSTRUCTION_SITES, 1);
-											if (mySite.length)
-												creep.build(mySite[0]);
+											if (mySite.length) creep.build(mySite[0]);
 											else {
 												creep.unloadEnergy();
 												creep.harvestEnergy();
 											}
-										} else {
-											creep.build(nearbySites[0]);
-										}
+										} else creep.build(nearbySites[0]);
 									}
-									//creep.unloadEnergy();
-									//creep.harvestEnergy();
 								}
 							}
 						}
 					} else creep.harvestEnergy();
 				}
-			} else //: I HAVE A RALLY POINT, LET'S BOOGY!
-				navRallyPoint(creep);
-		} else //: AI DISABLED ALERT
-			aiAlert(creep);
+			} else navRallyPoint(creep);
+		} else aiAlert(creep);
 	},
 
 	runremote: (creep: Creep) => {
@@ -115,10 +116,10 @@ export const Harvester = {
 		const rMem: RoomMemory = Game.rooms[cMem.home].memory;
 		const pos: RoomPosition = creep.pos;
 
-		if (cMem.disable === undefined) cMem.disable = false;
-		if (cMem.rally === undefined) cMem.rally = 'none';
-		if (cMem.returnEnergy === undefined) cMem.returnEnergy = false;
-		if (cMem.haveCalledDeathAction === undefined) cMem.haveCalledDeathAction = false;
+		cMem.disable ??= false;
+		cMem.rally ??= 'none';
+		cMem.returnEnergy ??= false;
+		cMem.haveCalledDeathAction ??= false;
 		if (!cMem.source) creep.assignHarvestSource('remote', true, false);
 
 		if (!cMem.disable) {
@@ -140,22 +141,17 @@ export const Harvester = {
 				let source: Source;
 				if (creep.getActiveBodyparts(CARRY) === 0) {
 					source = Game.getObjectById(cMem.source) as unknown as Source;
-					if (!pos.isNearTo(source))
-						creep.advMoveTo(source, true, pathing.harvesterPathing);
+					if (!pos.isNearTo(source)) creep.advMoveTo(source, true, pathing.harvesterPathing);
 					else {
 						const containers: StructureContainer[] = source.pos.findInRange(FIND_STRUCTURES, 2, { filter: { structureType: STRUCTURE_CONTAINER } });
 						if (containers.length) {
 							const bucket = pos.findClosestByRange(containers);
 							if (bucket) {
-								if (cMem.bucket === undefined)
-									cMem.bucket = bucket.id;
-								if (!pos.isEqualTo(bucket))
-									creep.advMoveTo(bucket, true, pathing.harvesterPathing);
-								else
-									creep.harvestEnergy();
+								cMem.bucket ??= bucket.id;
+								if (!pos.isEqualTo(bucket))	creep.advMoveTo(bucket, true, pathing.harvesterPathing);
+								else creep.harvestEnergy();
 							}
-						} else
-							creep.harvestEnergy();
+						} else creep.harvestEnergy();
 					}
 				} else {
 					if (creep.store.getFreeCapacity() == 0 || creep.store.getFreeCapacity() < (creep.getActiveBodyparts(WORK) * 2)) {
@@ -163,15 +159,14 @@ export const Harvester = {
 							if (creep.transfer(Game.spawns['Spawn1'], RESOURCE_ENERGY) === ERR_NOT_IN_RANGE)
 								creep.advMoveTo(Game.spawns['Spawn1'], true, pathing.harvesterPathing);
 						} else {
-							if (cMem.bucket) {
-								creep.unloadEnergy(cMem.bucket);
-							} else {
+							if (cMem.bucket) creep.unloadEnergy(cMem.bucket);
+							else {
 								const containers: StructureContainer[] = pos.findInRange(FIND_STRUCTURES, 3, { filter: (i) => { i.structureType === STRUCTURE_CONTAINER } });
 								if (containers.length) {
 									const target: StructureContainer = pos.findClosestByRange(containers)!;
 									if (target) {
 										cMem.bucket = target.id;
-										if (!pos.isNearTo(target)) creep.advMoveTo(target, true, pathing.harvesterPathing);
+										if (!pos.isEqualTo(target)) creep.advMoveTo(target, true, pathing.harvesterPathing);
 										else if (target.hits < target.hitsMax) creep.repair(target);
 										else {
 											creep.unloadEnergy();
@@ -185,25 +180,20 @@ export const Harvester = {
 										const buildersNearby = room.find(FIND_MY_CREEPS, { filter: (i) => i.memory.role == 'remotebuilder' || i.memory.role == 'builder' });
 										if (buildersNearby.length > 0) {
 											const mySite = pos.findInRange(FIND_CONSTRUCTION_SITES, 1);
-											if (mySite.length)
-												creep.build(mySite[0]);
+											if (mySite.length) creep.build(mySite[0]);
 											else {
 												creep.unloadEnergy();
 												creep.harvestEnergy();
 											}
-										} else {
-											creep.build(nearbySites[0]);
-										}
+										} else creep.build(nearbySites[0]);
 									}
 								}
 							}
 						}
 					} else creep.harvestEnergy();
 				}
-			} else //: I HAVE A RALLY POINT, LET'S BOOGY!
-				navRallyPoint(creep);
-		} else //: AI DISABLED ALERT
-			aiAlert(creep);
+			} else navRallyPoint(creep);
+		} else aiAlert(creep);
 	}
 }
 
@@ -218,11 +208,11 @@ export const Builder = {
 		const rMem: RoomMemory = Game.rooms[cMem.home].memory;
 		const pos: RoomPosition = creep.pos;
 
-		if (cMem.disable === undefined) cMem.disable = false;
-		if (cMem.rally === undefined) cMem.rally = 'none';
+		cMem.disable ??= false;
+		cMem.rally ??= 'none';
 
 		if (cMem.disable === true) {
-
+			aiAlert(creep);
 		} else {
 			if (cMem.rally !== 'none') {
 				navRallyPoint(cMem.rally);
@@ -264,6 +254,10 @@ export const Builder = {
 							else if (result === ERR_NOT_ENOUGH_ENERGY)
 								creep.memory.working = false;
 						}
+					} else {
+						if (rMem.containers.controller) cMem.bucket ??= rMem.containers.controller;
+						cMem.controller ??= room.controller?.id;
+						upgraderBehavior(creep);
 					}
 				}
 			}
@@ -288,8 +282,8 @@ export const Filler = {
 		const rMem: RoomMemory = Game.rooms[cMem.home].memory
 		const pos: RoomPosition = creep.pos;
 
-		if (cMem.disable === undefined) cMem.disable = false;
-		if (cMem.rally === undefined) cMem.rally = 'none';
+		cMem.disable ??= false;
+		cMem.rally ??= 'none';
 		if (room.storage && !cMem.pickup) cMem.pickup = room.storage.id;
 		if (!room.storage && !cMem.pickup) {
 
@@ -300,10 +294,10 @@ export const Filler = {
 		}
 
 		if (cMem.disable === true) {
-			return;
+			aiAlert(creep);
 		} else {
 			if (cMem.rally !== 'none') {
-
+				navRallyPoint(creep);
 			} else {
 				if (creep.store.getUsedCapacity() === 0) {
 					let target;
@@ -346,8 +340,8 @@ export const Hauler = {
 		const rMem: RoomMemory = Game.rooms[cMem.home].memory;
 		const pos: RoomPosition = creep.pos;
 
-		if (cMem.disable === undefined) cMem.disable = false;
-		if (cMem.rally === undefined) cMem.rally = 'none';
+		cMem.disable ??= false;
+		cMem.rally ??= 'none';
 
 		if (cMem.disable === true)
 			aiAlert(creep);
@@ -372,34 +366,27 @@ export const Hauler = {
 				if (cMem.pickup)  pickupTarget  = Game.getObjectById(cMem.pickup)  as AnyStoreStructure;
 				if (cMem.dropoff) dropoffTarget = Game.getObjectById(cMem.dropoff) as AnyStoreStructure;
 
+				const pickupPos = pickupTarget?.pos || (cMem.pickupPos? new RoomPosition(cMem.pickupPos.x, cMem.pickupPos.y, cMem.pickupPos.roomName): null);
+				const dropoffPos = dropoffTarget?.pos || (cMem.dropoffPos? new RoomPosition(cMem.dropoffPos.x, cMem.dropoffPos.y, cMem.dropoffPos.roomName): null);
+
 				if (creep.store[RESOURCE_ENERGY] == 0 || creep.store[cMem.cargo] == 0) {
-					if (cMem.pickup) {
-
-						if (pickupTarget) {
-							if (pos.isNearTo(pickupTarget)) {
-								const piles = pos.findInRange(FIND_DROPPED_RESOURCES, 1);
-
-								if (piles.length) {
-									const closestPile = pos.findClosestByRange(piles);
-									if (closestPile) creep.pickup(closestPile);
-								} else {
-									creep.withdraw(pickupTarget, cMem.cargo);
-								}
-							} else {
-								creep.advMoveTo(pickupTarget, false, pathing.haulerPathing);
-							}
-						}
+					if (pickupPos) {
+						if (pickupTarget && pos.isNearTo(pickupTarget)) {
+							const piles = pos.findInRange(FIND_DROPPED_RESOURCES, 1);
+							if (piles.length) {
+								const closestPile = pos.findClosestByRange(piles);
+								if (closestPile) creep.pickup(closestPile);
+							} else creep.withdraw(pickupTarget, cMem.cargo);
+						} else creep.advMoveTo(pickupPos, false, pathing.haulerPathing);
 					}
 				} else {
-					if (dropoffTarget) {
-						if (pos.isNearTo(dropoffTarget)) {
+					if (dropoffPos) {
+						if (dropoffTarget && pos.isNearTo(dropoffTarget)) {
 							if (dropoffTarget.store.getFreeCapacity(RESOURCE_ENERGY) > 0) {
 								const result = creep.transfer(dropoffTarget, RESOURCE_ENERGY);
-								if (result === OK)
-									creep.advMoveTo(pickupTarget, false, pathing.haulerPathing);
+								if (result === OK) creep.advMoveTo(pickupPos, false, pathing.haulerPathing);
 							}
-						}
-						else creep.advMoveTo(dropoffTarget, false, pathing.haulerPathing);
+						}	else creep.advMoveTo(dropoffPos, false, pathing.haulerPathing);
 					}
 				}
 			} else navRallyPoint(creep);
@@ -543,12 +530,41 @@ export const Reserver = {
 							creep.advMoveTo(room.controller, true, pathing.reserverPathing);
 						}
 					} else {
-						creep.advMoveTo(Game.rooms[cMem.targetOutpost].controller!.pos, true, pathing.reserverPathing);
+						creep.advMoveTo(Game.flags[cMem.targetOutpost], true, pathing.reserverPathing);
 					}
 				}
 			} else {
 				//! Override default behavior and navigate to nav point
 				navRallyPoint(creep);
+			}
+		}
+	}
+}
+
+export const Scout = {
+	tickCount: 0,
+	run: (creep: Creep) => {
+
+		const room: Room = creep.room;
+		const cMem: CreepMemory = creep.memory;
+		const rMem: RoomMemory = Game.rooms[cMem.home].memory;
+		const pos: RoomPosition = creep.pos;
+
+		cMem.disable ??= false;
+		cMem.rally ??= 'none';
+
+		if (pos.x == 49) creep.move(LEFT);
+		else if (pos.x == 0) creep.move(RIGHT);
+		else if (pos.y == 49) creep.move(TOP);
+		else if (pos.y == 0) creep.move(BOTTOM);
+
+		if (cMem.disable === true) aiAlert(creep);
+		else {
+			if (cMem.rally !== 'none') navRallyPoint(creep);
+			else {
+				if (Scout.tickCount % 5) creep.say('🥱');
+				else creep.say('💤');
+				Scout.tickCount++;
 			}
 		}
 	}
@@ -565,39 +581,39 @@ export const Upgrader = {
 		const rMem: RoomMemory = Game.rooms[cMem.home].memory;
 		const pos: RoomPosition = creep.pos;
 
-		if (cMem.disable === undefined) cMem.disable = false;
-		if (cMem.rally === undefined) cMem.rally = 'none';
+		cMem.disable ??= false;
+		cMem.rally ??= 'none';
+		if (rMem.containers.controller) cMem.bucket ??= rMem.containers.controller;
 
-		if (cMem.disable === true) {
-			aiAlert(creep);
-		} else {
+		if (cMem.disable === true) aiAlert(creep);
+		else {
 			if (cMem.rally === 'none') {
-				if (creep.memory.controller === undefined) {
+				if (cMem.controller === undefined) {
 					// Use the room's controller directly when available
 					const controllerObj = creep.room.controller;
 					const cMemControllerID: Id<StructureController> | undefined = controllerObj ? controllerObj.id : undefined;
-					if (cMemControllerID) creep.memory.controller = cMemControllerID;
+					if (cMemControllerID) cMem.controller = cMemControllerID;
 				}
 
-				if (creep.memory.bucket === undefined) {
+				if (cMem.bucket === undefined) {
 
-					if (creep.room.memory?.containers?.controller === undefined) {
+					if (rMem?.containers?.controller === undefined) {
 						const bucket = creep.room.find(FIND_STRUCTURES, { filter: (i) => i.structureType === STRUCTURE_CONTROLLER })[0].pos.findInRange(FIND_STRUCTURES, 3, { filter: (i) => i.structureType === STRUCTURE_CONTAINER })[0];
 						if (bucket)
-							creep.room.memory.containers.controller = bucket.id;
+							rMem.containers.controller = bucket.id;
 						else {
 							const bucket = creep.room.find(FIND_STRUCTURES, { filter: (i) => i.structureType === STRUCTURE_CONTAINER });
 							const closestBucket = pos.findClosestByRange(bucket);
 							if (closestBucket)
-								creep.memory.bucket = closestBucket.id;
+								cMem.bucket = closestBucket.id;
 						}
 					}
 					else
-						creep.memory.bucket = creep.room.memory.containers.controller;
+						cMem.bucket = creep.room.memory.containers.controller;
 				}
 
 				if (creep.store.getFreeCapacity() === 0)
-					creep.memory.working = true;
+					cMem.working = true;
 
 				if (creep.store.getUsedCapacity() === 0) {
 					const containers = room.find(FIND_STRUCTURES, { filter: (i) => i.structureType === STRUCTURE_CONTAINER && i.store.getUsedCapacity() >= creep.store.getCapacity() });
@@ -613,9 +629,9 @@ export const Upgrader = {
 					}
 				}
 
-				if (creep.memory.working) {
-					if (creep.memory.controller) {
-						const controllerObject: StructureController = Game.getObjectById(creep.memory.controller) as StructureController;
+				if (cMem.working) {
+					if (cMem.controller) {
+						const controllerObject: StructureController = Game.getObjectById(cMem.controller) as StructureController;
 						if (controllerObject) {
 							const result = creep.upgradeController(controllerObject)
 							if (result === ERR_NOT_IN_RANGE)
@@ -625,16 +641,16 @@ export const Upgrader = {
 						}
 					}
 				}
-				if (creep.memory.working == false) {
-					if (creep.memory.bucket) {
+				if (cMem.working == false) {
+					if (cMem.bucket) {
 						// Use the bucket to get energy if available
-						const bucketObject: StructureContainer = Game.getObjectById(creep.memory.bucket) as StructureContainer;
+						const bucketObject: StructureContainer = Game.getObjectById(cMem.bucket) as StructureContainer;
 						if (bucketObject && bucketObject.store.getUsedCapacity(RESOURCE_ENERGY) >= creep.store.getCapacity()) {
 							if (creep.withdraw(bucketObject, RESOURCE_ENERGY) === ERR_NOT_IN_RANGE)
 								creep.moveTo(bucketObject, { visualizePathStyle: { stroke: 'yellow', lineStyle: 'dashed', opacity: 0.3 } });
 							// Otherwise, find a source to harvest (ideally this should be a last resort, and only at low room levels)
-						} else if (creep.room.find(FIND_DROPPED_RESOURCES, { filter: (i) => i.resourceType === RESOURCE_ENERGY && i.amount >= creep.store.getCapacity() / 2 }).length) {
-							const piles = creep.room.find(FIND_DROPPED_RESOURCES, { filter: (i) => i.resourceType === RESOURCE_ENERGY && i.amount >= creep.store.getCapacity() / 2 });
+						} else if (room.find(FIND_DROPPED_RESOURCES, { filter: (i) => i.resourceType === RESOURCE_ENERGY && i.amount >= creep.store.getCapacity() / 2 }).length) {
+							const piles = room.find(FIND_DROPPED_RESOURCES, { filter: (i) => i.resourceType === RESOURCE_ENERGY && i.amount >= creep.store.getCapacity() / 2 });
 							if (piles.length) {
 								const closestPile = pos.findClosestByRange(piles);
 								if (closestPile) {
@@ -642,8 +658,8 @@ export const Upgrader = {
 										creep.moveTo(closestPile, pathing.upgraderPathing);
 								}
 							}
-						} else if (creep.room.controller!.level <= 2) {
-							const source = creep.room.controller?.pos.findClosestByRange(FIND_SOURCES_ACTIVE);
+						} else if (room.controller!.level <= 2) {
+							const source = room.controller?.pos.findClosestByRange(FIND_SOURCES_ACTIVE);
 							if (source) {
 								if (creep.harvest(source) === ERR_NOT_IN_RANGE)
 									creep.moveTo(source, { visualizePathStyle: { stroke: 'yellow', lineStyle: 'dashed', opacity: 0.3 } });
@@ -741,4 +757,86 @@ function aiAlert(creep: Creep): void {
 		log('WARNING: Creep ' + creep.name + '\'s AI is disabled.', creep.room);
 	creep.say('💤');
 	return;
+}
+
+function upgraderBehavior(creep: Creep): void {
+	if (creep.memory.controller === undefined) {
+		// Use the room's controller directly when available
+		const controllerObj = creep.room.controller;
+		const cMemControllerID: Id<StructureController> | undefined = controllerObj ? controllerObj.id : undefined;
+		if (cMemControllerID) creep.memory.controller = cMemControllerID;
+	}
+
+	if (creep.memory.bucket === undefined) {
+
+		if (creep.room.memory?.containers?.controller === undefined) {
+			const bucket = creep.room.find(FIND_STRUCTURES, { filter: (i) => i.structureType === STRUCTURE_CONTROLLER })[0].pos.findInRange(FIND_STRUCTURES, 3, { filter: (i) => i.structureType === STRUCTURE_CONTAINER })[0];
+			if (bucket)
+				creep.room.memory.containers.controller = bucket.id;
+			else {
+				const bucket = creep.room.find(FIND_STRUCTURES, { filter: (i) => i.structureType === STRUCTURE_CONTAINER });
+				const closestBucket = creep.pos.findClosestByRange(bucket);
+				if (closestBucket)
+					creep.memory.bucket = closestBucket.id;
+			}
+		}
+		else
+			creep.memory.bucket = creep.room.memory.containers.controller;
+	}
+
+	if (creep.store.getFreeCapacity() === 0)
+		creep.memory.working = true;
+
+	if (creep.store.getUsedCapacity() === 0) {
+		const containers = creep.room.find(FIND_STRUCTURES, { filter: (i) => i.structureType === STRUCTURE_CONTAINER && i.store.getUsedCapacity() >= creep.store.getCapacity() });
+
+		if (containers.length) {
+			const nearestContainer = creep.pos.findClosestByRange(containers);
+
+			if (nearestContainer) {
+				const result = creep.withdraw(nearestContainer, RESOURCE_ENERGY);
+				if (result === ERR_NOT_IN_RANGE)
+					creep.moveTo(nearestContainer, pathing.builderPathing);
+			}
+		}
+	}
+
+	if (creep.memory.working) {
+		if (creep.memory.controller) {
+			const controllerObject: StructureController = Game.getObjectById(creep.memory.controller) as StructureController;
+			if (controllerObject) {
+				const result = creep.upgradeController(controllerObject)
+				if (result === ERR_NOT_IN_RANGE)
+					creep.moveTo(controllerObject, { visualizePathStyle: { stroke: 'green', lineStyle: 'dashed', opacity: 0.3 } });
+				else if (result === OK)
+					creep.say('🔋');
+			}
+		}
+	}
+	if (creep.memory.working == false) {
+		if (creep.memory.bucket) {
+			// Use the bucket to get energy if available
+			const bucketObject: StructureContainer = Game.getObjectById(creep.memory.bucket) as StructureContainer;
+			if (bucketObject && bucketObject.store.getUsedCapacity(RESOURCE_ENERGY) >= creep.store.getCapacity()) {
+				if (creep.withdraw(bucketObject, RESOURCE_ENERGY) === ERR_NOT_IN_RANGE)
+					creep.moveTo(bucketObject, { visualizePathStyle: { stroke: 'yellow', lineStyle: 'dashed', opacity: 0.3 } });
+				// Otherwise, find a source to harvest (ideally this should be a last resort, and only at low room levels)
+			} else if (creep.room.find(FIND_DROPPED_RESOURCES, { filter: (i) => i.resourceType === RESOURCE_ENERGY && i.amount >= creep.store.getCapacity() / 2 }).length) {
+				const piles = creep.room.find(FIND_DROPPED_RESOURCES, { filter: (i) => i.resourceType === RESOURCE_ENERGY && i.amount >= creep.store.getCapacity() / 2 });
+				if (piles.length) {
+					const closestPile = creep.pos.findClosestByRange(piles);
+					if (closestPile) {
+						if (creep.pickup(closestPile) === ERR_NOT_IN_RANGE)
+							creep.moveTo(closestPile, pathing.upgraderPathing);
+					}
+				}
+			} else if (creep.room.controller!.level <= 2) {
+				const source = creep.room.controller?.pos.findClosestByRange(FIND_SOURCES_ACTIVE);
+				if (source) {
+					if (creep.harvest(source) === ERR_NOT_IN_RANGE)
+						creep.moveTo(source, { visualizePathStyle: { stroke: 'yellow', lineStyle: 'dashed', opacity: 0.3 } });
+				}
+			}
+		}
+	}
 }
