@@ -791,6 +791,35 @@ export default class RoomManager {
 		}
 	}
 
+	private updateRoomContainers(): void {
+		if (!this.room.memory.objects) this.room.cacheObjects();
+
+		const sources = this.room.find(FIND_SOURCES);
+
+		for (let source of sources) {
+			const containers = source.pos.findInRange(FIND_STRUCTURES, 2, { filter: { structureType: STRUCTURE_CONTAINER }});
+
+			if (!this.room.memory.containers.sourceOne) {
+				if (source.id === this.room.memory.objects.sources[0])
+					this.room.memory.containers.sourceOne = containers[0].id;
+				else if (this.room.memory.objects.sources.length > 1 && source.id === this.room.memory.objects.sources[1])
+					this.room.memory.containers.sourceTwo = containers[0].id;
+			}
+		}
+	}
+
+	private findSourceContainers(): StructureContainer[] | boolean {
+		const sources = this.room.find(FIND_SOURCES);
+		let allContainers: StructureContainer[] = [];
+
+		for (let source of sources) {
+			const nearbyContainers: StructureContainer[] = source.pos.findInRange(FIND_STRUCTURES, 2, { filter: { structureType: STRUCTURE_CONTAINER }});
+			allContainers = allContainers.concat(nearbyContainers);
+		}
+
+		return (allContainers.length) ? allContainers : false;
+	}
+
 	/** Calculates the energy cost of a body configuration */
 	private calculateBodyCost(body: BodyPartConstant[]): number {
 		return body.reduce((cost, part) => cost + BODYPART_COST[part], 0);

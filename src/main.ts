@@ -4,7 +4,7 @@ import RoomManager from "@managers/RoomManager";
 import roomDefense from './tower';
 import { needMoreHarvesters, visualRCProgress, calcTickTime } from "@globals";
 import { buildProgress, repairProgress } from '@funcs/visual/progress';
-import * as CreepAI from 'creeps';
+import CreepAI from './creeps/index';
 
 import 'prototypes/creep';
 import 'prototypes/room';
