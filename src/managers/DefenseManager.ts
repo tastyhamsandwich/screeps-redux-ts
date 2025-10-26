@@ -1,8 +1,6 @@
 "use strict";
 
-import { inRange } from "lodash";
-
-export default function RoomDefense(tower: StructureTower) {
+export default function DefenseManager(tower: StructureTower) {
 	const room = tower.room;
 
 	if (tower) {

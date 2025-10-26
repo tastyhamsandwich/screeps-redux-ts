@@ -19,7 +19,9 @@
 		"watch-pserver": "rollup -cw --environment DEST:pserver",
 		"watch-season": "rollup -cw --environment DEST:season",
 		"watch-sim": "rollup -cw --environment DEST:sim",
-		"watch-ptr": "rollup -cw --environment DEST:ptr"
+		"watch-ptr": "rollup -cw --environment DEST:ptr",
+		"push-local": "rollup -c && cpx 'dist/**/*' '../../users/danvi/appdata/local/screeps/scripts/127_0_0_1___21025/default",
+		"watch-local": "rollup -cw && cpx 'dist/**/*' '../../users/danvi/appdata/local/screeps/scripts/127_0_0_1___21025/default"
 	},
 	"repository": {
 		"type": "git",
@@ -48,6 +50,7 @@
 		"@typescript-eslint/parser": "^4.33.0",
 		"@typescript-eslint/typescript-estree": "^4.33.0",
 		"chai": "^4.5.0",
+		"cpx": "^1.5.0",
 		"eslint": "^7.32.0",
 		"eslint-config-prettier": "^8.10.0",
 		"eslint-import-resolver-typescript": "^2.7.1",
