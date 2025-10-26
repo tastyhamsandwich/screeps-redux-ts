@@ -1,4 +1,4 @@
-import RoomDefense from '../tower';
+import RoomDefense from './DefenseManager';
 import SpawnManager from './SpawnManager';
 import { determineBodyParts } from '@funcs/creep/body';
 
@@ -11,6 +11,10 @@ interface RoomData {
 	controllerLevel?: number;
 	numCSites?: number;
 	logisticalPairs?: any;
+	enabledCapabilities: {
+		room: { [key: string]: boolean };
+		creep: { [key: string]: boolean };
+	}
 }
 
 interface SpawnManagerMemory {
@@ -44,9 +48,7 @@ interface RoomStats {
 	damagedStructures: Structure[];
 }
 
-/**
- * Manages all logic and operations for a single room.
- */
+/** Manages all logic and operations for a single room. */
 export default class RoomManager {
 	private room: Room;
 	private resources: RoomResources;
@@ -186,28 +188,28 @@ export default class RoomManager {
 		const rMem = this.room.memory;
 
 		// Pull creep role caps from room memory, or set to default value if none are set
-		const harvesterTarget = _.get(rMem, ['quotas', 'harvesters'], 2);
-		const fillerTarget = _.get(rMem, ['quotas', 'fillers'], 2);
-		const upgraderTarget = _.get(rMem, ['quotas', 'upgraders'], 2);
-		const builderTarget = _.get(rMem, ['quotas', 'builders'], 2);
-		const repairerTarget = _.get(rMem, ['quotas', 'repairers'], 0);
-		const reserverTarget = _.get(rMem, ['quotas', 'reservers'], 1);
-		const haulerTarget = _.get(rMem, ['quotas', 'haulers'], 2);
+		const harvesterTarget 			= _.get(rMem, ['quotas', 'harvesters'], 2);
+		const fillerTarget 					= _.get(rMem, ['quotas', 'fillers'], 2);
+		const upgraderTarget 				= _.get(rMem, ['quotas', 'upgraders'], 2);
+		const builderTarget 				= _.get(rMem, ['quotas', 'builders'], 2);
+		const repairerTarget 				= _.get(rMem, ['quotas', 'repairers'], 0);
+		const reserverTarget 				= _.get(rMem, ['quotas', 'reservers'], 1);
+		const haulerTarget 					= _.get(rMem, ['quotas', 'haulers'], 2);
 		const remoteharvesterTarget = _.get(rMem, ['quotas', 'remoteharvesters'], 2);
 		const remotebodyguardTarget = _.get(rMem, ['quotas', 'remotebodyguards'], 1);
-		const remotehaulerTarget = _.get(rMem, ['quotas', 'remotehaulers'], 2);
+		const remotehaulerTarget 		= _.get(rMem, ['quotas', 'remotehaulers'], 2);
 
 		// Pull current amount of creeps alive by RFQ (Role For Quota)
-		const harvesters = _.filter(Game.creeps, (c) => (c.memory.RFQ == 'harvester' || c.memory.role == 'harvester') && c.memory.home == roomName);
-		const fillers = _.filter(Game.creeps, (c) => (c.memory.RFQ == 'filler' || c.memory.role == 'filler') && c.memory.home == roomName);
-		const upgraders = _.filter(Game.creeps, (c) => (c.memory.RFQ == 'upgrader' || c.memory.role == 'upgrader') && c.memory.home == roomName);
-		const builders = _.filter(Game.creeps, (c) => (c.memory.RFQ == 'builder' || c.memory.role == 'builder') && c.memory.home == roomName);
-		const repairers = _.filter(Game.creeps, (c) => (c.memory.RFQ == 'repairer' || c.memory.role == 'repairer') && c.memory.home == roomName);
-		const reservers = _.filter(Game.creeps, (c) => (c.memory.RFQ == 'reserver' || c.memory.role == 'reserver') && c.memory.home == roomName);
-		const haulers = _.filter(Game.creeps, (c) => (c.memory.RFQ == 'hauler' || c.memory.role == 'hauler') && c.memory.home == roomName);
-		const remoteharvesters = _.filter(Game.creeps, (c) => (c.memory.RFQ == 'remoteharvester' || c.memory.role == 'remoteharvester') && c.memory.home == roomName);
-		const remotebodyguards = _.filter(Game.creeps, (c) => (c.memory.RFQ == 'remotebodyguard' || c.memory.role == 'remotebodyguard') && c.memory.home == roomName);
-		const remotehaulers = _.filter(Game.creeps, (c) => (c.memory.RFQ == 'remotehauler' || c.memory.role == 'remotehauler') && c.memory.home == roomName);
+		const harvesters 				= _.filter(Game.creeps, (c) => (c.memory.RFQ == 'harvester' 			|| c.memory.role == 'harvester') 			 && c.memory.home == roomName);
+		const fillers 					= _.filter(Game.creeps, (c) => (c.memory.RFQ == 'filler' 					|| c.memory.role == 'filler') 				 && c.memory.home == roomName);
+		const upgraders 				= _.filter(Game.creeps, (c) => (c.memory.RFQ == 'upgrader' 				|| c.memory.role == 'upgrader') 			 && c.memory.home == roomName);
+		const builders 					= _.filter(Game.creeps, (c) => (c.memory.RFQ == 'builder' 				|| c.memory.role == 'builder') 				 && c.memory.home == roomName);
+		const repairers 				= _.filter(Game.creeps, (c) => (c.memory.RFQ == 'repairer' 				|| c.memory.role == 'repairer') 			 && c.memory.home == roomName);
+		const reservers 				= _.filter(Game.creeps, (c) => (c.memory.RFQ == 'reserver' 				|| c.memory.role == 'reserver') 			 && c.memory.home == roomName);
+		const haulers 					= _.filter(Game.creeps, (c) => (c.memory.RFQ == 'hauler' 					|| c.memory.role == 'hauler') 				 && c.memory.home == roomName);
+		const remoteharvesters 	= _.filter(Game.creeps, (c) => (c.memory.RFQ == 'remoteharvester' || c.memory.role == 'remoteharvester') && c.memory.home == roomName);
+		const remotebodyguards 	= _.filter(Game.creeps, (c) => (c.memory.RFQ == 'remotebodyguard' || c.memory.role == 'remotebodyguard') && c.memory.home == roomName);
+		const remotehaulers 		= _.filter(Game.creeps, (c) => (c.memory.RFQ == 'remotehauler' 		|| c.memory.role == 'remotehauler') 	 && c.memory.home == roomName);
 
 		// Get current spawn queue to check pending spawns
 		const queue = this.spawnManager.getQueue();
@@ -534,54 +536,6 @@ export default class RoomManager {
 		}
 	}
 
-	/** Ensures each source has a container (or construction site) planned near it. */
-	private planSourceContainers(): void {
-		if (!this.room.controller?.my) return; // only plan in owned rooms
-
-		const data = (this.room.memory.data ||= {});
-
-		for (const [index, source] of this.resources.sources.entries()) {
-			const key = index === 0 ? 'sourceOne' : 'sourceTwo';
-
-			// If we already have a valid container reference, skip
-			const existingId = data[key]?.container;
-			if (existingId) {
-				const obj = Game.getObjectById(existingId);
-				if (obj && (obj as StructureContainer | ConstructionSite).pos) continue;
-			}
-
-			// Look for an existing container nearby
-			const existingContainer = source.pos.findInRange(FIND_STRUCTURES, 2, {
-				filter: s => s.structureType === STRUCTURE_CONTAINER
-			})[0] as StructureContainer | undefined;
-
-			if (existingContainer) {
-				data[key] = { source: source.id, container: existingContainer.id };
-				continue;
-			}
-
-			// Look for an existing construction site nearby
-			const site = source.pos.findInRange(FIND_CONSTRUCTION_SITES, 2, {
-				filter: s => s.structureType === STRUCTURE_CONTAINER
-			})[0] as ConstructionSite | undefined;
-
-			if (site) {
-				data[key] = { source: source.id, container: site.id };
-				continue;
-			}
-
-			// Otherwise, plan a new container position
-			const openSpots = this.findContainerSpotsNear(source.pos, 1);
-			if (openSpots.length > 0) {
-				const pos = openSpots[0];
-				const result = this.room.createConstructionSite(pos, STRUCTURE_CONTAINER);
-				if (result === OK) {
-					console.log(`${this.room.name}: Planned container at ${pos.x},${pos.y} for source ${source.id}`);
-				}
-			}
-		}
-	}
-
 	/** Finds valid terrain positions near a given RoomPos for placing a container. */
 	private findContainerSpotsNear(pos: RoomPosition, range: number): RoomPosition[] {
 		const spots: RoomPosition[] = [];
@@ -840,6 +794,159 @@ export default class RoomManager {
 		return this.spawnManager;
 	}
 
+	/** Ensures each source has a container (or construction site) planned near it. */
+	private planSourceContainers(): void {
+		if (!this.room.controller?.my) return; // only plan in owned rooms
+
+		const data = (this.room.memory.data ||= {});
+		const spawn = this.resources.spawns[0];
+		if (!spawn) return; // Need a spawn to calculate optimal positions
+
+		for (const [index, source] of this.resources.sources.entries()) {
+			const key = index === 0 ? 'sourceOne' : 'sourceTwo';
+
+			// If we already have a valid container reference, skip
+			const existingId = data[key]?.container;
+			if (existingId) {
+				const obj = Game.getObjectById(existingId);
+				if (obj && (obj as StructureContainer | ConstructionSite).pos) continue;
+			}
+
+			// Look for an existing container nearby
+			const existingContainer = source.pos.findInRange(FIND_STRUCTURES, 2, {
+				filter: s => s.structureType === STRUCTURE_CONTAINER
+			})[0] as StructureContainer | undefined;
+
+			if (existingContainer) {
+				data[key] = { source: source.id, container: existingContainer.id };
+				continue;
+			}
+
+			// Look for an existing construction site nearby
+			const site = source.pos.findInRange(FIND_CONSTRUCTION_SITES, 2, {
+				filter: s => s.structureType === STRUCTURE_CONTAINER
+			})[0] as ConstructionSite | undefined;
+
+			if (site) {
+				data[key] = { source: source.id, container: site.id };
+				continue;
+			}
+
+			// Otherwise, plan a new container position optimized for spawn distance
+			const openSpots = this.findContainerSpotsNear(source.pos, 1);
+			if (openSpots.length > 0) {
+				// Find the spot closest to spawn using PathFinder
+				const bestSpot = this.findClosestSpotToSpawn(openSpots, spawn.pos);
+				if (bestSpot) {
+					const result = this.room.createConstructionSite(bestSpot, STRUCTURE_CONTAINER);
+					if (result === OK) {
+						console.log(`${this.room.name}: Planned container at ${bestSpot.x},${bestSpot.y} for source ${source.id} (optimized for spawn distance)`);
+					}
+				}
+			}
+		}
+	}
+
+	/** Finds the position from a list that has the shortest path distance to the spawn. */
+	private findClosestSpotToSpawn(positions: RoomPosition[], spawnPos: RoomPosition): RoomPosition | null {
+		if (positions.length === 0) return null;
+		if (positions.length === 1) return positions[0];
+
+		let bestPos: RoomPosition | null = null;
+		let shortestPathLength = Infinity;
+
+		for (const pos of positions) {
+			const result = PathFinder.search(spawnPos, { pos, range: 0 }, {
+				plainCost: 2,
+				swampCost: 10,
+				roomCallback: (roomName) => {
+					const room = Game.rooms[roomName];
+					if (!room) return false;
+
+					const costs = new PathFinder.CostMatrix();
+
+					// Avoid structures
+					room.find(FIND_STRUCTURES).forEach(struct => {
+						if (struct.structureType !== STRUCTURE_ROAD && struct.structureType !== STRUCTURE_CONTAINER) {
+							costs.set(struct.pos.x, struct.pos.y, 0xff);
+						}
+					});
+
+					// Prefer roads
+					room.find(FIND_STRUCTURES, {
+						filter: s => s.structureType === STRUCTURE_ROAD
+					}).forEach(road => {
+						costs.set(road.pos.x, road.pos.y, 1);
+					});
+
+					return costs;
+				}
+			});
+
+			if (!result.incomplete && result.path.length < shortestPathLength) {
+				shortestPathLength = result.path.length;
+				bestPos = pos;
+			}
+		}
+
+		return bestPos;
+	}
+
+	/** Sets what tasks need to be prioritized based on new RCL */
+	private setRclTasks(rcl: number): void {
+		switch (rcl) {
+			case 0:
+				// For new room, set quotas for harvesters, ensure source containers are placed
+				// Then built, and focus energy into upgrader output
+
+				this.room.setQuota('harvester', 4) // Ensures 80% utilization per source
+				break;
+			case 1:
+				break;
+			case 2:
+				break;
+			case 3:
+				break;
+			case 4:
+				break;
+			case 5:
+				break;
+			case 6:
+				break;
+			case 7:
+				break;
+			case 8:
+				break;
+			default:
+				break;
+		}
+	}
+
+	/** Sets allowed capabilities for manager daemon based upon RCL input */
+	private enableCapabilities(rcl: number): void {
+		switch (rcl) {
+			case 0:
+				break;
+			case 1:
+				break;
+			case 2:
+				break;
+			case 3:
+				break;
+			case 4:
+				break;
+			case 5:
+				break;
+			case 6:
+				break;
+			case 7:
+				break;
+			case 8:
+				break;
+			default:
+				break;
+		}
+	}
 	/** Draws planned structures (like extensions) on the room using RoomVisuals. */
 	private drawPlanningVisuals(): void {
 		const visual = new RoomVisual(this.room.name);
