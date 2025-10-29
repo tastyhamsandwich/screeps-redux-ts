@@ -1,5 +1,7 @@
 import RoomDefense from './DefenseManager';
 import SpawnManager from './SpawnManager';
+
+import { log } from '@globals';
 import { determineBodyParts } from '@funcs/creep/body';
 
 interface RoomData {
@@ -167,9 +169,9 @@ export default class RoomManager {
 		const hitsPercent = structure.hits / structure.hitsMax;
 
 		// Critical structures get highest priority
-		if (structure.structureType === STRUCTURE_TOWER) return 100 - hitsPercent * 100;
-		if (structure.structureType === STRUCTURE_SPAWN) return 95 - hitsPercent * 100;
-		if (structure.structureType === STRUCTURE_EXTENSION) return 80 - hitsPercent * 100;
+		if (structure.structureType === STRUCTURE_TOWER) 			return 100 	- hitsPercent * 100;
+		if (structure.structureType === STRUCTURE_SPAWN) 			return 95 	- hitsPercent * 100;
+		if (structure.structureType === STRUCTURE_EXTENSION) 	return 80 	- hitsPercent * 100;
 		if (structure.structureType === STRUCTURE_CONTAINER) {
 			// Containers decay, only repair when below 50%
 			return hitsPercent < 0.5 ? 70 - hitsPercent * 100 : 0;
@@ -898,8 +900,15 @@ export default class RoomManager {
 			case 0:
 				// For new room, set quotas for harvesters, ensure source containers are placed
 				// Then built, and focus energy into upgrader output
-
+				log(`Setting creep role quotas for early, low-tech spawn system.`);
 				this.room.setQuota('harvester', 4) // Ensures 80% utilization per source
+				this.room.setQuota('hauler', 0);
+				this.room.setQuota('builder', 1);
+				this.room.setQuota('upgrader', 3);
+
+				log(`Quotas: Harvesters (4)  Haulers (0)  Builders (1)  Upgraders (3)`);
+
+
 				break;
 			case 1:
 				break;

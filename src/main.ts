@@ -87,7 +87,6 @@ declare global {
 		spawnList: CreepRole[];
 	}
 
-
 	//! STANDARD INTERFACE DEFINITIONS
 	interface SpawnRequest {
 		id: string;
@@ -109,7 +108,6 @@ declare global {
 		energyCost: number;
 		priority: number;
 	}
-
 
 	interface GlobalSettings {
 		consoleSpawnInterval: number;
@@ -400,42 +398,34 @@ export const loop = () => {
 	// Resolve all movement Intents created during Creep AI execution phase
 	TrafficManager.run();
 
-	//! Encompassing loop to run across every room where we have vision
+	//* Encompassing loop to run across every room where we have vision
 	_.forEach(Game.rooms, room => {
 
 		const roomName = room.name;
 		const rMem = room.memory;
 
-		if (!global.roomManagers) global.roomManagers = {};
+		if (rMem.data === undefined) rMem.data = { numCSites: 0};
 
-		if (!global.roomManagers[roomName]) {
-			global.roomManagers[roomName] = new RoomManager(room);
-		}
-
-		const manager = global.roomManagers[roomName];
-
-		manager.run();
-
-
-		if (rMem.data === undefined)
-			rMem.data = { numCSites: 0};
-
-		const cSites: Array<ConstructionSite> = room.find(FIND_CONSTRUCTION_SITES, { filter: (i) => i.structureType !== STRUCTURE_ROAD })
+		const cSites: Array<ConstructionSite> = room.find(FIND_CONSTRUCTION_SITES, { filter: (i) => i.structureType !== STRUCTURE_ROAD });
 		const numCSitesPrevious: number = rMem.data.numCSites || 0;
 		rMem.data.numCSites = cSites.length;
 		const numCSites: number = rMem.data.numCSites || 0;
 
-		if (room.memory.objects === undefined)
-			room.cacheObjects();
-		if (numCSites < numCSitesPrevious)
-			room.cacheObjects();
+		if (room.memory.objects === undefined) room.cacheObjects();
+		if (numCSites < numCSitesPrevious) room.cacheObjects();
 
 		_.forEach(cSites, function (cSite: ConstructionSite) {
 			if (cSite.progress > 0) buildProgress(cSite, room);
 		});
 
-		//! From here, only rooms where we own the controller have this code ran
+		//* From here, only rooms where we own the controller have this code ran
 		if (room.controller && room.controller.my) {
+
+			// Initialize Room Manager instances for controlled rooms
+			if (!global.roomManagers) global.roomManagers = {};
+			if (!global.roomManagers[roomName]) global.roomManagers[roomName] = new RoomManager(room);
+			const RoomManagerInstance = global.roomManagers[roomName];
+			RoomManagerInstance.run();
 
 			if (room.controller.level !== room.memory.data.controllerLevel) {
 				const newLevel = room.controller.level;
@@ -443,44 +433,45 @@ export const loop = () => {
 
 				switch (newLevel) {
 					case 1:
-						//# Handle creation of initial containers and roads
+						// TODO RCL1: Handle creation of initial containers and roads
 						break;
 					case 2:
-						//# Handle creation of first 5 extensions
+						// TODO RCL2: Handle creation of first 5 extensions
 						break;
 					case 3:
-						//# Handle creation of next 5 extensions, first tower, and potential transition to remote mining
+						// TODO RCL3: Handle creation of next 5 extensions, first tower, and potential transition to remote mining
 						rMem.quotas.reserver = 1;
 						rMem.quotas.remoteharvester = 2;
 						rMem.quotas.remotebodyguard = 1;
 						rMem.quotas.remotehauler = 2;
 						break;
 					case 4:
-						//# Handle creation of storage and next 10 extensions,
+						// TODO RCL4: Handle creation of storage and next 10 extensions,
 						break;
 					case 5:
-						//# Handle creation of next 10 extensions, 2 links, and 2nd tower
+						// TODO RCL5: Handle creation of next 10 extensions, 2 links, and 2nd tower
 						break;
 					case 6:
-						//# Handle creation of terminal, first 3 labs, mineral extarctor, third link, and next 10 extensions
+						// TODO RCL6: Handle creation of terminal, first 3 labs, mineral extarctor, third link, and next 10 extensions
 						break;
 					case 7:
-						//# Handle creation of factory, next 3 labs, third tower, fourth link, next 10 extensions (which now hold 100 each), and second spawn
+						// TODO RCL7: Handle creation of factory, next 3 labs, third tower, fourth link, next 10 extensions (which now hold 100 each), and second spawn
 						break;
 					case 8:
-						//# Handle creation of nuker, final 4 labs, powerSpawn, observer, 3 more towers, final 2 links, third spawn, and final 10 extensions (which now all hold 200 each)
+						// TODO RCL8: Handle creation of nuker, final 4 labs, powerSpawn, observer, 3 more towers, final 2 links, third spawn, and final 10 extensions (which now all hold 200 each)
 						break;
 					default:
+						//# This should never happen
+						console.log(`Unknown Exception occured in main colony room loop!`);
 						break;
 				}
 			}
 
 			if (room.controller.level >= 1) visualRCProgress(room.controller);
-		} //! end of if (room.controller && room.controller.my) {}
-
-	}) //! end of _.forEach(Game.rooms, room => {}) loop
+		} //* end of if (room.controller && room.controller.my) {}
+	}) //* end of _.forEach(Game.rooms, room => {}) loop
 
 	tickCount++;
 	global.tickCount = tickCount;
 
-}; //! End of entire main loop (wrapped in ErrorMapper)
+}; //* End of entire main loop

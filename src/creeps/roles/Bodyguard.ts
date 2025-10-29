@@ -12,9 +12,9 @@ export const Bodyguard = {
 		// Standard creep aliases
 		const room: Room = creep.room;
 		const cMem: CreepMemory = creep.memory;
-		const rMem: RoomMemory = Game.rooms[cMem.homeRoom].memory
+		const rMem: RoomMemory = Game.rooms[cMem.home].memory
 		const pos: RoomPosition = creep.pos;
-		const TTL = creep.ticksToLive!;
+		const TTL: number = creep.ticksToLive!;
 
 		// Role-specific creep aliases
 		const outpostRoom = cMem.outpostRoom;
@@ -25,12 +25,14 @@ export const Bodyguard = {
 
 		cMem.guardPost ??= homeOutpost.list[homeOutpost.guardCounter];
 
-		if (cMem.guardPost === undefined) global.log(`-- [${creep.name}]: I was never given a guardpost assignment, falling back to home room for safety. Please assign a proper room for me to patrol!`, creep.room);
+		if (cMem.guardPost === undefined)
+			global.log(`-- [${creep.name}]: I was never given a 'memory.guardPost' assignment, falling back to home room for safety. Please assign a proper room for me to patrol!`, creep.room);
 		cMem.guardPost ??= cMem.home;
 
 		homeOutpost.guardCounter++;
 
-		if (homeOutpost.guardCounter >= homeOutpost.array.length)	homeOutpost.guardCounter = 0;
+		if (homeOutpost.guardCounter >= homeOutpost.array.length)
+			homeOutpost.guardCounter = 0;
 
 		if (!cMem.disable) {
 
@@ -57,9 +59,7 @@ export const Bodyguard = {
 							creep.moveTo(Game.flags[outpostRoom], pathing.remoteGuard);
 					}
 				}
-			} else //: I HAVE A RALLY POINT, LET'S BOOGY!
-				navRallyPoint(creep);
-		} else //: AI DISABLED ALERT
-			aiAlert(creep);
+			} else navRallyPoint(creep);
+		} else aiAlert(creep);
 	}
 }

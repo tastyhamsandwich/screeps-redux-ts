@@ -587,7 +587,6 @@ Room.prototype.initFlags = function () {
 	return;
 }
 
-
 /** Updates source assignments in a room's memory.
  * @param roomToUpdate - Name of the room to update assignments for
  * @param updateObject - Object containing the assignment updates
@@ -829,7 +828,6 @@ Room.prototype.setQuota = function (roleTarget: CreepRole, newTarget: number) {
 	log('Set role \'' + pluralRoleTarget + '\' quota to ' + newTarget + ' (was ' + oldTarget + ').', this);
 	return;
 }
-
 
 /* POTENTIALLY DEPRECATED
 /** Adds a new spawn order to the room's spawn queue
