@@ -3,51 +3,73 @@ export interface MoveIntent {
 	from: RoomPosition;
 	to: RoomPosition;
 	priority: number;
+	opts?: MoveToOpts;
 }
 
 declare global {
-	interface Creep {
-		smartMoveTo(target: RoomPosition | { pos: RoomPosition }, opts?: MoveToOpts): ScreepsReturnCode;
-		movePriority?: number;
-		stuckTicks?: number;
-	}
 
 	var TrafficIntents: MoveIntent[];
 }
 
-Creep.prototype.smartMoveTo = function (
-	this: Creep,
-	target: RoomPosition | { pos: RoomPosition },
-	opts: MoveToOpts = {}
-): ScreepsReturnCode {
-	const dest = target instanceof RoomPosition ? target : target.pos;
-	opts.ignoreCreeps = true;
-
-	const result = this.moveTo(dest, opts);
-
-	// Record movement intent for Traffic Manager
-	if (result === OK || result === ERR_TIRED) {
-		const dir = this.pos.getDirectionTo(dest);
-		const nextPos = this.pos.getAdjacentPosition(dir);
-		if (nextPos) {
-			global.TrafficIntents.push({
-				creep: this,
-				from: this.pos,
-				to: nextPos,
-				priority: this.movePriority ?? 1
-			});
-		}
-	}
-
-	return result;
-};
-
+if (!global.TrafficIntents) global.TrafficIntents = [];
 /** Traffic Manager for Screeps
  *
  * Coordinates creep movement with ignoreCreeps: true
  *
  * Supports intelligent swapping, pushing, and yielding.
  */
+export default class TrafficManager {
+	static run(): void {
+		const intents: MoveIntent[] = global.TrafficIntents;
+		if (!intents?.length) return;
+
+		const byRoom: { [roomName: string]: MoveIntent[] } = {};
+		for (const intent of intents) {
+			(byRoom[intent.from.roomName] ||= []).push(intent);
+		}
+
+		for (const roomName in byRoom) {
+			const roomIntents = byRoom[roomName];
+			const occupied: { [key: string]: Creep } = {};
+
+			for (const intent of roomIntents) {
+				const key = intent.to.toString();
+				const blocker = occupied[key];
+
+				if (!blocker) {
+					intent.creep.move(intent.creep.pos.getDirectionTo(intent.to));
+					occupied[key] = intent.creep;
+					continue;
+				}
+
+				// Try swapping if both want each other's tile
+				if (blocker.memory?.moveIntent?.to?.x === intent.from.x &&
+					blocker.memory?.moveIntent?.to?.y === intent.from.y &&
+					blocker.memory?.moveIntent?.to?.roomName === intent.from.roomName) {
+
+					const dirA = intent.creep.pos.getDirectionTo(intent.to);
+					const dirB = blocker.pos.getDirectionTo(blocker.memory.moveIntent.to);
+					intent.creep.move(dirA);
+					blocker.move(dirB);
+					continue;
+				}
+
+				// Otherwise, try to push
+				const pushDir = blocker.pos.getDirectionTo(intent.to);
+				const pushed = blocker.move(pushDir);
+				if (pushed === OK) {
+					intent.creep.move(intent.creep.pos.getDirectionTo(intent.to));
+					continue;
+				}
+			}
+		}
+
+		// Clear after processing
+		global.TrafficIntents = [];
+	}
+}
+
+/*
 const TrafficManager = {
 	run(): void {
 		if (!global.TrafficIntents) global.TrafficIntents = [];
@@ -111,10 +133,11 @@ const TrafficManager = {
 			}
 		}
 	},
-
+*/
 	/** Attempts to push a blocking creep aside into an open neighbor tile. Returns true if successful. */
+	/*
 	tryPush(blocker: Creep, pusher: Creep): boolean {
-		const neighbors = blocker.pos.getNeighbors();
+		const neighbors = blocker.pos.getAdjacentPositions();
 		for (const pos of neighbors) {
 			if (!this.isWalkable(pos)) continue;
 			if (pos.lookFor(LOOK_CREEPS).length > 0) continue;
@@ -137,3 +160,4 @@ const TrafficManager = {
 }
 
 export default TrafficManager;
+*/

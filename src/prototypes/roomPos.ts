@@ -17,7 +17,7 @@ declare global {
 		 *
 		 * The resulting array does not include the position itself.
 		 */
-		getNeighbors(): RoomPosition[];
+		getAdjacentPositions(): RoomPosition[];
 	}
 }
 
@@ -94,16 +94,16 @@ RoomPosition.prototype.getAdjacentPosition = function (a: number, b?: number): R
 	return new RoomPosition(newX, newY, this.roomName);
 };
 
-RoomPosition.prototype.getNeighbors = function (): RoomPosition[] {
-	const results: RoomPosition[] = [];
+RoomPosition.prototype.getAdjacentPositions = function (): RoomPosition[] {
+	const positions: RoomPosition[] = [];
 	for (let dx = -1; dx <= 1; dx++) {
 		for (let dy = -1; dy <= 1; dy++) {
 			if (dx === 0 && dy === 0) continue;
-			const nx = this.x + dx;
-			const ny = this.y + dy;
-			if (nx < 0 || nx > 49 || ny < 0 || ny > 49) continue;
-			results.push(new RoomPosition(nx, ny, this.roomName));
+			const x = this.x + dx;
+			const y = this.y + dy;
+			if (x < 0 || x > 49 || y < 0 || y > 49) continue;
+			positions.push(new RoomPosition(x, y, this.roomName));
 		}
 	}
-	return results;
+	return positions;
 };

@@ -1,5 +1,6 @@
 import { log } from '../functions/utils/globals';
 import { pathing } from '../functions/utils/constants';
+import SmartNavigator from "@modules/SmartNavigator";
 
 declare global {
 
@@ -11,6 +12,7 @@ declare global {
 
 	type Locality = 'local' | 'remote';
 	interface Creep {
+		smartMoveTo(target: RoomPosition | { pos: RoomPosition }, opts?: MoveToOpts): ScreepsReturnCode;
 		advGet(target: Source | Id<Source> | Mineral | Id<Mineral> | Deposit | Id<Deposit> | AnyStoreStructure | Resource | Tombstone | Ruin | Id<AnyStoreStructure> | Id<Resource> | Id<Tombstone> | Id<Ruin>): ScreepsReturnCode;
 		advGive(target: Creep | AnyStoreStructure | Id<AnyStoreStructure>, pathing?: MoveToOpts, resource?: ResourceConstant, canTravel?: boolean): ScreepsReturnCode;
 		advHarvest(): void;
@@ -24,6 +26,8 @@ declare global {
 		executeDirective(): boolean;
 		assignLogisticalPair(): boolean;
 		hasWorked: boolean;
+		movePriority?: number;
+		stuckTicks?: number;
 	}
 }
 
@@ -31,6 +35,28 @@ const globalRouteCache: Record<string, RoomRoute | ERR_NO_PATH | ERR_INVALID_ARG
 
 // Prevent prototype augmentation from executing in non-Screeps (node/mocha) environments.
 if (typeof Creep !== 'undefined') {
+
+	Creep.prototype.smartMoveTo = function (target: RoomPosition | { pos: RoomPosition },
+		opts: MoveToOpts = {}): ScreepsReturnCode {
+
+		const pos = target instanceof RoomPosition ? target : target.pos;
+
+		// Get next navigation step (may be exit toward unseen room)
+		const next = SmartNavigator.getNextStep(this, pos);
+		if (!next) return ERR_NO_PATH;
+
+		// Record intent for TrafficManager
+		this.memory.moveIntent = { to: next };
+		global.TrafficIntents.push({
+			creep: this,
+			from: this.pos,
+			to: next,
+			priority: 50,
+			opts
+		});
+
+		return OK;
+	};
 
 	Creep.prototype.advGet = function (target: Source | Id<Source> | Mineral | Id<Mineral> | Deposit | Id<Deposit> | AnyStoreStructure | Resource | Tombstone | Ruin | Id<AnyStoreStructure> | Id<Resource> | Id<Tombstone> | Id<Ruin>): ScreepsReturnCode {
 
