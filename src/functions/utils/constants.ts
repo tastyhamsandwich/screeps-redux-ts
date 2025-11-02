@@ -1,8 +1,8 @@
 import { initGlobal } from './globals';
 
 if (!Memory.globalSettings) initGlobal();
-if (!Memory.globalSettings.creepSettings) Memory.globalSettings.creepSettings = {};
-const cSet = Memory.globalSettings.creepSettings;
+if (!Memory.globalSettings?.creepSettings) Memory.globalSettings!.creepSettings = {};
+const cSet = Memory.globalSettings!.creepSettings;
 
 export const PART_COST: Record<BodyPartConstant, number> = {
 	[MOVE]: 50,
@@ -20,6 +20,11 @@ export const pathing: { [key: string]: MoveToOpts } = {
 		visualizePathStyle: { stroke: "#0000ff", opacity: 0.3, lineStyle: "dotted" },
 		reusePath: cSet.builder.reusePathValue || 3,
 		ignoreCreeps: false //cSet.builder.ignoreCreeps
+	},
+	defenderPathing: {
+		visualizePathStyle: { stroke: "#ff0000", opacity: 0.3, lineStyle: "dashed" },
+		reusePath: cSet.defender.reusePathValue || 3,
+		ignoreCreeps: false //cSet.defender.ignoreCreeps
 	},
 	fillerPathing: {
 		visualizePathStyle: { stroke: "#44ffaa", opacity: 0.3, lineStyle: "dotted" },
@@ -40,11 +45,6 @@ export const pathing: { [key: string]: MoveToOpts } = {
 		visualizePathStyle: { stroke: "#ffff00", opacity: 0.3, lineStyle: "dotted" },
 		reusePath: cSet.builder.reusePathValue || 3,
 		ignoreCreeps: false //cSet.remotebuilder.ignoreCreeps
-	},
-	remoteBodyguardPathing: {
-		visualizePathStyle: { stroke: "#ff0000", opacity: 0.3, lineStyle: "dashed" },
-		reusePath: cSet.remotebodyguard.reusePathValue || 3,
-		ignoreCreeps: false //cSet.remotebodyguard.ignoreCreeps
 	},
 	remoteHarvesterPathing: {
 		visualizePathStyle: { stroke: "#98dd44", opacity: 0.5, lineStyle: "dashed" },
@@ -73,12 +73,12 @@ export const pathing: { [key: string]: MoveToOpts } = {
 	},
 	rallyPointPathing: {
 		visualizePathStyle: { stroke: "#ffffff", opacity: 1.0, lineStyle: "solid" },
-		reusePath: Memory.globalSettings.reusePathValue || 3,
-		ignoreCreeps: Memory.globalSettings.ignoreCreeps
+		reusePath: Memory.globalSettings!.reusePathValue || 3,
+		ignoreCreeps: Memory.globalSettings!.ignoreCreeps
 	},
 	subordinatePathing: {
 		visualizePathStyle: { stroke: '#880000', opacity: 1.0, lineStyle: "dashed" },
-		reusePath: Memory.globalSettings.reusePathValue || 3,
+		reusePath: Memory.globalSettings!.reusePathValue || 3,
 		ignoreCreeps: false
 	}
 };
@@ -182,29 +182,17 @@ const ROOM_VIS_MAX_SIZE = 512000;
 const MAP_VIS_MAX_SIZE = 1024000;
 const ROOM_BOUNDARY_VALUES = { minX: 0, minY: 0, maxX: 49, maxY: 49 };
 
-
-
-
 const SOURCE_GOAL_OWNED = SOURCE_ENERGY_CAPACITY / ENERGY_REGEN_TIME;
 const SOURCE_GOAL_NEUTRAL = SOURCE_ENERGY_NEUTRAL_CAPACITY / ENERGY_REGEN_TIME;
 const SOURCE_GOAL_KEEPER = SOURCE_ENERGY_KEEPER_CAPACITY / ENERGY_REGEN_TIME;
-
-
-
 
 const SOURCE_HARVEST_PARTS = SOURCE_ENERGY_CAPACITY / HARVEST_POWER / ENERGY_REGEN_TIME;
 const SOURCE_HARVEST_PARTS_NEUTRAL = SOURCE_ENERGY_NEUTRAL_CAPACITY / HARVEST_POWER / ENERGY_REGEN_TIME;
 const SOURCE_HARVEST_PARTS_KEEPER = SOURCE_ENERGY_KEEPER_CAPACITY / HARVEST_POWER / ENERGY_REGEN_TIME;
 
-
-
-
 const SOURCE_CARRY_PARTS_PER_DISTANCE_OWNED = SOURCE_GOAL_OWNED / CARRY_CAPACITY;
 const SOURCE_CARRY_PARTS_PER_DISTANCE_NEUTRAL = SOURCE_GOAL_NEUTRAL / CARRY_CAPACITY;
 const SOURCE_CARRY_PARTS_PER_DISTANCE_KEEPER = SOURCE_GOAL_KEEPER / CARRY_CAPACITY;
-
-
-
 
 const RAMPART_UPKEEP = RAMPART_DECAY_AMOUNT / REPAIR_POWER / RAMPART_DECAY_TIME;
 const ROAD_UPKEEP = ROAD_DECAY_AMOUNT / REPAIR_POWER / ROAD_DECAY_TIME;
@@ -212,8 +200,5 @@ const ROAD_UPKEEP_SWAMP = (ROAD_DECAY_AMOUNT * CONSTRUCTION_COST_ROAD_SWAMP_RATI
 const ROAD_UPKEEP_TUNNEL = (ROAD_DECAY_AMOUNT * CONSTRUCTION_COST_ROAD_WALL_RATIO) / REPAIR_POWER / ROAD_DECAY_TIME;
 const CONTAINER_UPKEEP = CONTAINER_DECAY / REPAIR_POWER / CONTAINER_DECAY_TIME_OWNED;
 const REMOTE_CONTAINER_UPKEEP = CONTAINER_DECAY / REPAIR_POWER / CONTAINER_DECAY_TIME;
-
-
-
 
 const IS_PTR = !!(Game.shard && Game.shard.ptr);
