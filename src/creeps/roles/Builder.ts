@@ -23,13 +23,19 @@ const Builder = {
 			} else {
 				if (creep.store.getUsedCapacity() === 0)
 					creep.memory.working = false;
-				if (creep.store.getUsedCapacity() >= 150)
+				if (creep.store.getFreeCapacity() === 0)
 					creep.memory.working = true;
 
 				if (!creep.memory.working) {
 					if (room.storage && room.storage.store.getUsedCapacity(RESOURCE_ENERGY) > (creep.store.getCapacity() + 1000)) {
-						if (creep.withdraw(room.storage, RESOURCE_ENERGY) === ERR_NOT_IN_RANGE)
+						const result = creep.withdraw(room.storage, RESOURCE_ENERGY)
+						if (result === ERR_NOT_IN_RANGE) {
 							creep.moveTo(room.storage, pathing.builderPathing);
+							return;
+						}	else if (result === OK) {
+							creep.memory.working = true;
+							return;
+						}
 					} else {
 						const containers = room.find(FIND_STRUCTURES, { filter: (i) => i.structureType === STRUCTURE_CONTAINER });
 
@@ -38,25 +44,29 @@ const Builder = {
 
 							if (nearestContainer) {
 								const result = creep.withdraw(nearestContainer, RESOURCE_ENERGY);
-								if (result === ERR_NOT_IN_RANGE)
+								if (result === ERR_NOT_IN_RANGE) {
 									creep.moveTo(nearestContainer, pathing.builderPathing);
-								else if (result === ERR_NOT_ENOUGH_RESOURCES)
+									return;
+								}	else if (result === ERR_NOT_ENOUGH_RESOURCES || OK) {
 									creep.memory.working = true;
+									return;
+								}
 							}
 						}
 					}
 				} else {
 					const cSites = room.find(FIND_CONSTRUCTION_SITES);
-
 					if (cSites.length) {
 						const nearestCSite = pos.findClosestByRange(cSites);
-
 						if (nearestCSite) {
 							const result = creep.build(nearestCSite);
-							if (result === ERR_NOT_IN_RANGE)
+							if (result === ERR_NOT_IN_RANGE) {
 								creep.moveTo(nearestCSite, pathing.builderPathing);
-							else if (result === ERR_NOT_ENOUGH_ENERGY)
+								return;
+							} else if (result === ERR_NOT_ENOUGH_ENERGY) {
 								creep.memory.working = false;
+								return;
+							}
 						}
 					} else {
 						if (rMem.containers.controller) cMem.bucket ??= rMem.containers.controller;
