@@ -121,7 +121,10 @@ export default class BasePlanner {
 		this.tileUsage = Array.from({ length: ROOM_SIZE }, () => Array(ROOM_SIZE).fill('empty' as TileUsage));
 	}
 
-	/** Main entry: returns a PlanResult describing an RCL8 plan and an RCL schedule. */
+	/** Main Entry Point:
+	 * --
+	 *
+	 * returns a PlanResult describing an RCL8 plan and an RCL schedule. */
 	createPlan(): PlanResult {
 		// 1. Distance transform -> find open tiles
 		this.computeDistanceTransform();

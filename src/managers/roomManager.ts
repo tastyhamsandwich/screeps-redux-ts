@@ -1,6 +1,7 @@
 import RoomDefense from './DefenseManager';
 import SpawnManager from './SpawnManager';
-
+import BasePlanner from '@modules/BasePlanner';
+import { legacySpawnManager } from './room/utils';
 import { log } from '@globals';
 import { determineBodyParts } from '@funcs/creep/body';
 
@@ -56,12 +57,14 @@ export default class RoomManager {
 	private resources: RoomResources;
 	private stats: RoomStats;
 	private spawnManager: SpawnManager;
+	private legacySpawnManager;
 
 	constructor(room: Room) {
 		this.room = room;
 		this.resources = this.scanResources();
 		this.stats = this.gatherStats();
 		this.spawnManager = new SpawnManager(room);
+		this.legacySpawnManager = this.legacySpawnManager;
 
 		// Initialize room memory if needed
 		if (!this.room.memory.data) {
@@ -72,24 +75,27 @@ export default class RoomManager {
 	/** Main run method - called every tick */
 	run(): void {
 
+		const roomMem = this.room.memory;
+		const rmData = roomMem.data;
+
 		// Update resources and stats
 		this.resources = this.scanResources();
 		this.stats = this.gatherStats();
 
-		// Run spawn manager
-		this.spawnManager.run();
+		if (!rmData.firstTimeInit)
+			rmData.advSpawnSystem = false;
+
+		rmData.firstTimeInit ??= true;
+
+		// Run spawn manager according to advSpawnSystem flag
+		if (rmData.advSpawnSystem) this.spawnManager.run();
+		else this.legacySpawnManager.run(this.room);
 
 		// Assess need for bootstrapping mode
 		this.updateBootstrapState();
 
-		// Infrastructure planning
-		this.planSourceContainers(); // always safe to run
-		if (this.stats.controllerLevel >= 2) {
-			this.planControllerContainer();
-			this.planExtensions();
-		}
-		if (this.stats.controllerLevel >= 6)
-			this.planMineralContainer();
+		const basePlanner = new BasePlanner(this.room);
+		const plan = basePlanner.createPlan();
 
 		// Assess creep needs and submit spawn requests
 		this.assessCreepNeeds();
@@ -117,7 +123,6 @@ export default class RoomManager {
 		if (!this.room.memory.flags) this.room.initRoom();
 		this.room.memory.flags.bootstrap = (level === 1 && creepCount < 5 && !hasContainer);
 	}
-
 
 	/** Scans the room for all relevant structures and resources */
 	private scanResources(): RoomResources {
