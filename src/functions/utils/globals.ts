@@ -361,6 +361,7 @@ export function determineBodyParts(role: string, maxEnergy: number, extras?: { [
 
 export function initGlobal(override: boolean = false): boolean {
 
+	if (override)	Memory.globalSettings = {};
 	if (!Memory.globalSettings) {
 
 		Memory.globalSettings = {
@@ -373,6 +374,10 @@ export function initGlobal(override: boolean = false): boolean {
 					reusePathValue: 3,
 					ignoreCreeps: true
 				},
+				defender: {
+					reusePathValue: 3,
+					ignoreCreeps: true
+				},
 				filler: {
 					reusePathValue: 3,
 					ignoreCreeps: true
@@ -381,7 +386,7 @@ export function initGlobal(override: boolean = false): boolean {
 					reusePathValue: 3,
 					ignoreCreeps: true
 				},
-				upgrader: {
+				hauler: {
 					reusePathValue: 3,
 					ignoreCreeps: true
 				},
@@ -389,18 +394,14 @@ export function initGlobal(override: boolean = false): boolean {
 					reusePathValue: 3,
 					ignoreCreeps: true
 				},
-				hauler: {
-					reusePathValue: 3,
-					ignoreCreeps: true
-				},
-				remotebodyguard: {
-					reusePathValue: 3,
-					ignoreCreeps: true
-				},
 				reserver: {
 					reusePathValue: 3,
 					ignoreCreeps: true
-				}
+				},
+				upgrader: {
+					reusePathValue: 3,
+					ignoreCreeps: true
+				},
 			}
 		}
 		console.log(`Initialized global settings!`);
@@ -458,7 +459,7 @@ export function needMoreHarvesters(room: Room): boolean {
  *
  * Shows: Current Level, Progress/TotalNeeded (and %), Average Progress Per Tick, and estimated Time to Upgrade
  * @author randomencounter
- * @param {StructureController} controller
+ * @param {StructureController} controller Room controller used for calculations and visualization display
  * @return {void}
  * @example visualRCProgress(room.controller);
  */
