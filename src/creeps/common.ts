@@ -12,9 +12,8 @@ else
 
 /**
  * This function allows a creep to navigate a series of Game flags, stored in Creep Memory as either a
- * single string, or an array of strings, named rallyPoint. For no navigation, delete it/set it to 'none'.
+ * single string, or an array of strings, named rally. For no navigation, delete it/set it to 'none'.
  * @param {Creep} creep The creep executing the waypoint navigation
- * @returns void;
  */
 export function navRallyPoint(creep: Creep): void {
 
@@ -77,6 +76,9 @@ export function subordinateNavRally(creep: Creep, waypointArray: string[]): void
 	}
 }
 
+/** Logs a 'WARNING' message every tick to advise the player that a given creep has their AI disabled.
+ * @example @link {log}`Room [W7S11]: WARNING: Creep 'Jeffrey_The_Creep's AI is disabled.`
+*/
 export function aiAlert(creep: Creep): void {
 	if (!Memory.globalSettings.alertDisabled)
 		log('WARNING: Creep ' + creep.name + '\'s AI is disabled.', creep.room);
@@ -84,6 +86,8 @@ export function aiAlert(creep: Creep): void {
 	return;
 }
 
+/** An extracted version of the Upgrader creep behavior function, for the purpose of allowing Builders and Repairers to fall back to upgrading
+ * a room controller when they have no other tasks, without unwieldy code duplication. */
 export function upgraderBehavior(creep: Creep): void {
 	if (creep.memory.controller === undefined) {
 		// Use the room's controller directly when available
@@ -131,8 +135,10 @@ export function upgraderBehavior(creep: Creep): void {
 			const controllerObject: StructureController = Game.getObjectById(creep.memory.controller) as StructureController;
 			if (controllerObject) {
 				const result = creep.upgradeController(controllerObject)
-				if (result === ERR_NOT_IN_RANGE)
+				if (result === ERR_NOT_IN_RANGE) {
 					creep.moveTo(controllerObject, { visualizePathStyle: { stroke: 'green', lineStyle: 'dashed', opacity: 0.3 } });
+					return;
+				}
 				else if (result === OK)
 					creep.say('🔋');
 			}
@@ -143,16 +149,29 @@ export function upgraderBehavior(creep: Creep): void {
 			// Use the bucket to get energy if available
 			const bucketObject: StructureContainer = Game.getObjectById(creep.memory.bucket) as StructureContainer;
 			if (bucketObject && bucketObject.store.getUsedCapacity(RESOURCE_ENERGY) >= creep.store.getCapacity()) {
-				if (creep.withdraw(bucketObject, RESOURCE_ENERGY) === ERR_NOT_IN_RANGE)
+				const result = creep.withdraw(bucketObject, RESOURCE_ENERGY);
+				if (result === ERR_NOT_IN_RANGE) {
 					creep.moveTo(bucketObject, { visualizePathStyle: { stroke: 'yellow', lineStyle: 'dashed', opacity: 0.3 } });
+					return;
+				} else if (result === OK) {
+					creep.memory.working = true;
+					return;
+				}
+
 				// Otherwise, find a source to harvest (ideally this should be a last resort, and only at low room levels)
 			} else if (creep.room.find(FIND_DROPPED_RESOURCES, { filter: (i) => i.resourceType === RESOURCE_ENERGY && i.amount >= creep.store.getCapacity() / 2 }).length) {
 				const piles = creep.room.find(FIND_DROPPED_RESOURCES, { filter: (i) => i.resourceType === RESOURCE_ENERGY && i.amount >= creep.store.getCapacity() / 2 });
 				if (piles.length) {
 					const closestPile = creep.pos.findClosestByRange(piles);
 					if (closestPile) {
-						if (creep.pickup(closestPile) === ERR_NOT_IN_RANGE)
+						const result = creep.pickup(closestPile);
+						if (result === ERR_NOT_IN_RANGE) {
 							creep.moveTo(closestPile, pathing.upgraderPathing);
+							return;
+						} else if (result === OK) {
+							creep.memory.working = true;
+							return;
+						}
 					}
 				}
 			} else if (creep.room.controller!.level <= 2) {
