@@ -601,9 +601,7 @@ export default class RoomManager {
 		return spots;
 	}
 
-	/**
- * Ensures there is a container near the controller (for upgraders).
- */
+	/** Ensures there is a container near the controller (for upgraders). */
 	private planControllerContainer(): void {
 		const controller = this.room.controller;
 		if (!controller) return;
@@ -750,9 +748,7 @@ export default class RoomManager {
 
 	/** Manages tower operations (defense and repair) */
 	private manageTowers(): void {
-		for (const tower of this.resources.towers) {
-			RoomDefense(tower);
-		}
+		for (const tower of this.resources.towers) RoomDefense(tower);
 	}
 
 	/** Manages link energy transfers */
@@ -766,11 +762,8 @@ export default class RoomManager {
 				source => link.pos.getRangeTo(source) <= 2
 			);
 
-			if (nearSource) {
-				sourceLinks.push(link);
-			} else {
-				sinkLinks.push(link);
-			}
+			if (nearSource) sourceLinks.push(link);
+			else sinkLinks.push(link);
 		}
 
 		// Transfer energy from full source links to empty sink links
@@ -779,9 +772,7 @@ export default class RoomManager {
 				const emptySink = sinkLinks.find(
 					link => link.store.getFreeCapacity(RESOURCE_ENERGY) > 400
 				);
-				if (emptySink) {
-					sourceLink.transferEnergy(emptySink);
-				}
+				if (emptySink) sourceLink.transferEnergy(emptySink);
 			}
 		}
 	}
