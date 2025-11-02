@@ -1,13 +1,9 @@
 import { aiAlert, navRallyPoint } from '../common';
 import { pathing } from '@constants';
 
-export const Bodyguard = {
+const Defender = {
 
 	run: function (creep: Creep) {
-
-	},
-
-	runremote: function (creep: Creep) {
 
 		// Standard creep aliases
 		const room: Room = creep.room;
@@ -18,21 +14,11 @@ export const Bodyguard = {
 
 		// Role-specific creep aliases
 		const outpostRoom = cMem.outpostRoom;
-		const homeOutpost = Game.rooms[cMem.home].memory.outposts;
 
 		cMem.disable ??= false;
 		cMem.rally ??= 'none';
 
-		cMem.guardPost ??= homeOutpost.list[homeOutpost.guardCounter];
-
-		if (cMem.guardPost === undefined)
-			global.log(`-- [${creep.name}]: I was never given a 'memory.guardPost' assignment, falling back to home room for safety. Please assign a proper room for me to patrol!`, creep.room);
 		cMem.guardPost ??= cMem.home;
-
-		homeOutpost.guardCounter++;
-
-		if (homeOutpost.guardCounter >= homeOutpost.array.length)
-			homeOutpost.guardCounter = 0;
 
 		if (!cMem.disable) {
 
@@ -63,3 +49,5 @@ export const Bodyguard = {
 		} else aiAlert(creep);
 	}
 }
+
+export default Defender;

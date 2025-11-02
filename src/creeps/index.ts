@@ -1,4 +1,5 @@
 import Builder 		from "./roles/Builder";
+import Defender 	from "./roles/Defender";
 import Filler 		from "./roles/Filler";
 import Harvester 	from "./roles/Harvester";
 import Hauler 		from "./roles/Hauler";
@@ -9,6 +10,7 @@ import Upgrader 	from "./roles/Upgrader";
 
 const CreepAI = {
 	Builder,
+	Defender,
 	Filler,
 	Harvester,
 	Hauler,
