@@ -59,7 +59,7 @@ const Harvester = {
 							}
 						} else {
 							if (isBootstrap) {
-								const spawn = creep.pos.findClosestByRange(FIND_MY_STRUCTURES, {
+								const spawn: StructureSpawn | StructureExtension | null = creep.pos.findClosestByRange(FIND_MY_STRUCTURES, {
 									filter: (s) =>
 										(s.structureType === STRUCTURE_SPAWN || s.structureType === STRUCTURE_EXTENSION) &&
 										s.store.getFreeCapacity(RESOURCE_ENERGY) > 0
@@ -67,7 +67,7 @@ const Harvester = {
 								if (spawn) {
 									(creep.transfer(spawn, RESOURCE_ENERGY) === ERR_NOT_IN_RANGE)
 									creep.moveTo(spawn, pathing.harvesterPathing);
-								}
+								} else buildContainer(creep);
 								return;
 							}
 							if (cMem.bucket) creep.unloadEnergy(cMem.bucket);
@@ -84,21 +84,7 @@ const Harvester = {
 											creep.harvestEnergy();
 										}
 									}
-								} else {
-									const nearbySites = pos.findInRange(FIND_CONSTRUCTION_SITES, 2);
-									if (nearbySites.length == 0) room.createConstructionSite(pos.x, pos.y, STRUCTURE_CONTAINER);
-									else {
-										const buildersNearby = room.find(FIND_MY_CREEPS, { filter: (i) => i.memory.role == 'remotebuilder' || i.memory.role == 'builder' });
-										if (buildersNearby.length > 0) {
-											const mySite = pos.findInRange(FIND_CONSTRUCTION_SITES, 1);
-											if (mySite.length) creep.build(mySite[0]);
-											else {
-												creep.unloadEnergy();
-												creep.harvestEnergy();
-											}
-										} else creep.build(nearbySites[0]);
-									}
-								}
+								} else buildContainer(creep);
 							}
 						}
 					} else creep.harvestEnergy();
@@ -194,4 +180,22 @@ const Harvester = {
 	}
 }
 
+function buildContainer(creep: Creep): void {
+	const room = creep.room;
+	const pos = creep.pos;
+
+	const nearbySites = pos.findInRange(FIND_CONSTRUCTION_SITES, 1);
+	if (nearbySites.length == 0) room.createConstructionSite(pos.x, pos.y, STRUCTURE_CONTAINER);
+	else {
+		const buildersNearby = room.find(FIND_MY_CREEPS, { filter: (i) => i.memory.role == 'remotebuilder' || i.memory.role == 'builder' });
+		if (buildersNearby.length > 0) {
+			const mySite = pos.findInRange(FIND_CONSTRUCTION_SITES, 1);
+			if (mySite.length) creep.build(mySite[0]);
+			else {
+				creep.unloadEnergy();
+				creep.harvestEnergy();
+			}
+		} else creep.build(nearbySites[0]);
+	}
+}
 export default Harvester;
