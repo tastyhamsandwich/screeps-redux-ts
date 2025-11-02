@@ -27,6 +27,7 @@ declare global {
 		link(): string;
 		cacheObjects(): void;
 		initOutpost(roomName: string): void;
+		initQuotas(): void;
 		initRoom(): void;
 		initFlags(): void;
 		updateSourceAssignment(roomToUpdate: string, updateObject: SourceAssignmentUpdate);
@@ -464,17 +465,29 @@ Room.prototype.cacheObjects = function () {
 	return true;
 }
 
-/** Initializes a room with default memory structure and settings. Sets up quotas, visual settings, repair settings, and stats tracking.
- */
-Room.prototype.initRoom = function () {
-	if (this.memory.quotas) this.memory.quotas = {
+/** Initializes a room's quota list. */
+Room.prototype.initQuotas = function (): void {
+	if (!this.memory.quotas) this.memory.quotas = {};
+
+	this.memory.quotas = {
 		harvesters: 2,
 		upgraders: 2,
 		fillers: 2,
-		haulers: 2,
-		builders: 2,
+		haulers: 0,
+		builders: 1,
 		repairers: 1,
-	};
+		defenders: 0,
+		reservers: 0,
+		scouts: 0,
+		remoteharvesters: 0,
+	}
+
+	log(`Quotas initialized: Harvesters (2), Upgraders (2), Fillers (2), Haulers (0), Builders (1), Defenders (0), Reservers (0), Scouts (0), Remote Harvesters (0)`);
+}
+
+/** Initializes a room with default memory structure and settings. Sets up quotas, visual settings, repair settings, and stats tracking. */
+Room.prototype.initRoom = function () {
+	if (!this.memory.quotas) this.initQuotas();
 
 	const visualSettings: VisualSettings = { progressInfo: { alignment: 'left', xOffset: 1, yOffsetFactor: 0.6, stroke: '#000000', fontSize: 0.6, color: '' } };
 	const towerSettings: TowerRepairSettings = { creeps: true, walls: false, ramparts: false, roads: false, others: false, wallLimit: 10, rampartLimit: 10, maxRange: 10 };
@@ -493,12 +506,12 @@ Room.prototype.initRoom = function () {
 	if (!this.memory.outposts) this.memory.outposts = { list: {}, array: [], reserverLastAssigned: 0, numSources: 0, numHarvesters: 0, counter: 0, guardCounter: 0 };
 	if (!this.memory.stats) this.memory.stats = { energyHarvested: 0, controlPoints: 0, constructionPoints: 0, creepsSpawned: 0, creepPartsSpawned: 0,
 		mineralsHarvested: mineralsHarvested, controllerLevelReached: 0, npcInvadersKilled: 0, hostilePlayerCreepsKilled: 0, labStats: labStats };
-	if (!this.memory.flags) this.memory.flags = {};
+	if (!this.memory.flags) this.memory.flags = { advancedSpawnLogic: false, };
 
 	this.cacheObjects();
 }
 
-/** Initializes an outpost room with necessary memory structures
+/** Initializes an outpost room with necessary memory structures.
  * @param roomName - The name of the room to initialize as an outpost
  */
 Room.prototype.initOutpost = function (roomName): void {
@@ -541,49 +554,13 @@ Room.prototype.initFlags = function () {
 	if (!this.memory.settings.flags)
 		this.memory.settings.flags = {};
 
-	if (flagSettings.craneUpgrades === undefined)
-		flagSettings.craneUpgrades = false;
-
-	if (flagSettings.repairRamparts === undefined)
-		flagSettings.repairRamparts = true;
-
-	if (flagSettings.repairWalls === undefined)
-		flagSettings.repairWalls = true;
-
-	if (flagSettings.centralStorageLogic === undefined)
-		flagSettings.centralStorageLogic = false;
-
-	if (flagSettings.dropHarvestingEnabled === undefined)
-		flagSettings.dropHarvestingEnabled = false;
-
-	if (flagSettings.haulersDoMinerals === undefined)
-		flagSettings.haulersDoMinerals = false;
-
-	if (flagSettings.towerRepairBasic === undefined)
-		flagSettings.towerRepairBasic = false;
-
-	if (flagSettings.towerRepairDefenses === undefined)
-		flagSettings.towerRepairDefenses = false;
-
 	if (flagSettings.haulersPickupEnergy === undefined)
 		flagSettings.haulersPickupEnergy = false;
-
-	if (flagSettings.harvestersFixAdjacent === undefined)
-		flagSettings.harvestersFixAdjacent = false;
-
-	if (flagSettings.repairBasics === undefined)
-		flagSettings.repairBasics = true;
-
-	if (flagSettings.upgradersSeekEnergy === undefined)
-		flagSettings.upgradersSeekEnergy = true;
-
-	if (flagSettings.sortConSites === undefined)
-		flagSettings.sortConSites = false;
 
 	if (flagSettings.closestConSites === undefined)
 		flagSettings.closestConSites = false;
 
-	log('Room flags initialized: craneUpgrades(' + flagSettings.craneUpgrades + ') centralStorageLogic(' + flagSettings.centralStorageLogic + ') dropHarvestingEnabled(' + flagSettings.dropHarvestingEnabled + ') repairRamparts(' + flagSettings.repairRamparts + ') repairWalls(' + flagSettings.repairWalls + ') haulersDoMinerals(' + flagSettings.haulersDoMinerals + ') towerRepairBasic(' + flagSettings.towerRepairBasic + ') towerRepairDefenses(' + flagSettings.towerRepairDefenses + ') haulersPickupEnergy(' + flagSettings.haulersPickupEnergy + ') harvestersFixAdjacent(' + flagSettings.harvestersFixAdjacent + ') repairBasics(' + flagSettings.repairBasics + ') upgradersSeekEnergy(' + flagSettings.upgradersSeekEnergy + ')', this);
+	log(`Room flags initialized: haulersPickupEnergy(${flagSettings.haulersPickupEnergy}), closestConSites(${flagSettings.closestConSites})`, this);
 	return;
 }
 
