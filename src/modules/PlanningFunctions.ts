@@ -209,7 +209,7 @@ export function getDistanceTransform(roomName, options: DistTransOptions = {}) {
 	 * @returns {[RoomPosition]} array of position of cuts
 	 */
 	export function getMinCut(roomName, sources, costMatrix) {
-		//soucres : array of roomPositions, costMatrix : costMatrix which indicates cost of that position.
+		// soucres: array of roomPositions, costMatrix: costMatrix which indicates cost of that position.
 		// an array indicating whether a point is at the exit or near the exit
 
 		const terrain = Game.map.getRoomTerrain(roomName);

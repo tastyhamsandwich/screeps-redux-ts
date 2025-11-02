@@ -4,6 +4,23 @@ if (!Memory.globalSettings) initGlobal();
 if (!Memory.globalSettings?.creepSettings) Memory.globalSettings!.creepSettings = {};
 const cSet = Memory.globalSettings!.creepSettings;
 
+export const STRUCTURE_PRIORITY: { [key in BuildableStructureConstant]?: number } = {
+	[STRUCTURE_SPAWN]: 1,
+	[STRUCTURE_STORAGE]: 2,
+	[STRUCTURE_EXTENSION]: 3,
+	[STRUCTURE_TOWER]: 4,
+	[STRUCTURE_LINK]: 5,
+	[STRUCTURE_TERMINAL]: 6,
+	[STRUCTURE_FACTORY]: 7,
+	[STRUCTURE_LAB]: 8,
+	[STRUCTURE_NUKER]: 9,
+	[STRUCTURE_OBSERVER]: 10,
+	[STRUCTURE_POWER_SPAWN]: 11,
+	[STRUCTURE_ROAD]: 12,
+	[STRUCTURE_RAMPART]: 13,
+	[STRUCTURE_WALL]: 14
+};
+
 export const PART_COST: Record<BodyPartConstant, number> = {
 	[MOVE]: 50,
 	[WORK]: 100,

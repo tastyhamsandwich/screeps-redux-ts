@@ -1,6 +1,7 @@
 import RoomDefense from './DefenseManager';
 import SpawnManager from './SpawnManager';
-import BasePlanner from '@modules/BasePlanner';
+import BasePlanner, { type PlanResult, computePlanChecksum } from '@modules/BasePlanner';
+import { STRUCTURE_PRIORITY } from '@constants';
 import { legacySpawnManager } from './room/utils';
 import { log } from '@globals';
 import { determineBodyParts } from '@funcs/creep/body';
@@ -58,6 +59,8 @@ export default class RoomManager {
 	private stats: RoomStats;
 	private spawnManager: SpawnManager;
 	private legacySpawnManager;
+	private basePlanner: BasePlanner | null;
+	private basePlan: PlanResult | null = null;
 
 	constructor(room: Room) {
 		this.room = room;
@@ -65,6 +68,7 @@ export default class RoomManager {
 		this.stats = this.gatherStats();
 		this.spawnManager = new SpawnManager(room);
 		this.legacySpawnManager = this.legacySpawnManager;
+		this.basePlanner = new BasePlanner(room);
 
 		// Initialize room memory if needed
 		if (!this.room.memory.data) {
@@ -94,8 +98,38 @@ export default class RoomManager {
 		// Assess need for bootstrapping mode
 		this.updateBootstrapState();
 
-		const basePlanner = new BasePlanner(this.room);
-		const plan = basePlanner.createPlan();
+		// Generate and cache base plan data
+		const rcl = this.room.controller?.level ?? 0;
+		const mem = this.room.memory;
+
+		// Initialize if needed
+		if (!this.basePlan) this.basePlan = null;
+		if (!this.basePlanner) this.basePlanner = null;
+
+		let regenerate = false;
+
+		// Determine whether to regenerate plan
+		if (!mem.basePlan) regenerate = true;
+		else if (mem.basePlan.rclAtGeneration !== rcl) regenerate = true;
+		else if (Game.time - mem.basePlan.lastGenerated > 10000) regenerate = true; // optional periodic refresh
+
+		// If regeneration is required
+		if (regenerate) {
+			this.basePlanner = new BasePlanner(this.room);
+			this.basePlan = this.basePlanner.createPlan();
+
+			mem.basePlan = {
+				lastGenerated: Game.time,
+				rclAtGeneration: rcl,
+				checksum: computePlanChecksum(this.basePlan),
+				data: this.basePlan
+			};
+			console.log(`[${this.room.name}] Base plan regenerated for RCL${rcl}`);
+			// Otherwise, load cached plan (only assign from memory if not already loaded)
+		} else if (!this.basePlan && mem.basePlan) this.basePlan = mem.basePlan.data;
+
+		// Process the plan if available
+		if (this.basePlan) this.handleBasePlan(this.basePlan);
 
 		// Assess creep needs and submit spawn requests
 		this.assessCreepNeeds();
@@ -913,7 +947,6 @@ export default class RoomManager {
 
 				log(`Quotas: Harvesters (4)  Haulers (0)  Builders (1)  Upgraders (3)`);
 
-
 				break;
 			case 1:
 				break;
@@ -961,6 +994,79 @@ export default class RoomManager {
 				break;
 		}
 	}
+
+	/** Process construction tasks as created by BasePlanner */
+	private handleBasePlan(plan: PlanResult): void {
+		const mem = this.room.memory;
+		const rcl = this.stats.controllerLevel;
+		const now = Game.time;
+
+		// Initialize or reset plan
+		if (!mem.buildQueue || mem.buildQueue.activeRCL !== rcl) {
+			mem.buildQueue = {
+				plannedAt: now,
+				lastBuiltTick: 0,
+				index: 0,
+				activeRCL: rcl
+			};
+		}
+
+		// Safety limit: 5 new sites per tick unless CPU is constrained
+		const MAX_PER_TICK = (Game.cpu.bucket > 8000) ? 5 : 1;
+		let created = 0;
+
+		const existingSites = this.room.find(FIND_CONSTRUCTION_SITES);
+		const existingStructs = this.room.find(FIND_STRUCTURES);
+		const existingPositions = new Set(
+			[
+				...existingStructs.map(s => `${s.pos.x},${s.pos.y},${s.structureType}`),
+				...existingSites.map(s => `${s.pos.x},${s.pos.y},${s.structureType}`)
+			]
+		);
+
+		const plannedForRCL = plan.rclSchedule[rcl] || [];
+		const queueStart = mem.buildQueue.index;
+		const remaining = plannedForRCL
+			.slice(queueStart)
+			.sort((a, b) => {
+				const pa = STRUCTURE_PRIORITY[a.structure as BuildableStructureConstant] ?? 99;
+				const pb = STRUCTURE_PRIORITY[b.structure as BuildableStructureConstant] ?? 99;
+				return pa - pb;
+			});
+
+		for (const entry of remaining) {
+			const key = `${entry.pos.x},${entry.pos.y},${entry.structure}`;
+			if (existingPositions.has(key)) {
+				mem.buildQueue.index++;
+				continue;
+			}
+
+			const pos = new RoomPosition(entry.pos.x, entry.pos.y, this.room.name);
+			const result = this.room.createConstructionSite(pos, entry.structure as BuildableStructureConstant);
+			if (result === OK) {
+				created++;
+				mem.buildQueue.index++;
+				mem.buildQueue.lastBuiltTick = now;
+				console.log(`[${this.room.name}] Queued ${entry.structure} @ ${entry.pos.x},${entry.pos.y} (RCL${rcl})`);
+				if (created >= MAX_PER_TICK) break;
+			}
+		}
+
+		// If we've finished the current RCL batch, clear or prepare for next
+		if (mem.buildQueue.index >= plannedForRCL.length) {
+			mem.buildQueue.index = 0;
+			mem.buildQueue.activeRCL = rcl + 1;
+			console.log(`[${this.room.name}] Finished building all RCL${rcl} structures.`);
+		}
+
+		const visual = new RoomVisual(this.room.name);
+		visual.text(
+			`Building ${mem.buildQueue?.index ?? 0}/${plan.rclSchedule[mem.buildQueue?.activeRCL || 1]?.length || 0}`,
+			3, 48,
+			{ align: 'left', color: '#88f', font: 0.8 }
+		);
+	}
+
 	/** Draws planned structures (like extensions) on the room using RoomVisuals. */
 	private drawPlanningVisuals(): void {
 		const visual = new RoomVisual(this.room.name);
@@ -1018,5 +1124,18 @@ export default class RoomManager {
 				font: 0.6
 			});
 		}
+	}
+
+	/** Draws Base Plan construction progress widget for visualization. */
+	private visualizeBuildQueue(): void {
+		const visual = new RoomVisual(this.room.name);
+		const mem = this.room.memory.buildQueue;
+		if (!mem) return;
+
+		visual.text(
+			`RCL${mem.activeRCL} build ${mem.index}`,
+			3, 47,
+			{ align: 'left', color: '#ccc', font: 0.8 }
+		);
 	}
 }

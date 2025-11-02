@@ -6,6 +6,7 @@ import { buildProgress, repairProgress } from '@funcs/visual/progress';
 // Import Manager Daemons
 import RoomManager from "@managers/RoomManager";
 import TrafficManager from '@managers/TrafficManager';
+import { type PlanResult } from "@modules/BasePlanner";
 
 // Import all Creep Role AI functions
 import CreepAI from './creeps/index';
@@ -71,6 +72,18 @@ declare global {
 			deferred?: SpawnRequest[];
 			lastProcessed: number;
 		}
+		buildQueue?: {
+			plannedAt: number;
+			lastBuiltTick: number;
+			index: number;
+			activeRCL: number;
+		};
+		basePlan?: {
+			lastGenerated: number;
+			rclAtGeneration: number;
+			checksum: string;
+			data: PlanResult;
+		};
 	}
 
 	// INTERFACE: Creep Memory Extension
