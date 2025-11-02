@@ -19,6 +19,7 @@
 			"@protos/*": ["./prototypes/*"],
 			"@roles/*": ["./roles/*"],
 			"@managers/*": ["./managers/*"],
+			"@modules/*": ["./modules/*"],
 			"@utils/*": ["./functions/utils/*"],
 			"@funcs/*": ["./functions/*"],
 			"@main": ["./main"],

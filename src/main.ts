@@ -1,6 +1,6 @@
 
 // Import Global Functions and VizFuncs
-import { needMoreHarvesters, visualRCProgress, calcTickTime } from "@globals";
+import { visualRCProgress, calcTickTime } from "@globals";
 import { buildProgress, repairProgress } from '@funcs/visual/progress';
 
 // Import Manager Daemons
@@ -28,7 +28,7 @@ declare global {
 		log: any;
 		stats: { [key: string]: number | string };
 		globalData: { [key: string]: any };
-		globalSettings: GlobalSettings;
+		globalSettings: { [key: string]: any };
 		colonies: { [key: string]: any };
 		time?: {
 			lastTickTime?: number,
@@ -79,6 +79,7 @@ declare global {
 		home: string;
 		room: string;
 		working?: boolean;
+		moveIntent?: { to: RoomPosition };
 		[key: string]: any;
 	}
 
@@ -124,24 +125,11 @@ declare global {
 
 	interface RoomFlags {
 		bootstrap?: boolean;
-		boostUpgraders?: boolean;
-		centralStorageLogic?: boolean;
 		closestConSites?: boolean;
-		craneUpgrades?: boolean;
 		displayTowerRanges?: boolean;
-		harvestersFixAdjacent?: boolean;
-		haulersDoMinerals?: boolean;
 		haulersPickupEnergy?: boolean;
-		repairBasics?: boolean;
-		repairRamparts?: boolean;
-		repairWalls?: boolean;
-		sortConSites?: boolean;
-		towerRepairBasic?: boolean;
-		towerRepairDefenses?: boolean;
-		upgradersSeekEnergy?: boolean;
-		doScience?: boolean;
-		boostCreeps?: boolean;
-		dropHarvestingEnabled?: boolean;
+		advancedSpawnLogic?: boolean;
+		managerInitialized?: boolean;
 	}
 
 	interface RoomSettings {
@@ -301,7 +289,6 @@ declare global {
 		distance?: number,
 	}
 
-
 	// Syntax for adding properties to `global` (ex "global.log")
 	namespace NodeJS {
 		interface Global {
@@ -342,7 +329,7 @@ export const loop = () => {
 
 	// PURPOSE Generate pixels with extra CPU time
 	if (Game.shard.name === 'shard3') {
-		if (Game.cpu.bucket == 10000) {
+		if (Game.cpu.bucket >= 10000) {
 			Game.cpu.generatePixel()
 			console.log('[GENERAL]: CPU Bucket at limit, generating pixel...');
 		}
@@ -350,9 +337,7 @@ export const loop = () => {
 
 	// Automatically delete memory of missing creeps
 	for (const name in Memory.creeps) {
-		if (!(name in Game.creeps)) {
-			delete Memory.creeps[name];
-		}
+		if (!(name in Game.creeps))	delete Memory.creeps[name];
 	}
 
 	// Execute specific role-based creep script for every creep, based on role assigned in CreepMemory
@@ -360,35 +345,74 @@ export const loop = () => {
 		const creep = Game.creeps[name];
 		switch (creep.memory.role) {
 			case 'harvester':
-				CreepAI.Harvester.run(creep);
+				try {
+					CreepAI.Harvester.run(creep);
+				} catch (e) {
+					console.log(`Error with Harvester logic: ${e}`);
+				}
 				break;
 			case 'upgrader':
-				CreepAI.Upgrader.run(creep);
+				try {
+					CreepAI.Upgrader.run(creep);
+				} catch (e) {
+					console.log(`Error with Upgrader logic: ${e}`);
+				}
 				break;
 			case 'builder':
-				CreepAI.Builder.run(creep);
+				try {
+					CreepAI.Builder.run(creep);
+				} catch (e) {
+					console.log(`Error with Builder logic: ${e}`);
+				}
 				break;
 			case 'repairer':
-				CreepAI.Repairer.run(creep);
+				try {
+					CreepAI.Repairer.run(creep);
+				} catch (e) {
+					console.log(`Error with Repairer logic: ${e}`);
+				}
 				break;
 			case 'filler':
-				CreepAI.Filler.run(creep);
+				try {
+					CreepAI.Filler.run(creep);
+				} catch (e) {
+					console.log(`Error with Filler logic: ${e}`);
+				}
 				break;
 			case 'hauler':
-				CreepAI.Hauler.run(creep);
+				try {
+					CreepAI.Hauler.run(creep);
+				} catch (e) {
+					console.log(`Error with Hauler logic: ${e}`);
+				}
 				break;
 			case 'defender':
-				// TODO: Implement defender AI
-				//CreepAI.Defender.run(creep);
+				try {
+					CreepAI.Defender.run(creep);
+				} catch (e) {
+					console.log(`Error with Defender logic: ${e}`);
+				}
 				break;
 			case 'reserver':
-				CreepAI.Reserver.run(creep);
+				try {
+					CreepAI.Reserver.run(creep);
+				} catch (e) {
+					console.log(`Error with Reserver logic: ${e}`);
+				}
 				break;
 			case 'remoteharvester':
-				CreepAI.Harvester.runremote(creep);
+				try {
+					CreepAI.Harvester.runremote(creep);
+				} catch (e) {
+					console.log(`Error with Remote Harvester logic: ${e}`);
+				}
 				break;
 			case 'scout':
-				CreepAI.Scout.run(creep);
+				try {
+					CreepAI.Scout.run(creep);
+				} catch (e) {
+					console.log(`Error with Scout logic: ${e}`);
+				}
 				break;
 			default:
 				break;
