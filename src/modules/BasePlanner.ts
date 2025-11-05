@@ -168,6 +168,9 @@ export default class BasePlanner {
 		// 11. Create RCL schedule mapping structures to RCLs
 		const rclSchedule = this.buildRclSchedule(placements);
 
+		// 12. Validate structure counts
+		const validationNotes = this.validateStructureCounts(placements);
+
 		// finalize tileUsage grid
 		const gridCopy = copyGrid(this.tileUsage);
 
@@ -180,7 +183,8 @@ export default class BasePlanner {
 			notes: [
 				`Base center chosen near controller at ${baseCenter.x},${baseCenter.y}.`,
 				`Used distance transform threshold: ${START_MIN_DIST}.`,
-				`Lab count target: ${LABS_COUNT}.`
+				`Lab count target: ${LABS_COUNT}.`,
+				...validationNotes
 			]
 		};
 	}
@@ -191,7 +195,7 @@ export default class BasePlanner {
 		// Use user-provided distanceTransform(room) which should return NxN numeric grid (0 for obstacles)
 		// We'll adapt as needed; fallback to a built-in distance transform if the import fails.
 		try {
-			const costMatrix = getDistanceTransform(this.room); // returns CostMatrix
+			const costMatrix = getDistanceTransform(this.room.name); // returns CostMatrix
 			// convert returned CostMatrix to a 2D
 			const dt: number[][] = Array.from({ length: ROOM_SIZE }, (_, y) =>
 				Array.from({ length: ROOM_SIZE }, (_, x) => costMatrix.get(x, y))
@@ -205,7 +209,7 @@ export default class BasePlanner {
 				for (let x = 0; x < ROOM_SIZE; x++) {
 					const pos = new RoomPosition(x, y, this.room.name);
 					const obstacle =
-						pos.lookFor('terrain')[0] === 'wall' || pos.lookFor(LOOK_STRUCTURES).some(s => s.structureType === STRUCTURE_WALL || s.structureType === STRUCTURE_RAMPART);
+						pos.lookFor(LOOK_TERRAIN)[0] === 'wall' || pos.lookFor(LOOK_STRUCTURES).some(s => s.structureType === STRUCTURE_WALL || s.structureType === STRUCTURE_RAMPART);
 					grid[y][x] = obstacle ? 0 : 5; // naive
 				}
 			}
@@ -394,7 +398,7 @@ export default class BasePlanner {
 	 -- */
 	computeFloodfill(seed: Pos) {
 		try {
-			const ff = getPositionsByPathCost(this.room, seed.x, seed.y); // expects numeric grid with distances
+			const ff = getPositionsByPathCost(this.room.name, [seed], {}); // expects numeric grid with distances
 			if (ff && ff.length) {
 				this.floodGrid = ff;
 				// optionally use floodGrid to weight placements
@@ -417,7 +421,7 @@ export default class BasePlanner {
 					if (!inBounds(n.x, n.y)) continue;
 					if (dist[n.y][n.x] <= d + 1) continue;
 					const tilePos = new RoomPosition(n.x, n.y, this.room.name);
-					if (tilePos.lookFor('terrain')[0] === 'wall') continue;
+					if (tilePos.lookFor(LOOK_TERRAIN)[0] === 'wall') continue;
 					dist[n.y][n.x] = d + 1;
 					queue.push(n);
 				}
@@ -429,31 +433,14 @@ export default class BasePlanner {
 	/** 6: Allocate Tiles for Essential Structures
 	 -- */
 	allocateStructureTiles(center: Pos, placements: StructurePlacement[]) {
-		// Extensions: use a grid around core stamp, expanding outward as needed.
-		// generate grid positions in rings, place extension groups in grid-pattern "commie bot" style.
-		const extTargets = 60; // total RCL8 extension count (but we'll schedule them across RCLs)
+		// Extensions: place in organized + shaped blocks (5 extensions per block)
+		// Core stamp already has 16 extensions, so we need 44 more for a total of 60
+		const extTargets = 44; // additional extensions needed (60 total - 16 from core stamp)
 		const extPositions: Pos[] = [];
 
-		// search outward spiral from center for open extension tiles (prefer dtGrid >= 2)
-		const maxRadius = 12;
-		for (let r = 1; r <= maxRadius && extPositions.length < extTargets; r++) {
-			for (let dy = -r; dy <= r; dy++) {
-				for (let dx = -r; dx <= r; dx++) {
-					if (Math.abs(dx) !== r && Math.abs(dy) !== r) continue; // ring only
-					const x = center.x + dx;
-					const y = center.y + dy;
-					if (!inBounds(x, y)) continue;
-					if (this.tileUsage[y][x] !== 'empty') continue;
-					if (this.dtGrid[y][x] < 1) continue;
-					// prefer tiles close to roads/flood grid low value
-					extPositions.push({ x, y });
-					this.tileUsage[y][x] = 'extension';
-					placements.push({ structure: STRUCTURE_EXTENSION, pos: { x, y } });
-					if (extPositions.length >= extTargets) break;
-				}
-				if (extPositions.length >= extTargets) break;
-			}
-		}
+		// Place extension blocks in a grid pattern around the core
+		// Each block is a + shape (5 extensions) with roads around it
+		this.placeExtensionBlocks(center, extTargets, placements, extPositions);
 
 		// Towers: place 3-6 towers distributed to maximize coverage
 		const towerCount = 6; // RCL8
@@ -461,6 +448,32 @@ export default class BasePlanner {
 		for (const t of towerPositions) {
 			this.tileUsage[t.y][t.x] = 'tower';
 			placements.push({ structure: STRUCTURE_TOWER, pos: t });
+		}
+
+		// Additional Spawns: place 2 more spawns (total 3 for RCL8) near the core area
+		// Screeps allows 1 spawn at RCL1, 2 at RCL7, and 3 at RCL8
+		const additionalSpawns = 2; // We already have 1 spawn from core stamp
+		let spawnCount = 0;
+		for (let r = 3; r <= 8 && spawnCount < additionalSpawns; r++) {
+			for (let dy = -r; dy <= r; dy++) {
+				for (let dx = -r; dx <= r; dx++) {
+					if (Math.abs(dx) !== r && Math.abs(dy) !== r) continue; // ring only
+					const x = center.x + dx;
+					const y = center.y + dy;
+					if (!inBounds(x, y)) continue;
+					if (this.tileUsage[y][x] !== 'empty') continue;
+					if (this.dtGrid[y][x] < 2) continue; // Prefer more open areas for spawns
+					// Verify walkable terrain
+					const pos = new RoomPosition(x, y, this.room.name);
+					if (pos.lookFor(LOOK_TERRAIN)[0] === 'wall') continue;
+					// Place spawn
+					this.tileUsage[y][x] = 'spawn';
+					placements.push({ structure: STRUCTURE_SPAWN, pos: { x, y } });
+					spawnCount++;
+					if (spawnCount >= additionalSpawns) break;
+				}
+				if (spawnCount >= additionalSpawns) break;
+			}
 		}
 
 		// Factory, Nuker, Observer: place them in less critical tiles but within base bounds
@@ -641,30 +654,28 @@ export default class BasePlanner {
 			}
 		}
 
-		// Place roads from storage/terminal to source CONTAINERS (not sources themselves) & to mineral container
+		// Get key structure positions for road network
+		const spawn = placements.find(p => p.structure === STRUCTURE_SPAWN);
 		const storage = placements.find(p => p.structure === STRUCTURE_STORAGE);
-		const storagePos = storage ? storage.pos : this.controllerPos;
+		const spawnPos = spawn ? spawn.pos : (storage ? storage.pos : this.controllerPos);
+		const storagePos = storage ? storage.pos : spawnPos;
 
-		// Get container positions instead of source positions
+		// Get container positions
 		const sourceContainers = placements.filter(p => p.structure === STRUCTURE_CONTAINER);
-		const targets: Pos[] = sourceContainers.map(c => c.pos);
+		const controllerContainer = placements.find(p =>
+			p.structure === STRUCTURE_CONTAINER &&
+			manhattan(p.pos, this.controllerPos) <= 3
+		);
 
-		if (this.mineralPos) {
-			// Find mineral container if it exists
-			const mineralContainer = placements.find(p =>
-				p.structure === STRUCTURE_CONTAINER &&
-				manhattan(p.pos, this.mineralPos!) <= 2
-			);
-			if (mineralContainer) targets.push(mineralContainer.pos);
-		}
+		// Helper function to place roads along a path
+		const placeRoadsOnPath = (path: Pos[], skipFirst = true, skipLast = true) => {
+			const startIdx = skipFirst ? 1 : 0;
+			const endIdx = skipLast ? path.length - 1 : path.length;
 
-		for (const t of targets) {
-			const path = this.simplePath(storagePos, t);
-			// Don't place road on the first (storage) or last (container) position
-			for (let i = 1; i < path.length - 1; i++) {
+			for (let i = startIdx; i < endIdx; i++) {
 				const step = path[i];
-				// Only place roads on empty tiles
-				if (this.tileUsage[step.y][step.x] !== 'empty') continue;
+				// Only place roads on empty tiles or upgrade existing roads
+				if (this.tileUsage[step.y][step.x] !== 'empty' && this.tileUsage[step.y][step.x] !== 'road') continue;
 
 				// Verify we're not placing on walls
 				const posObj = new RoomPosition(step.x, step.y, this.room.name);
@@ -686,10 +697,63 @@ export default class BasePlanner {
 				}
 				if (isSourceOrMineral) continue;
 
-				this.tileUsage[step.y][step.x] = 'road';
-				placements.push({ structure: 'road', pos: step });
+				if (this.tileUsage[step.y][step.x] === 'empty') {
+					this.tileUsage[step.y][step.x] = 'road';
+					placements.push({ structure: 'road', pos: step });
+				}
+			}
+		};
+
+		// 1. Roads from spawn to each source container
+		for (const container of sourceContainers) {
+			// Skip controller container (handled separately)
+			if (controllerContainer && posEq(container.pos, controllerContainer.pos)) continue;
+
+			const path = this.simplePath(spawnPos, container.pos);
+			placeRoadsOnPath(path, true, true);
+		}
+
+		// 2. Roads from spawn to controller (via controller container if exists)
+		if (controllerContainer) {
+			const path = this.simplePath(spawnPos, controllerContainer.pos);
+			placeRoadsOnPath(path, true, true);
+		} else {
+			// Direct path to controller upgrade area
+			const path = this.simplePath(spawnPos, this.controllerPos);
+			placeRoadsOnPath(path, true, true);
+		}
+
+		// 3. Roads from storage to source containers (for hauling efficiency)
+		if (storage) {
+			for (const container of sourceContainers) {
+				// Skip controller container
+				if (controllerContainer && posEq(container.pos, controllerContainer.pos)) continue;
+
+				const path = this.simplePath(storagePos, container.pos);
+				placeRoadsOnPath(path, true, true);
+			}
+
+			// Roads from storage to controller container
+			if (controllerContainer) {
+				const path = this.simplePath(storagePos, controllerContainer.pos);
+				placeRoadsOnPath(path, true, true);
 			}
 		}
+
+		// 4. Roads to mineral container if it exists
+		if (this.mineralPos) {
+			const mineralContainer = placements.find(p =>
+				p.structure === STRUCTURE_CONTAINER &&
+				manhattan(p.pos, this.mineralPos!) <= 2
+			);
+			if (mineralContainer) {
+				const path = this.simplePath(storagePos, mineralContainer.pos);
+				placeRoadsOnPath(path, true, true);
+			}
+		}
+
+		// Extension blocks already have perimeter roads from placeExtensionBlocks()
+		// No additional extension road connections needed here
 	}
 
 	/** 9: Rampart Placement Using MinCut
@@ -739,7 +803,184 @@ export default class BasePlanner {
 		}
 	}
 
-	/** 10: Tower Placement Helper: Maximize Coverage (Greedy)
+	/** Helper: Place Extension Blocks in + Shaped Patterns
+	 -- */
+	placeExtensionBlocks(center: Pos, targetCount: number, placements: StructurePlacement[], extPositions: Pos[]) {
+		// Each block is a + shape: center + 4 cardinal directions = 5 extensions
+		// Blocks are separated by roads for efficient movement
+		// Pattern:  . E .
+		//           E E E
+		//           . E .
+		// Where E = extension, . = road or empty
+
+		const blockSpacing = 4; // 4 tiles between block centers (includes road perimeter)
+
+		// Try to place blocks in a grid pattern around the center
+		const maxSearchRadius = 15;
+		let placed = 0;
+
+		// Search in expanding rings around center
+		for (let ring = 2; ring <= maxSearchRadius && placed < targetCount; ring += blockSpacing) {
+			// Try positions at regular intervals in this ring
+			const positions: Pos[] = [];
+
+			// Generate candidate positions in a grid pattern
+			for (let dy = -ring; dy <= ring; dy += blockSpacing) {
+				for (let dx = -ring; dx <= ring; dx += blockSpacing) {
+					positions.push({ x: center.x + dx, y: center.y + dy });
+				}
+			}
+
+			// Try to place blocks at these positions
+			for (const basePos of positions) {
+				if (placed >= targetCount) break;
+
+				// Try to place a + block at this position
+				const blockPlaced = this.tryPlaceExtensionBlock(basePos, placements, extPositions);
+				if (blockPlaced) {
+					placed += 5; // Each block has 5 extensions
+				}
+			}
+		}
+
+		// If we still need more extensions, try a more flexible spiral search
+		if (placed < targetCount) {
+			for (let r = 3; r <= maxSearchRadius && placed < targetCount; r++) {
+				for (let dy = -r; dy <= r; dy++) {
+					for (let dx = -r; dx <= r; dx++) {
+						if (placed >= targetCount) break;
+						const basePos = { x: center.x + dx, y: center.y + dy };
+						const blockPlaced = this.tryPlaceExtensionBlock(basePos, placements, extPositions);
+						if (blockPlaced) placed += 5;
+					}
+					if (placed >= targetCount) break;
+				}
+			}
+		}
+	}
+
+	/** Try to place a single + shaped extension block at the given position
+	 -- Returns true if block was successfully placed */
+	tryPlaceExtensionBlock(basePos: Pos, placements: StructurePlacement[], extPositions: Pos[]): boolean {
+		// + pattern positions relative to base (center of +)
+		const pattern: Pos[] = [
+			{ x: 0, y: 0 },   // center
+			{ x: 1, y: 0 },   // right
+			{ x: -1, y: 0 },  // left
+			{ x: 0, y: 1 },   // down
+			{ x: 0, y: -1 }   // up
+		];
+
+		// Check if all 5 positions are valid and empty
+		const absolutePositions: Pos[] = [];
+		for (const offset of pattern) {
+			const pos = { x: basePos.x + offset.x, y: basePos.y + offset.y };
+
+			// Check bounds
+			if (!inBounds(pos.x, pos.y)) return false;
+
+			// Check if already used
+			if (this.tileUsage[pos.y][pos.x] !== 'empty') return false;
+
+			// Check terrain
+			const roomPos = new RoomPosition(pos.x, pos.y, this.room.name);
+			if (roomPos.lookFor(LOOK_TERRAIN)[0] === 'wall') return false;
+
+			// Check distance transform (prefer open areas)
+			if (this.dtGrid[pos.y][pos.x] < 1) return false;
+
+			absolutePositions.push(pos);
+		}
+
+		// All positions valid - place the extensions
+		for (const pos of absolutePositions) {
+			this.tileUsage[pos.y][pos.x] = 'extension';
+			placements.push({ structure: STRUCTURE_EXTENSION, pos });
+			extPositions.push(pos);
+		}
+
+		// Place roads around the perimeter of the block for access
+		this.placeRoadsAroundExtensionBlock(basePos, placements);
+
+		return true;
+	}
+
+	/** Place roads around an extension block for access */
+	placeRoadsAroundExtensionBlock(blockCenter: Pos, placements: StructurePlacement[]) {
+		// Place roads at the corners and edges around the + block
+		// This creates a perimeter for creeps to access all extensions
+		const perimeterOffsets: Pos[] = [
+			{ x: -1, y: -1 }, { x: 0, y: -2 }, { x: 1, y: -1 },  // top row
+			{ x: -2, y: 0 },                    { x: 2, y: 0 },   // middle (left and right)
+			{ x: -1, y: 1 },  { x: 0, y: 2 },  { x: 1, y: 1 }    // bottom row
+		];
+
+		for (const offset of perimeterOffsets) {
+			const pos = { x: blockCenter.x + offset.x, y: blockCenter.y + offset.y };
+
+			// Check bounds
+			if (!inBounds(pos.x, pos.y)) continue;
+
+			// Only place road if tile is empty (don't overwrite existing structures)
+			if (this.tileUsage[pos.y][pos.x] !== 'empty') continue;
+
+			// Check terrain
+			const roomPos = new RoomPosition(pos.x, pos.y, this.room.name);
+			if (roomPos.lookFor(LOOK_TERRAIN)[0] === 'wall') continue;
+
+			// Check distance transform
+			if (this.dtGrid[pos.y][pos.x] < 1) continue;
+
+			// Place road
+			this.tileUsage[pos.y][pos.x] = 'road';
+			placements.push({ structure: 'road', pos });
+		}
+	}
+
+	/** 10: Validate Structure Counts
+	 -- */
+	validateStructureCounts(placements: StructurePlacement[]): string[] {
+		const notes: string[] = [];
+
+		// Screeps maximum structure counts at RCL8
+		const maxCounts: Record<string, number> = {
+			[STRUCTURE_SPAWN]: 3,
+			[STRUCTURE_EXTENSION]: 60,
+			[STRUCTURE_TOWER]: 6,
+			[STRUCTURE_STORAGE]: 1,
+			[STRUCTURE_TERMINAL]: 1,
+			[STRUCTURE_LAB]: 10,
+			[STRUCTURE_LINK]: 6,
+			[STRUCTURE_FACTORY]: 1,
+			[STRUCTURE_NUKER]: 1,
+			[STRUCTURE_OBSERVER]: 1,
+			[STRUCTURE_EXTRACTOR]: 1,
+			'container': 5,
+			'road': Infinity,
+			[STRUCTURE_RAMPART]: Infinity
+		};
+
+		// Count each structure type
+		const counts: Record<string, number> = {};
+		for (const p of placements) {
+			const type = p.structure as string;
+			counts[type] = (counts[type] || 0) + 1;
+		}
+
+		// Validate against max counts
+		for (const [type, count] of Object.entries(counts)) {
+			const max = maxCounts[type];
+			if (max !== undefined && max !== Infinity && count > max) {
+				notes.push(`WARNING: ${type} count (${count}) exceeds maximum (${max})`);
+			} else if (max !== undefined && max !== Infinity) {
+				notes.push(`${type}: ${count}/${max}`);
+			}
+		}
+
+		return notes;
+	}
+
+	/** 11: Tower Placement Helper: Maximize Coverage (Greedy)
 	 -- */
 	pickTowerPositions(center: Pos, count: number): Pos[] {
 		// Greedy maximize min coverage: pick positions that decrease the maximum distance-to-any-base-edge
@@ -777,7 +1018,7 @@ export default class BasePlanner {
 		return chosen;
 	}
 
-	/** 11: Build RCL Schedule
+	/** 12: Build RCL Schedule
 	-- */
 	buildRclSchedule(placements: StructurePlacement[]): Record<number, StructurePlacement[]> {
 		// Determine typical RCL unlocks:
@@ -825,30 +1066,58 @@ export default class BasePlanner {
 			}
 		}
 
+		// Add all structures except extensions, towers, and spawns to their earliest RCL
 		for (const p of placements) {
+			// Skip extensions, towers, and spawns - they'll be distributed separately
+			if (p.structure === STRUCTURE_EXTENSION || p.structure === STRUCTURE_TOWER || p.structure === STRUCTURE_SPAWN) continue;
 			const r = earliestRclFor(p.structure as any);
 			schedule[r].push(p);
 		}
 
-		// Post-process: enforce counts per RCL (e.g., extensions counts increase)
-		// Count extensions and distribute them across RCLs progressively
+		// Distribute spawns across RCLs
+		// Screeps spawn progression: 1 at RCL1, 2 at RCL7, 3 at RCL8
+		const allSpawns = placements.filter(pl => pl.structure === STRUCTURE_SPAWN);
+		if (allSpawns.length > 0) schedule[1].push(allSpawns[0]); // First spawn at RCL1
+		if (allSpawns.length > 1) schedule[7].push(allSpawns[1]); // Second spawn at RCL7
+		if (allSpawns.length > 2) schedule[8].push(allSpawns[2]); // Third spawn at RCL8
+
+		// Distribute extensions across RCLs progressively
+		// Screeps extension progression: 0,5,10,20,30,40,50,60 at RCLs 1-8
 		const allExtensions = placements.filter(pl => pl.structure === STRUCTURE_EXTENSION);
-		const extPerRcl = {
+		const extPerRcl: Record<number, number> = {
 			1: 0,
-			2: 20,
-			3: 30,
-			4: 40,
-			5: 40,
-			6: 50,
-			7: 55,
-			8: allExtensions.length
+			2: 5,
+			3: 10,
+			4: 20,
+			5: 30,
+			6: 40,
+			7: 50,
+			8: 60
 		};
 		let assignedExt = 0;
 		for (let r = 2; r <= 8; r++) {
 			const target = Math.min(extPerRcl[r], allExtensions.length);
-			while (assignedExt < target) {
+			while (assignedExt < target && assignedExt < allExtensions.length) {
 				schedule[r].push(allExtensions[assignedExt]);
 				assignedExt++;
+			}
+		}
+
+		// Distribute towers across RCLs progressively
+		// Screeps tower progression: 1,2,3,6 at RCLs 3,5,7,8
+		const allTowers = placements.filter(pl => pl.structure === STRUCTURE_TOWER);
+		const towerPerRcl: Record<number, number> = {
+			3: 1,
+			5: 2,
+			7: 3,
+			8: 6
+		};
+		let assignedTowers = 0;
+		for (const r of [3, 5, 7, 8]) {
+			const target = Math.min(towerPerRcl[r], allTowers.length);
+			while (assignedTowers < target && assignedTowers < allTowers.length) {
+				schedule[r].push(allTowers[assignedTowers]);
+				assignedTowers++;
 			}
 		}
 
@@ -859,18 +1128,59 @@ export default class BasePlanner {
 		 Utilities: Pathfinding & Shuffle
 		 ------------------------- */
 	simplePath(from: Pos, to: Pos): Pos[] {
-		// very simple straight-line pathing as placeholder; replace with your pathfinder
-		const path: Pos[] = [];
-		let cx = from.x;
-		let cy = from.y;
-		const steps = Math.max(Math.abs(to.x - cx), Math.abs(to.y - cy));
-		for (let i = 0; i < steps; i++) {
-			if (cx < to.x) cx++;
-			else if (cx > to.x) cx--;
-			if (cy < to.y) cy++;
-			else if (cy > to.y) cy--;
-			if (inBounds(cx, cy)) path.push({ x: cx, y: cy });
+		// Use PathFinder to find a proper path avoiding walls and obstacles
+		const fromPos = new RoomPosition(from.x, from.y, this.room.name);
+		const toPos = new RoomPosition(to.x, to.y, this.room.name);
+
+		// Create a cost matrix that avoids walls and obstacles
+		const costMatrix = new PathFinder.CostMatrix();
+		for (let y = 0; y < ROOM_SIZE; y++) {
+			for (let x = 0; x < ROOM_SIZE; x++) {
+				const pos = new RoomPosition(x, y, this.room.name);
+				// Check terrain
+				const terrain = pos.lookFor(LOOK_TERRAIN)[0];
+				if (terrain === 'wall') {
+					costMatrix.set(x, y, 255); // Impassable
+				} else if (terrain === 'swamp') {
+					costMatrix.set(x, y, 5); // Prefer plains over swamps
+				}
+				// Avoid placing roads on existing structures (except roads)
+				const usage = this.tileUsage[y][x];
+				if (usage !== 'empty' && usage !== 'road') {
+					costMatrix.set(x, y, 255); // Don't path through structures
+				}
+			}
 		}
+
+		// Find path using PathFinder
+		const result = PathFinder.search(fromPos, { pos: toPos, range: 1 }, {
+			plainCost: 2,
+			swampCost: 10,
+			roomCallback: (roomName) => {
+				if (roomName === this.room.name) return costMatrix;
+				return false;
+			}
+		});
+
+		// Convert path to Pos[] format
+		const path: Pos[] = result.path.map(p => ({ x: p.x, y: p.y }));
+
+		// Fallback to straight line if PathFinder fails
+		if (result.incomplete || path.length === 0) {
+			const fallbackPath: Pos[] = [];
+			let cx = from.x;
+			let cy = from.y;
+			const steps = Math.max(Math.abs(to.x - cx), Math.abs(to.y - cy));
+			for (let i = 0; i < steps; i++) {
+				if (cx < to.x) cx++;
+				else if (cx > to.x) cx--;
+				if (cy < to.y) cy++;
+				else if (cy > to.y) cy--;
+				if (inBounds(cx, cy)) fallbackPath.push({ x: cx, y: cy });
+			}
+			return fallbackPath;
+		}
+
 		return path;
 	}
 

@@ -1043,12 +1043,33 @@ export default class RoomManager {
 
 			const pos = new RoomPosition(entry.pos.x, entry.pos.y, this.room.name);
 			const result = this.room.createConstructionSite(pos, entry.structure as BuildableStructureConstant);
+
 			if (result === OK) {
 				created++;
 				mem.buildQueue.index++;
 				mem.buildQueue.lastBuiltTick = now;
 				console.log(`[${this.room.name}] Queued ${entry.structure} @ ${entry.pos.x},${entry.pos.y} (RCL${rcl})`);
 				if (created >= MAX_PER_TICK) break;
+			} else {
+				// Handle errors from createConstructionSite
+				const errorMessages: Record<number, string> = {
+					[ERR_INVALID_TARGET]: 'Invalid target location',
+					[ERR_FULL]: 'Too many construction sites (max 100)',
+					[ERR_INVALID_ARGS]: 'Invalid structure type or position',
+					[ERR_RCL_NOT_ENOUGH]: 'Room Controller Level too low',
+					[ERR_NOT_OWNER]: 'Not the owner of this room'
+				};
+
+				const errorMsg = errorMessages[result] || `Unknown error (${result})`;
+
+				// Log error but skip this placement and continue
+				console.log(`[${this.room.name}] Failed to place ${entry.structure} @ ${entry.pos.x},${entry.pos.y}: ${errorMsg}`);
+
+				// Skip this item and move to next
+				mem.buildQueue.index++;
+
+				// Stop if we hit the construction site limit
+				if (result === ERR_FULL) break;
 			}
 		}
 
