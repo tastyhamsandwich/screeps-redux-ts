@@ -84,6 +84,9 @@ declare global {
 			checksum: string;
 			data: PlanResult;
 		};
+		visuals: {
+			[key: string]: any;
+		}
 	}
 
 	// INTERFACE: Creep Memory Extension
@@ -334,7 +337,7 @@ let tickCount = 0;
 
 // When compiling TS to JS and bundling with rollup, the line numbers and file names in error messages change
 // This utility uses source maps to get the line numbers and file names of the original, TS source code
-export const loop = () => {
+module.exports.loop = function() {
 
 	if (!Memory.globalSettings) global.initGlobal();
 
@@ -353,6 +356,7 @@ export const loop = () => {
 		if (!(name in Game.creeps))	delete Memory.creeps[name];
 	}
 
+	console.log(`pre-creep ai logic exec`);
 	// Execute specific role-based creep script for every creep, based on role assigned in CreepMemory
 	for (const name in Game.creeps) {
 		const creep = Game.creeps[name];
@@ -457,10 +461,11 @@ export const loop = () => {
 
 		//* From here, only rooms where we own the controller have this code ran
 		if (room.controller && room.controller.my) {
-
+			console.log(`Global tick!`, room);
 			// Initialize Room Manager instances for controlled rooms
 			if (!global.roomManagers) global.roomManagers = {};
 			if (!global.roomManagers[roomName]) global.roomManagers[roomName] = new RoomManager(room);
+
 			const RoomManagerInstance = global.roomManagers[roomName];
 			RoomManagerInstance.run();
 

@@ -119,6 +119,16 @@ export default class BasePlanner {
 		this.dtGrid = Array.from({ length: ROOM_SIZE }, () => Array(ROOM_SIZE).fill(0));
 		this.floodGrid = Array.from({ length: ROOM_SIZE }, () => Array(ROOM_SIZE).fill(Infinity));
 		this.tileUsage = Array.from({ length: ROOM_SIZE }, () => Array(ROOM_SIZE).fill('empty' as TileUsage));
+
+		// Mark sources, minerals, and controller as non-buildable
+		for (const source of this.sources) {
+			this.tileUsage[source.y][source.x] = 'wall'; // mark as unbuildable
+		}
+		if (this.mineralPos) {
+			this.tileUsage[this.mineralPos.y][this.mineralPos.x] = 'mineral';
+		}
+		// Mark controller position as blocked
+		this.tileUsage[this.controllerPos.y][this.controllerPos.x] = 'wall';
 	}
 
 	/** Main Entry Point:
@@ -256,8 +266,17 @@ export default class BasePlanner {
 				const x = originX + rx;
 				const y = originY + ry;
 				if (!inBounds(x, y)) continue;
+
+				// Skip if this tile is already occupied (e.g., by a source or mineral)
+				if (this.tileUsage[y][x] !== 'empty') continue;
+
 				const cell = pattern[ry][rx];
 				if (!cell) continue;
+
+				// Verify the tile is walkable
+				const pos = new RoomPosition(x, y, this.room.name);
+				if (pos.lookFor(LOOK_TERRAIN)[0] === 'wall') continue;
+
 				if (cell === 'extension') {
 					this.tileUsage[y][x] = 'extension';
 					placements.push({ structure: STRUCTURE_EXTENSION, pos: { x, y } });
@@ -312,11 +331,30 @@ export default class BasePlanner {
 		}
 		// choose the candidate nearest to core center
 		if (candidates.length === 0) {
-			// fall back to nearest tile to the controller which is walkable
-			const fallback = { x: Math.max(0, Math.min(ROOM_SIZE - 1, ctr.x - 1)), y: Math.max(0, Math.min(ROOM_SIZE - 1, ctr.y)) };
-			// mark center tile as upgrade area center
-			this.tileUsage[fallback.y][fallback.x] = 'controllerUpgradeArea';
-			placements.push({ structure: 'container', pos: fallback });
+			// Fallback: find any walkable tile within range 3 of controller for container
+			let fallbackContainer: Pos | null = null;
+			for (let dy = -3; dy <= 3; dy++) {
+				for (let dx = -3; dx <= 3; dx++) {
+					const x = ctr.x + dx;
+					const y = ctr.y + dy;
+					if (!inBounds(x, y)) continue;
+					const range = Math.max(Math.abs(dx), Math.abs(dy));
+					if (range > 3 || range < 1) continue; // Must be within range 3 but not on controller
+					if (this.tileUsage[y][x] !== 'empty') continue;
+					if (this.dtGrid[y][x] < 1) continue; // Must be walkable
+					// Verify it's actually walkable terrain
+					const pos = new RoomPosition(x, y, this.room.name);
+					if (pos.lookFor(LOOK_TERRAIN)[0] === 'wall') continue;
+					fallbackContainer = { x, y };
+					break;
+				}
+				if (fallbackContainer) break;
+			}
+
+			if (fallbackContainer) {
+				this.tileUsage[fallbackContainer.y][fallbackContainer.x] = 'controllerUpgradeArea';
+				placements.push({ structure: 'container', pos: fallbackContainer });
+			}
 			return;
 		}
 		candidates.sort((a, b) => manhattan(a, center) - manhattan(b, center));
@@ -334,7 +372,22 @@ export default class BasePlanner {
 		const centerTile = { x: chosen.x + 1, y: chosen.y + 1 };
 		placements.push({ structure: 'container', pos: centerTile }); // early game container
 		// link should be placed later when available; schedule it at higher RCL
-		placements.push({ structure: STRUCTURE_LINK, pos: { x: centerTile.x + 1, y: centerTile.y } });
+		// Find a valid tile for the link adjacent to the container
+		const linkNeighbors = [
+			{ x: centerTile.x + 1, y: centerTile.y },
+			{ x: centerTile.x - 1, y: centerTile.y },
+			{ x: centerTile.x, y: centerTile.y + 1 },
+			{ x: centerTile.x, y: centerTile.y - 1 }
+		];
+		for (const linkPos of linkNeighbors) {
+			if (!inBounds(linkPos.x, linkPos.y)) continue;
+			if (this.tileUsage[linkPos.y][linkPos.x] === 'controllerUpgradeArea' || this.tileUsage[linkPos.y][linkPos.x] === 'empty') {
+				if (this.dtGrid[linkPos.y][linkPos.x] >= 1) {
+					placements.push({ structure: STRUCTURE_LINK, pos: linkPos });
+					break;
+				}
+			}
+		}
 	}
 
 	/** 5: Floodfill for Accessibility
@@ -437,7 +490,9 @@ export default class BasePlanner {
 		// Place extractor + container at mineral if present
 		if (this.mineralPos) {
 			const m = this.mineralPos;
-			// find nearest open tile adjacent to mineral for extractor/container
+			// Place extractor on the mineral itself
+			placements.push({ structure: STRUCTURE_EXTRACTOR, pos: { x: m.x, y: m.y } });
+			// find nearest open tile adjacent to mineral for container
 			const neighbors = [
 				{ x: m.x + 1, y: m.y },
 				{ x: m.x - 1, y: m.y },
@@ -446,11 +501,12 @@ export default class BasePlanner {
 			];
 			for (const n of neighbors) {
 				if (!inBounds(n.x, n.y)) continue;
+				if (this.tileUsage[n.y][n.x] !== 'empty') continue; // Skip if already used
 				const posObj = new RoomPosition(n.x, n.y, this.room.name);
-				if (posObj.lookFor('terrain')[0] === 'wall') continue;
-				this.tileUsage[n.y][n.x] = 'extractor';
+				if (posObj.lookFor(LOOK_TERRAIN)[0] === 'wall') continue;
+				if (this.dtGrid[n.y][n.x] < 1) continue; // Must be walkable
+				this.tileUsage[n.y][n.x] = 'container';
 				placements.push({ structure: STRUCTURE_CONTAINER, pos: n }); // container
-				placements.push({ structure: STRUCTURE_EXTRACTOR, pos: { x: m.x, y: m.y } });
 				break;
 			}
 		}
@@ -549,23 +605,32 @@ export default class BasePlanner {
 			]);
 			for (const n of neighbors) {
 				if (!inBounds(n.x, n.y)) continue;
+				// Skip if this tile is already used
+				if (this.tileUsage[n.y][n.x] !== 'empty') continue;
 				const posObj = new RoomPosition(n.x, n.y, this.room.name);
-				if (posObj.lookFor('terrain')[0] === 'wall') continue;
-				// mark container and link
-				if (this.tileUsage[n.y][n.x] === 'empty') this.tileUsage[n.y][n.x] = 'container';
+				if (posObj.lookFor(LOOK_TERRAIN)[0] === 'wall') continue;
+				// Ensure minimum distance from walls (dt >= 1)
+				if (this.dtGrid[n.y][n.x] < 1) continue;
+				// mark container and place it
+				this.tileUsage[n.y][n.x] = 'container';
 				placements.push({ structure: STRUCTURE_CONTAINER, pos: n });
-				// link near container but not on same tile ideally; try to put link 1 tile outward towards base center
-				// we'll attempt to place a link in an adjacent tile in direction of controller
-				const dirX = Math.sign(this.controllerPos.x - n.x);
-				const dirY = Math.sign(this.controllerPos.y - n.y);
+
+				// link near container but not on same tile; try to put link 1 tile outward towards controller
+				const dirX = Math.sign(this.controllerPos.x - n.x) || 1;
+				const dirY = Math.sign(this.controllerPos.y - n.y) || 1;
 				const linkPos = { x: n.x + dirX, y: n.y + dirY };
-				if (inBounds(linkPos.x, linkPos.y) && this.tileUsage[linkPos.y][linkPos.x] === 'empty') {
+
+				if (inBounds(linkPos.x, linkPos.y) &&
+						this.tileUsage[linkPos.y][linkPos.x] === 'empty' &&
+						this.dtGrid[linkPos.y][linkPos.x] >= 1) {
 					this.tileUsage[linkPos.y][linkPos.x] = 'link';
 					placements.push({ structure: STRUCTURE_LINK, pos: linkPos });
 				} else {
-					// try other neighbors
+					// try other neighbors (excluding the container position and the source)
 					for (const alt of neighbors) {
-						if (inBounds(alt.x, alt.y) && this.tileUsage[alt.y][alt.x] === 'empty') {
+						if (!inBounds(alt.x, alt.y)) continue;
+						if (posEq(alt, n)) continue; // Skip container position
+						if (this.tileUsage[alt.y][alt.x] === 'empty' && this.dtGrid[alt.y][alt.x] >= 1) {
 							this.tileUsage[alt.y][alt.x] = 'link';
 							placements.push({ structure: STRUCTURE_LINK, pos: alt });
 							break;
@@ -576,18 +641,53 @@ export default class BasePlanner {
 			}
 		}
 
-		// Place roads from storage/terminal to each source & to mineral
+		// Place roads from storage/terminal to source CONTAINERS (not sources themselves) & to mineral container
 		const storage = placements.find(p => p.structure === STRUCTURE_STORAGE);
 		const storagePos = storage ? storage.pos : this.controllerPos;
-		const targets = [...this.sources];
-		if (this.mineralPos) targets.push(this.mineralPos);
+
+		// Get container positions instead of source positions
+		const sourceContainers = placements.filter(p => p.structure === STRUCTURE_CONTAINER);
+		const targets: Pos[] = sourceContainers.map(c => c.pos);
+
+		if (this.mineralPos) {
+			// Find mineral container if it exists
+			const mineralContainer = placements.find(p =>
+				p.structure === STRUCTURE_CONTAINER &&
+				manhattan(p.pos, this.mineralPos!) <= 2
+			);
+			if (mineralContainer) targets.push(mineralContainer.pos);
+		}
+
 		for (const t of targets) {
 			const path = this.simplePath(storagePos, t);
-			for (const step of path) {
-				if (this.tileUsage[step.y][step.x] === 'empty') {
-					this.tileUsage[step.y][step.x] = 'road';
-					placements.push({ structure: 'road', pos: step });
+			// Don't place road on the first (storage) or last (container) position
+			for (let i = 1; i < path.length - 1; i++) {
+				const step = path[i];
+				// Only place roads on empty tiles
+				if (this.tileUsage[step.y][step.x] !== 'empty') continue;
+
+				// Verify we're not placing on walls
+				const posObj = new RoomPosition(step.x, step.y, this.room.name);
+				if (posObj.lookFor(LOOK_TERRAIN)[0] === 'wall') continue;
+
+				// Ensure tile is walkable (dt >= 1)
+				if (this.dtGrid[step.y][step.x] < 1) continue;
+
+				// Ensure we're not on a source or mineral
+				let isSourceOrMineral = false;
+				for (const src of this.sources) {
+					if (posEq(step, src)) {
+						isSourceOrMineral = true;
+						break;
+					}
 				}
+				if (this.mineralPos && posEq(step, this.mineralPos)) {
+					isSourceOrMineral = true;
+				}
+				if (isSourceOrMineral) continue;
+
+				this.tileUsage[step.y][step.x] = 'road';
+				placements.push({ structure: 'road', pos: step });
 			}
 		}
 	}
@@ -695,13 +795,13 @@ export default class BasePlanner {
 				case STRUCTURE_SPAWN:
 					return 1;
 				case 'road':
-					return 1;
+					return 3; // Roads are available at RCL3
 				case 'container':
-					return 1;
+					return 2; // Containers available at RCL2
 				case STRUCTURE_EXTENSION:
 					return 2;
 				case STRUCTURE_TOWER:
-					return 5;
+					return 3; // First tower at RCL3
 				case STRUCTURE_STORAGE:
 					return 4;
 				case STRUCTURE_LINK:
@@ -709,7 +809,7 @@ export default class BasePlanner {
 				case STRUCTURE_TERMINAL:
 					return 6;
 				case STRUCTURE_LAB:
-					return 7;
+					return 6; // Labs at RCL6
 				case STRUCTURE_FACTORY:
 					return 7;
 				case STRUCTURE_NUKER:
@@ -717,7 +817,7 @@ export default class BasePlanner {
 				case STRUCTURE_OBSERVER:
 					return 8;
 				case STRUCTURE_RAMPART:
-					return 6;
+					return 2; // Ramparts available at RCL2
 				case STRUCTURE_EXTRACTOR:
 					return 6;
 				default:

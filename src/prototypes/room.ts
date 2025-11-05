@@ -33,27 +33,10 @@ declare global {
 		updateSourceAssignment(roomToUpdate: string, updateObject: SourceAssignmentUpdate);
 		registerLogisticalPairs(): void;
 		setQuota(roleTarget: CreepRole, newTarget: number);
-		counter: OutpostSourceCounter;
+		toggleBasePlannerVisuals(): void;
 	}
 
-	var __outpostCounters: Map<string, OutpostSourceCounter>;
 }
-
-if (!global.__outpostCounters)
-	global.__outpostCounters = new Map();
-
-// Creates a 'counter' property for the Room object used in deprecated spawning logic.
-Object.defineProperty(Room.prototype, "counter", {
-	get: function (this: Room): OutpostSourceCounter {
-		if (!global.__outpostCounters.has(this.name)) {
-			const counter = new OutpostSourceCounter(this, this.memory.outposts.counter);
-			global.__outpostCounters.set(this.name, counter);
-		}
-		return global.__outpostCounters.get(this.name)!;
-	},
-	enumerable: false,
-	configurable: false,
-});
 
 /** Gets all walkable positions around a source for optimal harvesting placement.
  * @param sourceID - The ID of the source to check positions for
@@ -507,8 +490,17 @@ Room.prototype.initRoom = function () {
 	if (!this.memory.stats) this.memory.stats = { energyHarvested: 0, controlPoints: 0, constructionPoints: 0, creepsSpawned: 0, creepPartsSpawned: 0,
 		mineralsHarvested: mineralsHarvested, controllerLevelReached: 0, npcInvadersKilled: 0, hostilePlayerCreepsKilled: 0, labStats: labStats };
 	if (!this.memory.flags) this.memory.flags = { advancedSpawnLogic: false, };
+	if (!this.memory.visuals) this.memory.visuals = {};
 
 	this.cacheObjects();
+}
+
+/** Disables all BasePlanner room visuals */
+Room.prototype.toggleBasePlannerVisuals = function (): void {
+	this.memory.visuals.visDistTrans = !this.memory.visuals.visDistTrans;
+	this.memory.visuals.visFloodFill = !this.memory.visuals.visFloodFill;
+	this.memory.visuals.visBasePlan = !this.memory.visuals.visBasePlan;
+	log(`Base Planner visuals are now set to '${this.memory.visuals.visDistTrans}'`);
 }
 
 /** Initializes an outpost room with necessary memory structures.

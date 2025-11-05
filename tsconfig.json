@@ -1,8 +1,8 @@
 {
 	"compilerOptions": {
 		"module": "esnext",
-		"lib": ["es2018"],
-		"target": "es2018",
+		"lib": ["es2019"],
+		"target": "es2019",
 		"moduleResolution": "Node",
 		"outDir": "C:/Users/danvi/AppData/Local/Screeps/scripts/screeps_newbieland_net___21025/default",
 		"baseUrl": "./src/",

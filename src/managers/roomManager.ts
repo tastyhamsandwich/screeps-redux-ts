@@ -67,7 +67,7 @@ export default class RoomManager {
 		this.resources = this.scanResources();
 		this.stats = this.gatherStats();
 		this.spawnManager = new SpawnManager(room);
-		this.legacySpawnManager = this.legacySpawnManager;
+		this.legacySpawnManager = legacySpawnManager;
 		this.basePlanner = new BasePlanner(room);
 
 		// Initialize room memory if needed
@@ -81,7 +81,7 @@ export default class RoomManager {
 
 		const roomMem = this.room.memory;
 		const rmData = roomMem.data;
-
+		console.log(`[${this.room.name}]: Room Manager tick exec start.`);
 		// Update resources and stats
 		this.resources = this.scanResources();
 		this.stats = this.gatherStats();
@@ -105,6 +105,12 @@ export default class RoomManager {
 		// Initialize if needed
 		if (!this.basePlan) this.basePlan = null;
 		if (!this.basePlanner) this.basePlanner = null;
+		if (!rmData.basePlanGenerated) {
+			this.room.memory.visuals.visDistTrans ??= true;
+			this.room.memory.visuals.visFloodFill ??= true;
+			this.room.memory.visuals.visBasePlan ??= true;
+			rmData.basePlanGenerated = true;
+		}
 
 		let regenerate = false;
 
@@ -131,8 +137,11 @@ export default class RoomManager {
 		// Process the plan if available
 		if (this.basePlan) this.handleBasePlan(this.basePlan);
 
-		// Assess creep needs and submit spawn requests
-		this.assessCreepNeeds();
+		// Assess creep needs and submit spawn requests if using advanced spawn manager
+		if (rmData.advancedSpawnLogic)
+			this.assessCreepNeeds();
+		else // Otherwise executre Legacy spawn manager logic
+			this.legacySpawnManager.run(this.room);
 
 		// Assign tasks to worker creeps
 		this.assignCreepTasks();
@@ -460,12 +469,12 @@ export default class RoomManager {
 				}
 			}
 			// Request Remote Harvesters
-			else if (rMem.outposts && totalRemoteHarvesters < rMem.outposts.numSources) {
+			/*else if (rMem.outposts && totalRemoteHarvesters < rMem.outposts.numSources) {
 				const body = determineBodyParts('harvester', cap, this.room);
 				if (body) {
-					const returnObj = this.room.counter?.next();
-					const sourceID = returnObj?.source;
-					const containerID = returnObj?.container;
+					//const returnObj = this.room.counter?.next();
+					//const sourceID = returnObj?.source;
+					//const containerID = returnObj?.container;
 
 					this.spawnManager.submitRequest({
 						role: 'remoteharvester',
@@ -486,7 +495,7 @@ export default class RoomManager {
 						urgent: false
 					});
 				}
-			}
+			}*/
 		}
 	}
 
@@ -1129,4 +1138,172 @@ export default class RoomManager {
 			{ align: 'left', color: '#ccc', font: 0.8 }
 		);
 	}
+
+	private drawPlannerVisuals(): void {
+		const vis = new RoomVisual(this.room.name);
+
+		if (this.room.memory.visuals.visDistTrans && this.basePlanner?.dtGrid) {
+			this.drawDistanceTransform(vis, this.basePlanner.dtGrid);
+		}
+
+		if (this.room.memory.visuals.visFloodFill && this.basePlanner?.floodGrid) {
+			this.drawFloodFill(vis, this.basePlanner.floodGrid);
+		}
+
+		if (this.room.memory.visuals.visBasePlan && this.basePlan) {
+			this.drawBaseLayout(vis, this.basePlan);
+		}
+	}
+
+	private drawDistanceTransform(vis: RoomVisual, dist: number[][]): void {
+		const max = Math.max(...dist.flat());
+		for (let x = 0; x < 50; x++) {
+			for (let y = 0; y < 50; y++) {
+				const val = dist[x][y];
+				if (val <= 0) continue;
+
+				const hue = Math.floor((val / max) * 240); // blue → green gradient
+				vis.rect(x - 0.5, y - 0.5, 1, 1, {
+					fill: `hsl(${hue}, 80%, 40%)`,
+					opacity: 0.4,
+					stroke: 'none'
+				});
+			}
+		}
+
+		vis.text('Distance Transform', 25, 1, { align: 'center', color: '#00f', font: 0.8 });
+	}
+
+	private drawFloodFill(vis: RoomVisual, flood: number[][]): void {
+		const max = Math.max(...flood.flat());
+		for (let x = 0; x < 50; x++) {
+			for (let y = 0; y < 50; y++) {
+				const val = flood[x][y];
+				if (val <= 0) continue;
+
+				const hue = Math.floor((1 - val / max) * 240); // red→green gradient
+				vis.rect(x - 0.5, y - 0.5, 1, 1, {
+					fill: `hsl(${hue}, 80%, 40%)`,
+					opacity: 0.35,
+					stroke: 'none'
+				});
+			}
+		}
+
+		vis.text('Flood Fill Map', 25, 2, { align: 'center', color: '#0f0', font: 0.8 });
+	}
+
+	private drawBaseLayout(vis: RoomVisual, plan: PlanResult): void {
+		const rcl = this.room.controller?.level ?? 8;
+		const placements = Object.values(plan.rclSchedule).flat();
+
+		for (const entry of placements) {
+			const { x, y } = entry.pos;
+			const sType = entry.structure as BuildableStructureConstant;
+
+			switch (sType) {
+				case STRUCTURE_ROAD:
+					vis.line(x, y, x + 0.001, y + 0.001, { color: '#aaa', width: 0.1 });
+					break;
+
+				case STRUCTURE_SPAWN:
+					this.drawShape(vis, x, y, 'circle', '#a0f', 'S');
+					break;
+
+				case STRUCTURE_EXTENSION:
+					this.drawShape(vis, x, y, 'circle', '#ff0', 'E', 0.35);
+					break;
+
+				case STRUCTURE_TOWER:
+					this.drawShape(vis, x, y, 'circle', '#f00', 'T');
+					break;
+
+				case STRUCTURE_LINK:
+					this.drawShape(vis, x, y, 'diamond', '#7f7', 'L');
+					break;
+
+				case STRUCTURE_STORAGE:
+					this.drawShape(vis, x, y, 'rect', '#f80', 'S', 0.55, 0.35);
+					break;
+
+				case STRUCTURE_TERMINAL:
+					this.drawShape(vis, x, y, 'triangle', '#0ff', 'T', 0.6);
+					break;
+
+				case STRUCTURE_LAB:
+					this.drawShape(vis, x, y, 'circle', '#0f0', 'L');
+					break;
+
+				case STRUCTURE_FACTORY:
+					this.drawShape(vis, x, y, 'hex', '#fff', 'F', 0.5);
+					break;
+
+				case STRUCTURE_NUKER:
+					this.drawShape(vis, x, y, 'oct', '#f0f', 'N', 0.6);
+					break;
+
+				case STRUCTURE_OBSERVER:
+					this.drawShape(vis, x, y, 'triangle', '#88f', 'O', 0.4);
+					break;
+
+				case STRUCTURE_RAMPART:
+					vis.rect(x - 0.5, y - 0.5, 1, 1, {
+						fill: '#00ff0080',
+						stroke: '#0f0',
+						opacity: 0.3
+					});
+					break;
+
+				default:
+					vis.circle(x, y, { radius: 0.25, fill: '#999', stroke: '#555' });
+					break;
+			}
+		}
+
+		vis.text('Base Layout', 25, 3, { align: 'center', color: '#fff', font: 0.8 });
+	}
+
+	private drawShape(
+		vis: RoomVisual,
+		x: number,
+		y: number,
+		shape: 'circle' | 'rect' | 'triangle' | 'diamond' | 'hex' | 'oct',
+		color: string,
+		label: string,
+		size: number = 0.45,
+		height?: number
+	): void {
+		const opts = { stroke: color, fill: `${color}40`, opacity: 0.8 };
+		switch (shape) {
+			case 'circle':
+				vis.circle(x, y, { radius: size, ...opts });
+				break;
+			case 'rect':
+				vis.rect(x - size, y - (height ?? size), size * 2, (height ?? size) * 2, opts);
+				break;
+			case 'triangle':
+				vis.poly([[x, y - size], [x - size, y + size], [x + size, y + size]], opts);
+				break;
+			case 'diamond':
+				vis.poly([[x, y - size], [x - size, y], [x, y + size], [x + size, y]], opts);
+				break;
+			case 'hex':
+				vis.poly(this.makePolygon(x, y, 6, size), opts);
+				break;
+			case 'oct':
+				vis.poly(this.makePolygon(x, y, 8, size), opts);
+				break;
+		}
+		vis.text(label, x, y + 0.05, { color: '#000', align: 'center', font: 0.5 });
+	}
+
+	private makePolygon(cx: number, cy: number, sides: number, radius: number): [number, number][] {
+		const pts: [number, number][] = [];
+		for (let i = 0; i < sides; i++) {
+			const a = (2 * Math.PI * i) / sides;
+			pts.push([cx + radius * Math.cos(a), cy + radius * Math.sin(a)]);
+		}
+		return pts;
+	}
+
 }
