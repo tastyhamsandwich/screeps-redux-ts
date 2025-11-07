@@ -196,6 +196,7 @@ declare global {
 		repairSettings: RepairSettings;
 		visualSettings: VisualSettings;
 		flags: RoomFlags;
+		[key: string]: any;
 	}
 
 	interface OutpostData {

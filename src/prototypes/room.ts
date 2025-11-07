@@ -446,14 +446,14 @@ Room.prototype.initRoom = function () {
 		catalyzedZynthiumAlkalide: 0, catalyzedGhodiumAcid: 0, catalyzedGhodiumAlkalide: 0 };
 	const labStats: LabStats = { compoundsMade: compoundStats, creepsBoosted: 0, boostsUsed: compoundStats, energySpentBoosting: 0 };
 
-	if (!this.memory.containers) this.memory.containers = { sourceOne: '', sourceTwo: '', controller: '', mineral: ''};
-	if (!this.memory.data) this.memory.data = { controllerLevel: 0, numCSites: 0, sourceData: { source: [], container: [], lastAssigned: 0 } };
-	if (!this.memory.settings) this.memory.settings = { visualSettings: visualSettings, repairSettings: repairSettings,	flags: {} };
-	if (!this.memory.outposts) this.memory.outposts = { list: {}, array: [], reserverLastAssigned: 0, numSources: 0, numHarvesters: 0, counter: 0, guardCounter: 0 };
-	if (!this.memory.stats) this.memory.stats = { energyHarvested: 0, controlPoints: 0, constructionPoints: 0, creepsSpawned: 0, creepPartsSpawned: 0,
-		mineralsHarvested: mineralsHarvested, controllerLevelReached: 0, npcInvadersKilled: 0, hostilePlayerCreepsKilled: 0, labStats: labStats };
-	if (!this.memory.flags) this.memory.flags = { advancedSpawnLogic: false, };
-	if (!this.memory.visuals) this.memory.visuals = {};
+	if (!this.memory.containers) 	this.memory.containers = { sourceOne: '', sourceTwo: '', controller: '', mineral: ''};
+	if (!this.memory.data) 				this.memory.data = { controllerLevel: 0, numCSites: 0, sourceData: { source: [], container: [], lastAssigned: 0 } };
+	if (!this.memory.settings) 		this.memory.settings = { visualSettings: visualSettings, repairSettings: repairSettings,	flags: {}, basePlanner: {} };
+	if (!this.memory.outposts) 		this.memory.outposts = { list: {}, array: [], reserverLastAssigned: 0, numSources: 0, numHarvesters: 0, counter: 0, guardCounter: 0 };
+	if (!this.memory.stats) 			this.memory.stats = { energyHarvested: 0, controlPoints: 0, constructionPoints: 0, creepsSpawned: 0, creepPartsSpawned: 0,
+				mineralsHarvested: mineralsHarvested, controllerLevelReached: 0, npcInvadersKilled: 0, hostilePlayerCreepsKilled: 0, labStats: labStats };
+	if (!this.memory.flags) 			this.memory.flags = { advancedSpawnLogic: false, };
+	if (!this.memory.visuals) 		this.memory.visuals = {};
 
 	this.cacheObjects();
 }
@@ -462,7 +462,7 @@ Room.prototype.initRoom = function () {
 Room.prototype.toggleBasePlannerVisuals = function (): void {
 	this.memory.visuals.visDistTrans = !this.memory.visuals.visDistTrans;
 	this.memory.visuals.visFloodFill = !this.memory.visuals.visFloodFill;
-	this.memory.visuals.visBasePlan = !this.memory.visuals.visBasePlan;
+	this.memory.visuals.visBasePlan  = !this.memory.visuals.visBasePlan;
 	log(`Base Planner visuals are now set to '${this.memory.visuals.visDistTrans}'`);
 }
 
@@ -760,39 +760,3 @@ Room.prototype.setQuota = function (roleTarget: CreepRole, newTarget: number) {
 	log('Set role \'' + pluralRoleTarget + '\' quota to ' + newTarget + ' (was ' + oldTarget + ').', this);
 	return;
 }
-
-/* POTENTIALLY DEPRECATED
-/** Adds a new spawn order to the room's spawn queue
- * @deprecated This function may be deprecated in future versions
- * @param role - The role of the creep to spawn (or a SpawnOrder object for legacy support)
- * @param critical - Whether this spawn order is critical (default: false)
- * @param maxEnergy - Maximum energy to use for spawning (default: room's energy capacity)
- * @param name - Custom name for the creep (optional)
- */
-/*
-Room.prototype.roomSpawnQueue = function(role: any, critical: boolean = false, maxEnergy?: number, name?: string): void {
-
-	const room: Room = this;
-
-	if (maxEnergy === undefined)
-		maxEnergy = this.energyCapacityAvailable;
-
-	const colonyNum = this.memory.data.colonyNumber;
-
-	const spawnOrder = {
-		role: role,
-		body: [], // body can be determined later by the spawn using determineBodyParts
-		memory: {
-			role: role,
-			home: this.name,
-			room: this.name,
-			working: false
-		} as CreepMemory,
-		name: name || `${role}_${Game.time}_${Math.floor(Math.random() * 1000)}`,
-		critical: critical
-	}
-
-	if (!this.roomSpawnQueue) this.roomSpawnQueue = [];
-	this.roomSpawnQueue.push(spawnOrder as SpawnOrder);
-}
-*/

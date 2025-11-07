@@ -29,7 +29,9 @@ export const creepRoleCounts: { [key: string]: any } = {
 	remoteharvester: 1,
 }
 let tickCount = 0;
-Memory.globalData.numColonies ??= 0;
+if (!Memory.globalData) Memory.globalData = {};
+if (!Memory.globalData.numColonies)
+	Memory.globalData.numColonies = 0;
 
 module.exports.loop = function() {
 

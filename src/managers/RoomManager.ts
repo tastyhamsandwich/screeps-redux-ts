@@ -36,9 +36,12 @@ export default class RoomManager {
 		const roomMem = this.room.memory;
 		const rmData = roomMem.data;
 
-		// Update resources and stats
-		this.resources = this.scanResources();
-		this.stats = this.gatherStats();
+		// Update resources and stats (throttled to every 10 ticks for performance)
+		if (!rmData.lastResourceScan || Game.time - rmData.lastResourceScan >= 10) {
+			this.resources = this.scanResources();
+			this.stats = this.gatherStats();
+			rmData.lastResourceScan = Game.time;
+		}
 
 		if (!rmData.firstTimeInit) {
 			rmData.advSpawnSystem = false;
@@ -566,6 +569,7 @@ export default class RoomManager {
 		if (!controller) return;
 
 		const data = (this.room.memory.data ||= {});
+		const debugMode = this.room.memory.settings?.basePlanning?.debug;
 
 		// Skip if we already have a valid record
 		if (data.controllerContainer) {
@@ -599,7 +603,7 @@ export default class RoomManager {
 			const result = this.room.createConstructionSite(pos, STRUCTURE_CONTAINER);
 			if (result === OK) {
 				data.controllerContainer = this.room.lookForAt(LOOK_CONSTRUCTION_SITES, pos.x, pos.y)[0]?.id;
-				console.log(`${this.room.name}: Planned controller container at ${pos.x},${pos.y}`);
+				if (debugMode) console.log(`${this.room.name}: Planned controller container at ${pos.x},${pos.y}`);
 			}
 		}
 	}
@@ -610,6 +614,7 @@ export default class RoomManager {
 		if (!mineral || (this.room.controller?.level ?? 0) < 6) return;
 
 		const data = (this.room.memory.data ||= {});
+		const debugMode = this.room.memory.settings?.basePlanning?.debug;
 
 		if (data.mineralContainer?.container) {
 			const obj = Game.getObjectById(data.mineralContainer.container);
@@ -640,7 +645,7 @@ export default class RoomManager {
 			const result = this.room.createConstructionSite(pos, STRUCTURE_CONTAINER);
 			if (result === OK) {
 				data.mineralContainer = { mineral: mineral.id, container: this.room.lookForAt(LOOK_CONSTRUCTION_SITES, pos.x, pos.y)[0]?.id };
-				console.log(`${this.room.name}: Planned mineral container at ${pos.x},${pos.y}`);
+				if (debugMode) console.log(`${this.room.name}: Planned mineral container at ${pos.x},${pos.y}`);
 			}
 		}
 	}
@@ -649,6 +654,7 @@ export default class RoomManager {
 	private planExtensions(): void {
 		if (!this.room.controller?.my) return;
 
+		const debugMode = this.room.memory.settings?.basePlanning?.debug;
 		const spawns = this.resources.spawns;
 		if (spawns.length === 0) return;
 
@@ -674,7 +680,7 @@ export default class RoomManager {
 			if (this.isBuildableTile(pos)) {
 				const result = this.room.createConstructionSite(pos, STRUCTURE_EXTENSION);
 				if (result === OK) {
-					console.log(`${this.room.name}: Planned extension at ${pos.x},${pos.y}`);
+					if (debugMode) console.log(`${this.room.name}: Planned extension at ${pos.x},${pos.y}`);
 					break; // place one per tick for safety
 				}
 			}
@@ -789,6 +795,7 @@ export default class RoomManager {
 	private planSourceContainers(): void {
 		if (!this.room.controller?.my) return; // only plan in owned rooms
 
+		const debugMode = this.room.memory.settings?.basePlanning?.debug;
 		const data = (this.room.memory.data ||= {});
 		const spawn = this.resources.spawns[0];
 		if (!spawn) return; // Need a spawn to calculate optimal positions
@@ -831,7 +838,7 @@ export default class RoomManager {
 				if (bestSpot) {
 					const result = this.room.createConstructionSite(bestSpot, STRUCTURE_CONTAINER);
 					if (result === OK) {
-						console.log(`${this.room.name}: Planned container at ${bestSpot.x},${bestSpot.y} for source ${source.id} (optimized for spawn distance)`);
+						if (debugMode) console.log(`${this.room.name}: Planned container at ${bestSpot.x},${bestSpot.y} for source ${source.id} (optimized for spawn distance)`);
 					}
 				}
 			}
@@ -950,6 +957,7 @@ export default class RoomManager {
 		const mem = this.room.memory;
 		const rcl = this.stats.controllerLevel;
 		const now = Game.time;
+		const debugMode = this.room.memory.settings.basePlanning.debug;
 
 		// Initialize or reset plan
 		if (!mem.buildQueue || mem.buildQueue.activeRCL !== rcl) {
@@ -959,6 +967,15 @@ export default class RoomManager {
 				index: 0,
 				activeRCL: rcl
 			};
+		}
+
+		// Early return: Skip expensive room.find() calls if we've completed all structures for current RCL
+		const plannedForCurrentRCL = plan.rclSchedule[rcl] || [];
+		if (mem.buildQueue.index >= plannedForCurrentRCL.length) {
+			// Only recheck every 50 ticks to see if something was destroyed
+			if (now - mem.buildQueue.lastBuiltTick < 50) {
+				return;
+			}
 		}
 
 		// Safety limit: 5 new sites per tick unless CPU is constrained
@@ -998,7 +1015,8 @@ export default class RoomManager {
 				created++;
 				mem.buildQueue.index++;
 				mem.buildQueue.lastBuiltTick = now;
-				console.log(`[${this.room.name}] Queued ${entry.structure} @ ${entry.pos.x},${entry.pos.y} (RCL${rcl})`);
+				if (debugMode)
+					console.log(`[${this.room.name}] Queued ${entry.structure} @ ${entry.pos.x},${entry.pos.y} (RCL${rcl})`);
 				if (created >= MAX_PER_TICK) break;
 			} else {
 				// Handle errors from createConstructionSite
@@ -1013,7 +1031,8 @@ export default class RoomManager {
 				const errorMsg = errorMessages[result] || `Unknown error (${result})`;
 
 				// Log error but skip this placement and continue
-				console.log(`[${this.room.name}] Failed to place ${entry.structure} @ ${entry.pos.x},${entry.pos.y}: ${errorMsg}`);
+				if (debugMode)
+					console.log(`[${this.room.name}] Failed to place ${entry.structure} @ ${entry.pos.x},${entry.pos.y}: ${errorMsg}`);
 
 				// Skip this item and move to next
 				mem.buildQueue.index++;

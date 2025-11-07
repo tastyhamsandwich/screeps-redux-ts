@@ -50,6 +50,7 @@ export default class BasePlanner {
 	dtGrid: number[][]; // distance transform grid
 	floodGrid: number[][]; // floodfill grid
 	tileUsage: TileUsage[][];
+	terrainGrid: string[][]; // cached terrain data
 
 	constructor(room: Room) {
 		this.room = room;
@@ -63,6 +64,13 @@ export default class BasePlanner {
 		this.dtGrid = Array.from({ length: ROOM_SIZE }, () => Array(ROOM_SIZE).fill(0));
 		this.floodGrid = Array.from({ length: ROOM_SIZE }, () => Array(ROOM_SIZE).fill(Infinity));
 		this.tileUsage = Array.from({ length: ROOM_SIZE }, () => Array(ROOM_SIZE).fill('empty' as TileUsage));
+
+		// Cache terrain data once to avoid expensive lookFor() calls in simplePath()
+		this.terrainGrid = Array.from({ length: ROOM_SIZE }, (_, y) =>
+			Array.from({ length: ROOM_SIZE }, (_, x) =>
+				new RoomPosition(x, y, this.room.name).lookFor(LOOK_TERRAIN)[0]
+			)
+		);
 
 		// Mark sources, minerals, and controller as non-buildable
 		for (const source of this.sources) {
@@ -1126,9 +1134,8 @@ export default class BasePlanner {
 		const costMatrix = new PathFinder.CostMatrix();
 		for (let y = 0; y < ROOM_SIZE; y++) {
 			for (let x = 0; x < ROOM_SIZE; x++) {
-				const pos = new RoomPosition(x, y, this.room.name);
-				// Check terrain
-				const terrain = pos.lookFor(LOOK_TERRAIN)[0];
+				// Use cached terrain instead of expensive lookFor() call
+				const terrain = this.terrainGrid[y][x];
 				if (terrain === 'wall') {
 					costMatrix.set(x, y, 255); // Impassable
 				} else if (terrain === 'swamp') {

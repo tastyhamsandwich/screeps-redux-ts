@@ -1,18 +1,5 @@
 import { creepRoleCounts } from "@main";
 
-const nameSuffix = {
-	harvester: `_H${creepRoleCounts.harvester}`,
-	filler: `_F${creepRoleCounts.filler}`,
-	hauler: `_Hl${creepRoleCounts.hauler}`,
-	upgrader: `_H${creepRoleCounts.upgrader}`,
-	builder: `_B${creepRoleCounts.builder}`,
-	repairer: `_Rep${creepRoleCounts.repairer}`,
-	defender: `_Def${creepRoleCounts.defender}`,
-	reserver: `_Rsv${creepRoleCounts.reserver}`,
-	scout: `_Sct${creepRoleCounts.scout}`,
-	remoteharvester: `_RH${creepRoleCounts.remoteharvester}`
-}
-
 /** Legacy version spawn management system which checks against role quotas and existing creep roles saved in their memory to determine spawn requirements.
  *
  * Priority is determined solely by ordering of the conditional statements, and thus is hard-coded. */
@@ -48,6 +35,19 @@ export const legacySpawnManager = {
 		let reservers: Creep[] = _.filter(Game.creeps, (creep) => (creep.memory.RFQ == 'reserver' || creep.memory.role == 'reserver') && creep.memory.home == roomName);
 
 		let remoteharvesters: Creep[] = _.filter(Game.creeps, (creep) => (creep.memory.RFQ == 'remoteharvester' || creep.memory.role == 'remoteharvester') && creep.memory.home == roomName);
+
+		const nameSuffix = {
+			harvester: `_H${creepRoleCounts.harvester}`,
+			filler: `_F${creepRoleCounts.filler}`,
+			hauler: `_Hl${creepRoleCounts.hauler}`,
+			upgrader: `_H${creepRoleCounts.upgrader}`,
+			builder: `_B${creepRoleCounts.builder}`,
+			repairer: `_Rep${creepRoleCounts.repairer}`,
+			defender: `_Def${creepRoleCounts.defender}`,
+			reserver: `_Rsv${creepRoleCounts.reserver}`,
+			scout: `_Sct${creepRoleCounts.scout}`,
+			remoteharvester: `_RH${creepRoleCounts.remoteharvester}`
+		}
 
 		const totalWorkParts = _.sum(harvesters, creep =>
 			_.filter(creep.body, part => part.type === WORK).length
