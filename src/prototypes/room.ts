@@ -1,43 +1,6 @@
 import { log, roomExitsTo, calcPath } from '../functions/utils/globals';
 import OutpostSourceCounter from '../classes/OutpostSourceCounter';
 
-type SourceAssignmentUpdate = {
-	source: Id<Source> | false,
-	container: Id<StructureContainer> | false,
-	pathLengthToStorage: number | false,
-	pathToStorage: PathFinderPath | false,
-	creepAssigned: string | false,
-	creepDeathTick: number | false
-}
-
-type LogisticsPair = {
-	source: string | Id<StructureContainer | StructureStorage>;
-	destination: Id<StructureContainer | StructureStorage | StructureLink>;
-	resource: ResourceConstant;
-	locality: 'local' | 'remote',
-	descriptor: string,
-	distance?: number,
-}
-
-declare global {
-
-	// PROTODEF: Room Prototype Extension
-	interface Room {
-		getSourcePositions(sourceID: string): RoomPosition[];
-		link(): string;
-		cacheObjects(): void;
-		initOutpost(roomName: string): void;
-		initQuotas(): void;
-		initRoom(): void;
-		initFlags(): void;
-		updateSourceAssignment(roomToUpdate: string, updateObject: SourceAssignmentUpdate);
-		registerLogisticalPairs(): void;
-		setQuota(roleTarget: CreepRole, newTarget: number);
-		toggleBasePlannerVisuals(): void;
-	}
-
-}
-
 /** Gets all walkable positions around a source for optimal harvesting placement.
  * @param sourceID - The ID of the source to check positions for
  * @returns Array of RoomPositions that are walkable around the source

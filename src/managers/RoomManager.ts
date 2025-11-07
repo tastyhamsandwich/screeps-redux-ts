@@ -1,56 +1,10 @@
 import RoomDefense from './DefenseManager';
 import SpawnManager from './SpawnManager';
-import BasePlanner, { type PlanResult, computePlanChecksum } from '@modules/BasePlanner';
-import { STRUCTURE_PRIORITY } from '@constants';
+import BasePlanner, { computePlanChecksum } from '../modules/BasePlanner';
+import { STRUCTURE_PRIORITY } from '../functions/utils/constants';
 import { legacySpawnManager } from './room/utils';
-import { log } from '@globals';
-import { determineBodyParts } from '@funcs/creep/body';
-
-interface RoomData {
-	sourceOne?: { source: Id<Source>; container: Id<StructureContainer | ConstructionSite> };
-	sourceTwo?: { source: Id<Source>; container: Id<StructureContainer | ConstructionSite> };
-	controllerContainer?: Id<StructureContainer | ConstructionSite>;
-	mineralContainer?: { mineral: Id<Mineral>; container: Id<StructureContainer | ConstructionSite> };
-	lastHarvesterAssigned?: number;
-	controllerLevel?: number;
-	numCSites?: number;
-	logisticalPairs?: any;
-	enabledCapabilities: {
-		room: { [key: string]: boolean };
-		creep: { [key: string]: boolean };
-	}
-}
-
-interface SpawnManagerMemory {
-	queue: any[];
-	scheduled: any[];
-	deferred?: any[];
-	lastProcessed: number;
-}
-
-interface RoomMemoryExtension {
-	spawnManager?: SpawnManagerMemory;
-}
-
-interface RoomResources {
-	sources: Source[];
-	minerals: Mineral[];
-	controller: StructureController | undefined;
-	containers: StructureContainer[];
-	towers: StructureTower[];
-	spawns: StructureSpawn[];
-	links: StructureLink[];
-	storage: StructureStorage | undefined;
-	terminal: StructureTerminal | undefined;
-}
-
-interface RoomStats {
-	controllerLevel: number;
-	energyAvailable: number;
-	energyCapacityAvailable: number;
-	constructionSites: ConstructionSite[];
-	damagedStructures: Structure[];
-}
+import { log } from '../functions/utils/globals';
+import { determineBodyParts } from '../functions/creep/body';
 
 /** Manages all logic and operations for a single room. */
 export default class RoomManager {
@@ -81,13 +35,15 @@ export default class RoomManager {
 
 		const roomMem = this.room.memory;
 		const rmData = roomMem.data;
-		console.log(`[${this.room.name}]: Room Manager tick exec start.`);
+
 		// Update resources and stats
 		this.resources = this.scanResources();
 		this.stats = this.gatherStats();
 
-		if (!rmData.firstTimeInit)
+		if (!rmData.firstTimeInit) {
 			rmData.advSpawnSystem = false;
+			Memory.globalData.numColonies++;
+		}
 
 		rmData.firstTimeInit ??= true;
 
@@ -245,9 +201,8 @@ export default class RoomManager {
 		const repairerTarget 				= _.get(rMem, ['quotas', 'repairers'], 0);
 		const reserverTarget 				= _.get(rMem, ['quotas', 'reservers'], 1);
 		const haulerTarget 					= _.get(rMem, ['quotas', 'haulers'], 2);
+		const defenderTarget				= _.get(rMem, ['quotas', 'defenders', 2]);
 		const remoteharvesterTarget = _.get(rMem, ['quotas', 'remoteharvesters'], 2);
-		const remotebodyguardTarget = _.get(rMem, ['quotas', 'remotebodyguards'], 1);
-		const remotehaulerTarget 		= _.get(rMem, ['quotas', 'remotehaulers'], 2);
 
 		// Pull current amount of creeps alive by RFQ (Role For Quota)
 		const harvesters 				= _.filter(Game.creeps, (c) => (c.memory.RFQ == 'harvester' 			|| c.memory.role == 'harvester') 			 && c.memory.home == roomName);
@@ -256,10 +211,9 @@ export default class RoomManager {
 		const builders 					= _.filter(Game.creeps, (c) => (c.memory.RFQ == 'builder' 				|| c.memory.role == 'builder') 				 && c.memory.home == roomName);
 		const repairers 				= _.filter(Game.creeps, (c) => (c.memory.RFQ == 'repairer' 				|| c.memory.role == 'repairer') 			 && c.memory.home == roomName);
 		const reservers 				= _.filter(Game.creeps, (c) => (c.memory.RFQ == 'reserver' 				|| c.memory.role == 'reserver') 			 && c.memory.home == roomName);
+		const defenders 				= _.filter(Game.creeps, (c) => (c.memory.RFQ == 'defender' 				|| c.memory.role == 'defender') 			 && c.memory.home == roomName);
 		const haulers 					= _.filter(Game.creeps, (c) => (c.memory.RFQ == 'hauler' 					|| c.memory.role == 'hauler') 				 && c.memory.home == roomName);
 		const remoteharvesters 	= _.filter(Game.creeps, (c) => (c.memory.RFQ == 'remoteharvester' || c.memory.role == 'remoteharvester') && c.memory.home == roomName);
-		const remotebodyguards 	= _.filter(Game.creeps, (c) => (c.memory.RFQ == 'remotebodyguard' || c.memory.role == 'remotebodyguard') && c.memory.home == roomName);
-		const remotehaulers 		= _.filter(Game.creeps, (c) => (c.memory.RFQ == 'remotehauler' 		|| c.memory.role == 'remotehauler') 	 && c.memory.home == roomName);
 
 		// Get current spawn queue to check pending spawns
 		const queue = this.spawnManager.getQueue();
@@ -281,8 +235,6 @@ export default class RoomManager {
 		const totalReservers = reservers.length + countPendingRole('reserver');
 		const totalHaulers = haulers.length + countPendingRole('hauler');
 		const totalRemoteHarvesters = remoteharvesters.length + countPendingRole('remoteharvester');
-		const totalRemoteBodyguards = remotebodyguards.length + countPendingRole('remotebodyguard');
-		const totalRemoteHaulers = remotehaulers.length + countPendingRole('remotehauler');
 
 		const harvesters_fillers_haulers_satisfied = (
 			totalHarvesters >= (rMem.objects?.sources?.length || 2) &&
@@ -292,9 +244,7 @@ export default class RoomManager {
 
 		// Use energyCapacityAvailable unless we have no harvesters (emergency)
 		let cap = this.stats.energyCapacityAvailable;
-		if (harvesters.length === 0) {
-			cap = this.stats.energyAvailable;
-		}
+		if (harvesters.length === 0) cap = this.stats.energyAvailable;
 
 		// Priority spawning logic - submit requests to SpawnManager
 		if (!harvesters_fillers_haulers_satisfied) {

@@ -1,4 +1,3 @@
-
 	module.exports = {
 		getDistanceTransform,
 		getPositionsByPathCost,
@@ -7,8 +6,8 @@
 
 	type InnerPositions = Array<RoomPosition | { x: number, y: number }>;
 	interface DistTransOptions {
-		innerPositions?: InnerPositions, visual?: boolean };
-
+		innerPositions?: InnerPositions, visual?: boolean
+	};
 
 	/**
 	 * Generate the distance trasform for a given Room
@@ -121,44 +120,38 @@ export function getDistanceTransform(roomName, options: DistTransOptions = {}) {
 	 */
 	export function getPositionsByPathCost(roomName, startPositions, options) {
 		const ADJACENT_VECTORS = [
-			{ x: 0, y: -1 }, // TOP
-			{ x: 1, y: -1 }, // TOP_RIGHT
-			{ x: 1, y: 0 }, // RIGHT
-			{ x: 1, y: 1 }, // BOTTOM_RIGHT
-			{ x: 0, y: 1 }, // BOTTOM
-			{ x: -1, y: 1 }, // BOTTOM_LEFT
-			{ x: -1, y: 0 }, // LEFT
-			{ x: -1, y: -1 }, // TOP_LEFT
+			{ x: 0,  y: -1 }, 	// TOP
+			{ x: 1,  y: -1 }, 	// TOP_RIGHT
+			{ x: 1,  y: 0  }, 	// RIGHT
+			{ x: 1,  y: 1	 }, 	// BOTTOM_RIGHT
+			{ x: 0,  y: 1  }, 	// BOTTOM
+			{ x: -1, y: 1  }, 	// BOTTOM_LEFT
+			{ x: -1, y: 0  }, 	// LEFT
+			{ x: -1, y: -1 }, 	// TOP_LEFT
 		];
 
 		const defaultOptions = {
 			costThreshold: 255,
 			visual: false,
 		};
+
 		const mergedOptions = { ...defaultOptions, ...options };
+		const queue: { x: number, y: number }[] = [];
+		const result: RoomPosition[] = [];
+		const terrain = Game.map.getRoomTerrain(roomName);
+		const check = new PathFinder.CostMatrix();
+		const roomVisual = new RoomVisual(roomName);
+
 		let { costMatrix, costThreshold, visual } = mergedOptions;
 
-		if (costMatrix === undefined) {
-			costMatrix = new PathFinder.CostMatrix();
-		} else {
-			costMatrix = costMatrix.clone();
-		}
-
-		const queue: {x: number, y: number}[] = [];
-
-		const result: RoomPosition[] = [];
-
-		const terrain = Game.map.getRoomTerrain(roomName);
-
-		const check = new PathFinder.CostMatrix();
+		if (costMatrix === undefined) costMatrix = new PathFinder.CostMatrix();
+		else costMatrix = costMatrix.clone();
 
 		for (const pos of startPositions) {
 			queue.push(pos);
 			costMatrix.set(pos.x, pos.y, 0);
 			check.set(pos.x, pos.y, 1);
 		}
-
-		const roomVisual = new RoomVisual(roomName);
 
 		while (queue.length) {
 			const current: { x: number, y: number } = queue.shift()!;
@@ -167,21 +160,13 @@ export function getDistanceTransform(roomName, options: DistTransOptions = {}) {
 			for (const vector of ADJACENT_VECTORS) {
 				const x = current.x + vector.x;
 				const y = current.y + vector.y;
-				if (x < 0 || x > 49 || y < 0 || y > 49) {
-					continue;
-				}
+				if (x < 0 || x > 49 || y < 0 || y > 49) continue;
 
-				if (terrain.get(x, y) === TERRAIN_MASK_WALL) {
-					continue;
-				}
+				if (terrain.get(x, y) === TERRAIN_MASK_WALL) continue;
 
-				if (costMatrix.get(x, y) >= costThreshold) {
-					continue;
-				}
+				if (costMatrix.get(x, y) >= costThreshold) continue;
 
-				if (check.get(x, y) > 0) {
-					continue;
-				}
+				if (check.get(x, y) > 0) continue;
 
 				costMatrix.set(x, y, currentLevel + 1);
 
@@ -192,9 +177,7 @@ export function getDistanceTransform(roomName, options: DistTransOptions = {}) {
 				const pos = new RoomPosition(x, y, roomName);
 				result.push(pos);
 
-				if (visual) {
-					roomVisual.text(currentLevel + 1, x, y);
-				}
+				if (visual) roomVisual.text(currentLevel + 1, x, y);
 			}
 		}
 
@@ -239,9 +222,8 @@ export function getDistanceTransform(roomName, options: DistTransOptions = {}) {
 
 		for (let y = 1; y < 49; y++) {
 			for (const x of [0, 49])
-				if (terrain.get(x, y) !== TERRAIN_MASK_WALL) {
+				if (terrain.get(x, y) !== TERRAIN_MASK_WALL)
 					exitCoords.push({ x, y });
-				}
 		}
 
 		const exit = new Uint8Array(MAX_NODE);
@@ -256,9 +238,8 @@ export function getDistanceTransform(roomName, options: DistTransOptions = {}) {
 			for (let x = minX; x <= maxX; x++) {
 				for (let y = minY; y <= maxY; y++) {
 					const coord = { x, y };
-					if (costMatrix.get(coord.x, coord.y) === 255) {
+					if (costMatrix.get(coord.x, coord.y) === 255)
 						continue;
-					}
 					exit[packPosToVertice(coord.x, coord.y) | OUT_NODE] = 1;
 				}
 			}
@@ -274,9 +255,8 @@ export function getDistanceTransform(roomName, options: DistTransOptions = {}) {
 				return ERR_NOT_FOUND;
 			}
 
-			if (costMatrix.get(coord.x, coord.y) === 255) {
-				continue;
-			}
+			if (costMatrix.get(coord.x, coord.y) === 255) continue;
+
 			sourceVertices.add(vertice);
 		}
 
@@ -292,22 +272,20 @@ export function getDistanceTransform(roomName, options: DistTransOptions = {}) {
 
 		for (let y = 0; y < 50; y++) {
 			for (let x = 0; x < 50; x++) {
-				if (costMatrix.get(x, y) === 255) {
+				if (costMatrix.get(x, y) === 255)
 					continue;
-				}
 
 				const vertice = packPosToVertice(x, y);
 				capacityMap[vertice | INSIDE_EDGE] = costMatrix.get(x, y); // edge from a tile to itself
 
 				for (let direction = 0; direction < EIGHT_DELTA.length; direction++) {
 					const nextPoint = pointAdd({ x, y }, EIGHT_DELTA[direction]);
-					if (!isPointInRoom(nextPoint)) {
+					if (!isPointInRoom(nextPoint))
 						continue;
-					}
 
-					if (costMatrix.get(nextPoint.x, nextPoint.y) === 255) {
+					if (costMatrix.get(nextPoint.x, nextPoint.y) === 255)
 						continue;
-					}
+
 					capacityMap[vertice | OUT_NODE | (direction << DIR_SHIFT)] = 10000; //almost infinite
 				}
 			}
@@ -320,9 +298,8 @@ export function getDistanceTransform(roomName, options: DistTransOptions = {}) {
 			levels = result.levels;
 			const cuts = result.cuts;
 
-			if (cuts.length) {
-				return cuts;
-			}
+			if (cuts.length) return cuts;
+
 			getBlockingFlow(sourceVertices, exit, capacityMap, levels);
 			i++;
 		}
@@ -366,17 +343,13 @@ function getBlockingFlow(sourceVertices, exit, capacityMap, levels) {
 				10000,
 				checkIndex
 			);
-			if (maxFlow === 0) {
-				break;
-			}
+			if (maxFlow === 0) break;
 		}
 	}
 }
 
 function getDFS(nodeNow, exit, capacityMap, levels, maxFlow, checkIndex) {
-	if (exit[nodeNow]) {
-		return maxFlow;
-	}
+	if (exit[nodeNow]) return maxFlow;
 	const adjacentsEdges = getEdgesFrom(nodeNow);
 	for (
 		;
@@ -429,9 +402,8 @@ function getLevels(sourceVertices, exit, capacityMap, roomName) {
 			if (capacityMap[edge] > 0 && levels[nextNode] === -1) {
 				levels[nextNode] = levels[nodeNow] + 1;
 				queue.push(nextNode);
-				if (exit[nextNode]) {
+				if (exit[nextNode])
 					connected = true;
-				}
 			}
 		}
 	}
@@ -462,9 +434,8 @@ function getLevels(sourceVertices, exit, capacityMap, roomName) {
 
 function getEdgesFrom(node) {
 	const result: any[] = [];
-	for (let i = 0; i <= 8; i++) {
+	for (let i = 0; i <= 8; i++)
 		result.push(node | (i << DIR_SHIFT));
-	}
 	return result;
 }
 

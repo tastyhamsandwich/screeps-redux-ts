@@ -15,41 +15,6 @@
 
 import { getDistanceTransform, getPositionsByPathCost, getMinCut } from './PlanningFunctions';
 
-type Pos = { x: number; y: number };
-type TileUsage =
-	| 'spawn'
-	| 'storage'
-	| 'terminal'
-	| 'extension'
-	| 'container'
-	| 'link'
-	| 'road'
-	| 'lab'
-	| 'tower'
-	| 'factory'
-	| 'nuker'
-	| 'observer'
-	| 'extractor'
-	| 'rampart'
-	| 'controllerUpgradeArea'
-	| 'empty'
-	| 'mineral'
-	| 'wall';
-
-export interface StructurePlacement {
-	structure: StructureConstant | 'container' | 'road';
-	pos: Pos;
-}
-
-export interface PlanResult {
-	roomName: string;
-	baseCenter: Pos; // the chosen starting position
-	placements: StructurePlacement[]; // final placements for RCL8
-	tileUsageGrid: TileUsage[][]; // 50x50 grid of usage (y then x)
-	rclSchedule: Record<number, StructurePlacement[]>; // map RCL -> placements to enable at that RCL
-	notes?: string[];
-}
-
 /* -------------------------
 	 Configurable constants
 	 ------------------------- */
@@ -62,28 +27,7 @@ const LAB_INPUT_RANGE = 2; // source labs must be within range 2 of other labs
 const MAX_SEARCH_RADIUS = 12; // radius around controller to search for base center
 const EXTENSION_GRID_GAP = 2; // gap in grid between extension clusters
 const RCL_MAX = 8;
-
-/* -------------------------
-	 Helpers
-	 ------------------------- */
-
-function inBounds(x: number, y: number) {
-	return x >= 0 && x < ROOM_SIZE && y >= 0 && y < ROOM_SIZE;
-}
-function copyGrid<T>(g: T[][]): T[][] {
-	return g.map(row => row.slice());
-}
-function posEq(a: Pos, b: Pos) {
-	return a.x === b.x && a.y === b.y;
-}
-function manhattan(a: Pos, b: Pos) {
-	return Math.abs(a.x - b.x) + Math.abs(a.y - b.y);
-}
-
-/** Convert RoomPosition -> Pos convenience if user passes RoomPosition objects in later use */
-function rpToPos(rp: RoomPosition): Pos {
-	return { x: rp.x, y: rp.y };
-}
+const ROADS_AVAILABLE_RCL = 3; // RCL at which roads become available
 
 /** Core Base Planner class, initialize new instance with room name as constructor input, then call .createPlan() to output a base plan object for the room.
  * @param room The room name (as a string) to build a plan for.
@@ -220,7 +164,28 @@ export default class BasePlanner {
 	/** 2: Choose Starting Position
 	 -- */
 	chooseStartPosition(): Pos {
-		// Search in a radius around controller for tiles with dt >= START_MIN_DIST
+		// Check if an existing spawn exists (placed by player)
+		const existingSpawn = this.room.find(FIND_MY_SPAWNS)[0];
+
+		// If we have an existing spawn, center the base ONE TILE SOUTH of it
+		if (existingSpawn) {
+			const spawnPos = rpToPos(existingSpawn.pos);
+			// Center point is one tile south (y+1) of the spawn
+			const centerPos = { x: spawnPos.x, y: spawnPos.y + 1 };
+
+			// Verify the center position is valid
+			if (inBounds(centerPos.x, centerPos.y)) {
+				// Mark the spawn position in tile usage
+				this.tileUsage[spawnPos.y][spawnPos.x] = 'spawn';
+				return centerPos;
+			}
+
+			// Fallback: if south is out of bounds, use spawn position directly
+			this.tileUsage[spawnPos.y][spawnPos.x] = 'spawn';
+			return spawnPos;
+		}
+
+		// No existing spawn - search for optimal position (for AI-placed colonies)
 		const ctr = this.controllerPos;
 		let best: { pos: Pos; score: number } | null = null;
 		for (let dy = -MAX_SEARCH_RADIUS; dy <= MAX_SEARCH_RADIUS; dy++) {
@@ -241,28 +206,31 @@ export default class BasePlanner {
 		}
 		// fallback: controller tile itself (rare)
 		if (!best) return this.controllerPos;
-		// mark base center on tile usage
-		this.tileUsage[best.pos.y][best.pos.x] = 'spawn';
 		return best.pos;
 	}
 
 	/** 3: Place Core 5x5 Stamp
 	 -- */
 	placeCoreStamp(center: Pos, placements: StructurePlacement[]) {
-		// We'll place: spawn(s), storage, terminal, roads inside stamp. Use a 'fast filler' extension zone shape.
-		// We'll center the 5x5 on center (if near edge prefer offset)
+		// Check if an existing spawn exists (it will be one tile north of center if manually placed)
+		const existingSpawn = this.room.find(FIND_MY_SPAWNS)[0];
+		const hasExistingSpawn = !!existingSpawn;
+
+		// Core stamp centered on 'center' position
+		// If spawn exists, it's already marked and at position (center.x, center.y - 1)
 		const half = Math.floor(CORE_STAMP_SIZE / 2);
 		const originX = Math.max(0, Math.min(ROOM_SIZE - CORE_STAMP_SIZE, center.x - half));
 		const originY = Math.max(0, Math.min(ROOM_SIZE - CORE_STAMP_SIZE, center.y - half));
 
-		// core layout pattern (5x5)
-		// We'll place storage roughly center-left, terminal center-right, spawn at near-center, extensions fill the rest.
+		// Core layout pattern (5x5)
+		// Row 2, col 2 (0-indexed: [1][2]) is the manually-placed spawn position
+		// Center point is at row 3, col 3 (0-indexed: [2][2])
 		const pattern: (StructureConstant | 'extension' | 'road' | null)[][] = [
-			[null, 'extension', 'extension', 'extension', null],
-			['extension', 'extension', 'spawn', 'extension', 'extension'],
-			['extension', 'storage', 'road', 'terminal', 'extension'],
-			['extension', 'extension', 'road', 'extension', 'extension'],
-			[null, 'extension', 'extension', 'extension', null]
+			[STRUCTURE_LAB, 'road', 'road', 'road', STRUCTURE_FACTORY],
+			['road', STRUCTURE_SPAWN, 'spawn', STRUCTURE_SPAWN, 'road'],
+			['road', STRUCTURE_TERMINAL, null, STRUCTURE_LINK, 'road'],
+			['road', STRUCTURE_STORAGE, 'road', STRUCTURE_POWER_SPAWN, 'road'],
+			[STRUCTURE_EXTENSION, 'road', STRUCTURE_NUKER, 'road', STRUCTURE_EXTENSION]
 		];
 
 		for (let ry = 0; ry < CORE_STAMP_SIZE; ry++) {
@@ -271,11 +239,17 @@ export default class BasePlanner {
 				const y = originY + ry;
 				if (!inBounds(x, y)) continue;
 
-				// Skip if this tile is already occupied (e.g., by a source or mineral)
-				if (this.tileUsage[y][x] !== 'empty') continue;
-
 				const cell = pattern[ry][rx];
 				if (!cell) continue;
+
+				// Skip if this tile is already occupied (e.g., source, mineral, or existing spawn)
+				if (this.tileUsage[y][x] !== 'empty') {
+					// If it's the spawn cell and there's an existing spawn here, add it to placements
+					if (cell === 'spawn' && hasExistingSpawn && this.tileUsage[y][x] === 'spawn') {
+						placements.push({ structure: STRUCTURE_SPAWN, pos: { x, y } });
+					}
+					continue;
+				}
 
 				// Verify the tile is walkable
 				const pos = new RoomPosition(x, y, this.room.name);
@@ -288,19 +262,35 @@ export default class BasePlanner {
 					this.tileUsage[y][x] = 'road';
 					placements.push({ structure: 'road', pos: { x, y } });
 				} else if (cell === 'spawn') {
-					this.tileUsage[y][x] = 'spawn';
-					placements.push({ structure: STRUCTURE_SPAWN, pos: { x, y } });
-				} else if (cell === 'storage') {
+					// Only place spawn if no existing spawn (AI placing new colony)
+					if (!hasExistingSpawn) {
+						this.tileUsage[y][x] = 'spawn';
+						placements.push({ structure: STRUCTURE_SPAWN, pos: { x, y } });
+					}
+				} else if (cell === STRUCTURE_STORAGE) {
 					this.tileUsage[y][x] = 'storage';
 					placements.push({ structure: STRUCTURE_STORAGE, pos: { x, y } });
-				} else if (cell === 'terminal') {
+				} else if (cell === STRUCTURE_TERMINAL) {
 					this.tileUsage[y][x] = 'terminal';
 					placements.push({ structure: STRUCTURE_TERMINAL, pos: { x, y } });
+				} else if (cell === STRUCTURE_LINK) {
+					this.tileUsage[y][x] = 'link';
+					placements.push({ structure: STRUCTURE_LINK, pos: { x, y } });
+				} else if (cell === STRUCTURE_LAB) {
+					this.tileUsage[y][x] = 'lab';
+					placements.push({ structure: STRUCTURE_LAB, pos: { x, y } });
+				} else if (cell === STRUCTURE_FACTORY) {
+					this.tileUsage[y][x] = 'factory';
+					placements.push({ structure: STRUCTURE_FACTORY, pos: { x, y } });
+				} else if (cell === STRUCTURE_POWER_SPAWN) {
+					this.tileUsage[y][x] = 'powerSpawn';
+					placements.push({ structure: STRUCTURE_POWER_SPAWN, pos: { x, y } });
+				} else if (cell === STRUCTURE_NUKER) {
+					this.tileUsage[y][x] = 'nuker';
+					placements.push({ structure: STRUCTURE_NUKER, pos: { x, y } });
 				}
 			}
 		}
-
-		// Reserve some neighboring tiles for future spawns / roads
 	}
 
 	/** 4: Place 3x3 Controller Upgrade Area (Drop Container -> Link)
@@ -1036,7 +1026,7 @@ export default class BasePlanner {
 				case STRUCTURE_SPAWN:
 					return 1;
 				case 'road':
-					return 3; // Roads are available at RCL3
+					return ROADS_AVAILABLE_RCL;
 				case 'container':
 					return 2; // Containers available at RCL2
 				case STRUCTURE_EXTENSION:
@@ -1191,6 +1181,29 @@ export default class BasePlanner {
 		}
 		return arr.slice();
 	}
+}
+
+
+/* -------------------------
+	 Helpers
+	 ------------------------- */
+
+function inBounds(x: number, y: number) {
+	return x >= 0 && x < ROOM_SIZE && y >= 0 && y < ROOM_SIZE;
+}
+function copyGrid<T>(g: T[][]): T[][] {
+	return g.map(row => row.slice());
+}
+function posEq(a: Pos, b: Pos) {
+	return a.x === b.x && a.y === b.y;
+}
+function manhattan(a: Pos, b: Pos) {
+	return Math.abs(a.x - b.x) + Math.abs(a.y - b.y);
+}
+
+/** Convert RoomPosition -> Pos convenience if user passes RoomPosition objects in later use */
+function rpToPos(rp: RoomPosition): Pos {
+	return { x: rp.x, y: rp.y };
 }
 
 export function computePlanChecksum(plan: PlanResult): string {

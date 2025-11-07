@@ -2,35 +2,6 @@ import { log } from '../functions/utils/globals';
 import { pathing } from '../functions/utils/constants';
 import SmartNavigator from "@modules/SmartNavigator";
 
-declare global {
-
-	type RoomRoute = RoomPathStep[];
-	interface RoomPathStep {
-		room: string;
-		exit: ExitConstant;
-	}
-
-	type Locality = 'local' | 'remote';
-	interface Creep {
-		smartMoveTo(target: RoomPosition | { pos: RoomPosition }, opts?: MoveToOpts): ScreepsReturnCode;
-		advGet(target: Source | Id<Source> | Mineral | Id<Mineral> | Deposit | Id<Deposit> | AnyStoreStructure | Resource | Tombstone | Ruin | Id<AnyStoreStructure> | Id<Resource> | Id<Tombstone> | Id<Ruin>): ScreepsReturnCode;
-		advGive(target: Creep | AnyStoreStructure | Id<AnyStoreStructure>, pathing?: MoveToOpts, resource?: ResourceConstant, canTravel?: boolean): ScreepsReturnCode;
-		advHarvest(): void;
-		advMoveTo(target: RoomObject | { pos: RoomPosition } | RoomPosition, pathFinder?: boolean, opts?: MoveToOpts): ScreepsReturnCode;
-		reassignSource(locality: Locality, sourceTwo: boolean): boolean;
-		assignHarvestSource(locality: Locality, simpleAssignment: boolean, returnID: boolean): Source | Id<Source>;
-		harvestEnergy(): void;
-		unloadEnergy(bucketID?: Id<AnyStoreStructure>): void;
-		cacheLocalObjects(): void;
-		cacheLocalOutpost(): void;
-		executeDirective(): boolean;
-		assignLogisticalPair(): boolean;
-		hasWorked: boolean;
-		movePriority?: number;
-		stuckTicks?: number;
-	}
-}
-
 const globalRouteCache: Record<string, RoomRoute | ERR_NO_PATH | ERR_INVALID_ARGS> = {};
 
 // Prevent prototype augmentation from executing in non-Screeps (node/mocha) environments.
@@ -621,7 +592,8 @@ if (typeof Creep !== 'undefined') {
 			}
 			else if (assignedPair) {
 				this.memory.pickup = assignedPair.source;
-				this.memory.pickupPos = Game.getObjectById(assignedPair.source)!.pos;
+				const pickupObject = Game.getObjectById(assignedPair.source);
+				this.memory.pickupPos = pickupObject instanceof RoomObject ? pickupObject.pos : undefined;
 				this.memory.dropoff = assignedPair.destination;
 				this.memory.dropoffPos = Game.getObjectById(assignedPair.destination)!.pos;
 				this.memory.cargo = assignedPair.resource;
