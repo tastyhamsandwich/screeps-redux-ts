@@ -26,14 +26,13 @@ declare global {
 		getSourcePositions(sourceID: string): RoomPosition[];
 		link(): string;
 		cacheObjects(): void;
-		newSpawnQueue(spawnOrder: SpawnOrder): void;
 		initOutpost(roomName: string): void;
+		initQuotas(): void;
 		initRoom(): void;
 		initFlags(): void;
 		updateSourceAssignment(roomToUpdate: string, updateObject: SourceAssignmentUpdate);
 		registerLogisticalPairs(): void;
 		setQuota(roleTarget: CreepRole, newTarget: number);
-		roomSpawnQueue: SpawnOrder[];
 		counter: OutpostSourceCounter;
 	}
 
@@ -43,6 +42,7 @@ declare global {
 if (!global.__outpostCounters)
 	global.__outpostCounters = new Map();
 
+// Creates a 'counter' property for the Room object used in deprecated spawning logic.
 Object.defineProperty(Room.prototype, "counter", {
 	get: function (this: Room): OutpostSourceCounter {
 		if (!global.__outpostCounters.has(this.name)) {
@@ -55,6 +55,10 @@ Object.defineProperty(Room.prototype, "counter", {
 	configurable: false,
 });
 
+/** Gets all walkable positions around a source for optimal harvesting placement.
+ * @param sourceID - The ID of the source to check positions for
+ * @returns Array of RoomPositions that are walkable around the source
+ */
 Room.prototype.getSourcePositions = function (sourceID: string): RoomPosition[] {
 
 	const source = this.find(FIND_SOURCES, { filter: function(s) { return s.id === sourceID }})[0];
@@ -84,67 +88,57 @@ Room.prototype.getSourcePositions = function (sourceID: string): RoomPosition[] 
 	return [];
 }
 
+/** Creates a clickable room link for console output */
 Room.prototype.link = function(): string {
 	return `<span color='red'>[<a href="#!/room/${Game.shard.name}/${this.name}">${this.name}</a></span>]: `;
 }
 
-
-// Note: this function is flexible and accepts either a SpawnOrder object (legacy declaration) or positional parameters.
-Room.prototype.newSpawnQueue = function(role: any, critical: boolean = false, maxEnergy?: number, name?: string): void {
-
-	if (maxEnergy === undefined) maxEnergy = this.energyCapacityAvailable;
-	const colonyNum = this.memory.data.colonyNumber;
-
-	const spawnOrder = {
-		role: role,
-		body: [], // body can be determined later by the spawn using determineBodyParts
-		memory: {
-			role: role,
-			home: this.name,
-			room: this.name,
-			working: false
-		} as CreepMemory,
-		name: name || `${role}_${Game.time}_${Math.floor(Math.random() * 1000)}`,
-		critical: critical
-	}
-
-	if (!this.roomSpawnQueue) this.roomSpawnQueue = [];
-	this.roomSpawnQueue.push(spawnOrder as SpawnOrder);
-}
-
+/** Caches all room objects (sources, minerals, structures, etc.) into memory for faster access. Organizes objects by type and updates relevant container assignments.
+ * @returns true when caching is complete
+ */
 Room.prototype.cacheObjects = function () {
 
 	// declare storage array for objects to cache
 	let storageArray: Id<any>[] = [];
 
 	// search room for each object type
-	const sources = this.find(FIND_SOURCES);
-	const minerals = this.find(FIND_MINERALS);
-	const deposits = this.find(FIND_DEPOSITS);
-	const allStructures = this.find(FIND_STRUCTURES, {
-		filter: (i) => i.structureType == STRUCTURE_CONTROLLER || i.structureType == STRUCTURE_SPAWN || i.structureType == STRUCTURE_EXTENSION || i.structureType == STRUCTURE_TOWER || i.structureType == STRUCTURE_CONTAINER || i.structureType == STRUCTURE_STORAGE || i.structureType == STRUCTURE_RAMPART || i.structureType == STRUCTURE_LINK || i.structureType == STRUCTURE_EXTRACTOR || i.structureType == STRUCTURE_LAB || i.structureType == STRUCTURE_TERMINAL || i.structureType == STRUCTURE_FACTORY || i.structureType == STRUCTURE_POWER_BANK || i.structureType == STRUCTURE_POWER_SPAWN || i.structureType == STRUCTURE_PORTAL || i.structureType == STRUCTURE_OBSERVER || i.structureType == STRUCTURE_KEEPER_LAIR || i.structureType == STRUCTURE_NUKER || i.structureType == STRUCTURE_WALL || i.structureType == STRUCTURE_INVADER_CORE
+	const sources = 			this.find(FIND_SOURCES);
+	const minerals = 			this.find(FIND_MINERALS);
+	const deposits = 			this.find(FIND_DEPOSITS);
+	const allStructures = this.find(FIND_STRUCTURES,
+		{	filter: (i) =>
+			i.structureType == STRUCTURE_CONTROLLER 	|| i.structureType == STRUCTURE_SPAWN 			||
+			i.structureType == STRUCTURE_EXTENSION 		|| i.structureType == STRUCTURE_TOWER 			||
+			i.structureType == STRUCTURE_CONTAINER 		|| i.structureType == STRUCTURE_STORAGE 		||
+			i.structureType == STRUCTURE_RAMPART 			|| i.structureType == STRUCTURE_LINK 				||
+			i.structureType == STRUCTURE_EXTRACTOR 		|| i.structureType == STRUCTURE_LAB 				||
+			i.structureType == STRUCTURE_TERMINAL 		|| i.structureType == STRUCTURE_FACTORY 		||
+			i.structureType == STRUCTURE_POWER_BANK 	|| i.structureType == STRUCTURE_POWER_SPAWN ||
+			i.structureType == STRUCTURE_PORTAL 			|| i.structureType == STRUCTURE_OBSERVER 		||
+			i.structureType == STRUCTURE_KEEPER_LAIR 	|| i.structureType == STRUCTURE_NUKER 			||
+			i.structureType == STRUCTURE_WALL 				|| i.structureType == STRUCTURE_INVADER_CORE
 	});
 
-	const controller = _.filter(allStructures, { structureType: STRUCTURE_CONTROLLER });
-	const spawns = _.filter(allStructures, { structureType: STRUCTURE_SPAWN });
-	const extensions = _.filter(allStructures, { structureType: STRUCTURE_EXTENSION });
-	const towers = _.filter(allStructures, { structureType: STRUCTURE_TOWER });
-	const containers = _.filter(allStructures, { structureType: STRUCTURE_CONTAINER });
-	const storage = _.filter(allStructures, { structureType: STRUCTURE_STORAGE });
-	const ramparts = _.filter(allStructures, { structureType: STRUCTURE_RAMPART });
-	const links = _.filter(allStructures, { structureType: STRUCTURE_LINK });
-	const extractor = _.filter(allStructures, { structureType: STRUCTURE_EXTRACTOR });
-	const labs = _.filter(allStructures, { structureType: STRUCTURE_LAB });
-	const terminal = _.filter(allStructures, { structureType: STRUCTURE_TERMINAL });
-	const factory = _.filter(allStructures, { structureType: STRUCTURE_FACTORY });
-	const observer = _.filter(allStructures, { structureType: STRUCTURE_OBSERVER });
-	const powerspawn = _.filter(allStructures, { structureType: STRUCTURE_POWER_SPAWN });
-	const nuker = _.filter(allStructures, { structureType: STRUCTURE_NUKER });
-	const keeperlairs = _.filter(allStructures, { structureType: STRUCTURE_KEEPER_LAIR });
-	const powerbanks = _.filter(allStructures, { structureType: STRUCTURE_POWER_BANK });
-	const portals = _.filter(allStructures, { structureType: STRUCTURE_PORTAL });
-	const invadercores = _.filter(allStructures, { structureType: STRUCTURE_INVADER_CORE });
-	const walls = _.filter(allStructures, { structureType: STRUCTURE_WALL });
+	const controller = 		_.filter(allStructures, { structureType: STRUCTURE_CONTROLLER 	});
+	const spawns = 				_.filter(allStructures, { structureType: STRUCTURE_SPAWN 				});
+	const extensions = 		_.filter(allStructures, { structureType: STRUCTURE_EXTENSION 		});
+	const towers = 				_.filter(allStructures, { structureType: STRUCTURE_TOWER 				});
+	const containers = 		_.filter(allStructures, { structureType: STRUCTURE_CONTAINER 		});
+	const storage = 			_.filter(allStructures, { structureType: STRUCTURE_STORAGE 			});
+	const ramparts = 			_.filter(allStructures, { structureType: STRUCTURE_RAMPART 			});
+	const links = 				_.filter(allStructures, { structureType: STRUCTURE_LINK 				});
+	const extractor = 		_.filter(allStructures, { structureType: STRUCTURE_EXTRACTOR 		});
+	const labs = 					_.filter(allStructures, { structureType: STRUCTURE_LAB 					});
+	const terminal = 			_.filter(allStructures, { structureType: STRUCTURE_TERMINAL 		});
+	const factory = 			_.filter(allStructures, { structureType: STRUCTURE_FACTORY 			});
+	const observer = 			_.filter(allStructures, { structureType: STRUCTURE_OBSERVER 		});
+	const powerspawn = 		_.filter(allStructures, { structureType: STRUCTURE_POWER_SPAWN 	});
+	const nuker = 				_.filter(allStructures, { structureType: STRUCTURE_NUKER 				});
+	const keeperlairs = 	_.filter(allStructures, { structureType: STRUCTURE_KEEPER_LAIR 	});
+	const powerbanks = 		_.filter(allStructures, { structureType: STRUCTURE_POWER_BANK 	});
+	const portals = 			_.filter(allStructures, { structureType: STRUCTURE_PORTAL 			});
+	const invadercores = 	_.filter(allStructures, { structureType: STRUCTURE_INVADER_CORE });
+	const walls = 				_.filter(allStructures, { structureType: STRUCTURE_WALL 				});
 
 	// check if the 'objects' object exists in room memory & create it if not
 	if (!this.memory.objects) this.memory.objects = {};
@@ -152,97 +146,74 @@ Room.prototype.cacheObjects = function () {
 	log('Caching room objects...', this);
 	// if sources are found, add their IDs to array and add array to room's 'objects' memory
 	if (sources) {
-		for (let i = 0; i < sources.length; i++)
-			storageArray.push(sources[i].id);
+		for (let i = 0; i < sources.length; i++) storageArray.push(sources[i].id);
 		if (storageArray.length) {
 			this.memory.objects.sources = storageArray;
-			if (this.memory.hostColony !== undefined) {
-				Game.rooms[this.memory.hostColony].memory.outposts.numSources += storageArray.length;
-				Game.rooms[this.memory.hostColony].memory.outposts.list[this.name].sourceIDs = storageArray;
-			}
-			if (storageArray.length > 1)
-				log('Cached ' + storageArray.length + ' sources.', this);
-			else
-				log('Cached 1 source.', this);
+			if (this.memory.hostColony !== undefined)	Game.rooms[this.memory.hostColony].memory.outposts.list[this.name].sourceIDs = storageArray;
+			if (storageArray.length > 1) log('Cached ' + storageArray.length + ' sources.', this);
+			else log('Cached 1 source.', this);
 		}
 		storageArray = [];
 	}
 	// if minerals are found, add their IDs to array and add array to room's 'objects' memory
 	if (minerals) {
-		for (let i = 0; i < minerals.length; i++)
-			storageArray.push(minerals[i].id);
+		for (let i = 0; i < minerals.length; i++)	storageArray.push(minerals[i].id);
 		if (storageArray.length) {
 			this.memory.objects.mineral = [storageArray[0]];
-			if (storageArray.length >= 1)
-				log('Cached 1 mineral.', this);
+			if (storageArray.length >= 1)	log('Cached 1 mineral.', this);
 		}
 		storageArray = [];
 	}
 	// if deposits are found, add their IDs to array and add array to room's 'objects' memory
 	if (deposits) {
-		for (let i = 0; i < deposits.length; i++)
-			storageArray.push(deposits[i].id);
+		for (let i = 0; i < deposits.length; i++)	storageArray.push(deposits[i].id);
 		if (storageArray.length) {
 			this.memory.objects.deposit = [storageArray[0]];
-			if (storageArray.length > 1)
-				log('Cached ' + storageArray.length + ' deposits.', this);
-			else
-				log('Cached 1 deposit.', this);
+			if (storageArray.length > 1) log('Cached ' + storageArray.length + ' deposits.', this);
+			else log('Cached 1 deposit.', this);
 		}
 		storageArray = [];
 	}
 	// if a controller is found, add its ID to array and add array to room's 'objects' memory
 	if (controller) {
-		for (let i = 0; i < controller.length; i++)
-			storageArray.push(controller[i].id);
+		for (let i = 0; i < controller.length; i++)	storageArray.push(controller[i].id);
 		if (storageArray.length) {
 			this.memory.objects.controller = [storageArray[0]];
 			if (this.memory.hostColony !== undefined) {
 				Game.rooms[this.memory.hostColony].memory.outposts.list[this.name].controllerID = storageArray[0];
 			}
-			if (storageArray.length >= 1)
-				log('Cached ' + storageArray.length + ' controllers.', this);
-			else
-				log('Cached 1 controller.', this);
+			if (storageArray.length >= 1)	log('Cached ' + storageArray.length + ' controllers.', this);
+			else log('Cached 1 controller.', this);
 		}
 		storageArray = [];
 	}
 	// if a spawn is found, add its ID to array and add array to room's 'objects' memory
 	if (spawns) {
-		for (let i = 0; i < spawns.length; i++)
-			storageArray.push(spawns[i].id);
+		for (let i = 0; i < spawns.length; i++) storageArray.push(spawns[i].id);
 		if (storageArray.length) {
 			this.memory.objects.spawns = storageArray;
-			if (storageArray.length > 1)
-				log('Cached ' + storageArray.length + ' spawns.', this);
-			else
-				log('Cached 1 spawn.', this);
+			if (storageArray.length > 1) log('Cached ' + storageArray.length + ' spawns.', this);
+			else log('Cached 1 spawn.', this);
 		}
 		storageArray = [];
 	}
 	// if an extension is found, add its ID to array and add array to room's 'objects' memory
 	if (extensions) {
-		for (let i = 0; i < extensions.length; i++)
-			storageArray.push(extensions[i].id);
+		for (let i = 0; i < extensions.length; i++)	storageArray.push(extensions[i].id);
 		if (storageArray.length) {
 			this.memory.objects.extensions = storageArray;
-			if (storageArray.length > 1)
-				log('Cached ' + storageArray.length + ' extensions.', this);
-			else
-				log('Cached 1 extension.', this);
+			if (storageArray.length > 1) log('Cached ' + storageArray.length + ' extensions.', this);
+			else log('Cached 1 extension.', this);
 		}
 		storageArray = [];
 	}
 	// if towers are found, add their IDs to array and add array to room's 'objects' memory
 	if (towers) {
-		for (let i = 0; i < towers.length; i++)
-			storageArray.push(towers[i].id);
+		for (let i = 0; i < towers.length; i++)	storageArray.push(towers[i].id);
 		if (storageArray.length) {
 			this.memory.objects.towers = storageArray;
-			if (storageArray.length > 1)
-				log('Cached ' + storageArray.length + ' towers.', this);
-			else
-				log('Cached 1 tower.', this);
+			if (storageArray.length > 1) log('Cached ' + storageArray.length + ' towers.', this);
+			else log('Cached 1 tower.', this);
 		}
 		storageArray = [];
 	}
@@ -303,15 +274,13 @@ Room.prototype.cacheObjects = function () {
 			let updateInfo = '';
 			if (this.memory.hostColony) {
 				const hostRoom = this.memory.hostColony;
-				this.memory.outposts.list[hostRoom].containerIDs = storageArray;
+				Game.rooms[hostRoom].memory.outposts.list[this.name].containerIDs = storageArray;
 				this.memory.objects.containers = storageArray;
 				updateInfo = "\n>>> NOTICE: Room is an outpost of a main colony. Updated outpost info with new container IDs.";
 			}
 
-			if (storageArray.length > 1)
-				log('Cached ' + storageArray.length + ' containers.' + updateInfo, this);
-			else
-				log('Cached 1 container.', this);
+			if (storageArray.length > 1) log('Cached ' + storageArray.length + ' containers.' + updateInfo, this);
+			else log('Cached 1 container.' + updateInfo, this);
 		}
 		storageArray = [];
 	}
@@ -321,8 +290,7 @@ Room.prototype.cacheObjects = function () {
 			storageArray.push(storage[i].id);
 		if (storageArray.length) {
 			this.memory.objects.storage = [storageArray[0]];
-			if (storageArray.length >= 1)
-				log('Cached 1 storage.', this);
+			if (storageArray.length >= 1)	log('Cached 1 storage.', this);
 		}
 		storageArray = [];
 	}
@@ -345,10 +313,8 @@ Room.prototype.cacheObjects = function () {
 			storageArray.push(links[i].id);
 		if (storageArray.length) {
 			this.memory.objects.links = storageArray;
-			if (storageArray.length > 1)
-				log('Cached ' + storageArray.length + ' links.', this);
-			else
-				log('Cached 1 link.', this);
+			if (storageArray.length > 1) log('Cached ' + storageArray.length + ' links.', this);
+			else log('Cached 1 link.', this);
 		}
 		storageArray = [];
 	}
@@ -499,15 +465,29 @@ Room.prototype.cacheObjects = function () {
 	return true;
 }
 
-Room.prototype.initRoom = function () {
-	if (this.memory.quotas) this.memory.quotas = {
+/** Initializes a room's quota list. */
+Room.prototype.initQuotas = function (): void {
+	if (!this.memory.quotas) this.memory.quotas = {};
+
+	this.memory.quotas = {
 		harvesters: 2,
 		upgraders: 2,
 		fillers: 2,
-		haulers: 2,
-		builders: 2,
+		haulers: 0,
+		builders: 1,
 		repairers: 1,
-	};
+		defenders: 0,
+		reservers: 0,
+		scouts: 0,
+		remoteharvesters: 0,
+	}
+
+	log(`Quotas initialized: Harvesters (2), Upgraders (2), Fillers (2), Haulers (0), Builders (1), Defenders (0), Reservers (0), Scouts (0), Remote Harvesters (0)`);
+}
+
+/** Initializes a room with default memory structure and settings. Sets up quotas, visual settings, repair settings, and stats tracking. */
+Room.prototype.initRoom = function () {
+	if (!this.memory.quotas) this.initQuotas();
 
 	const visualSettings: VisualSettings = { progressInfo: { alignment: 'left', xOffset: 1, yOffsetFactor: 0.6, stroke: '#000000', fontSize: 0.6, color: '' } };
 	const towerSettings: TowerRepairSettings = { creeps: true, walls: false, ramparts: false, roads: false, others: false, wallLimit: 10, rampartLimit: 10, maxRange: 10 };
@@ -523,13 +503,19 @@ Room.prototype.initRoom = function () {
 	if (!this.memory.containers) this.memory.containers = { sourceOne: '', sourceTwo: '', controller: '', mineral: ''};
 	if (!this.memory.data) this.memory.data = { controllerLevel: 0, numCSites: 0, sourceData: { source: [], container: [], lastAssigned: 0 } };
 	if (!this.memory.settings) this.memory.settings = { visualSettings: visualSettings, repairSettings: repairSettings,	flags: {} };
-	if (!this.memory.outposts) this.memory.outposts = { list: {}, array: [], reserverLastAssigned: 0, numSources: 0, numHarvesters: 0, counter: 0 };
+	if (!this.memory.outposts) this.memory.outposts = { list: {}, array: [], reserverLastAssigned: 0, numSources: 0, numHarvesters: 0, counter: 0, guardCounter: 0 };
 	if (!this.memory.stats) this.memory.stats = { energyHarvested: 0, controlPoints: 0, constructionPoints: 0, creepsSpawned: 0, creepPartsSpawned: 0,
 		mineralsHarvested: mineralsHarvested, controllerLevelReached: 0, npcInvadersKilled: 0, hostilePlayerCreepsKilled: 0, labStats: labStats };
+	if (!this.memory.flags) this.memory.flags = { advancedSpawnLogic: false, };
+
+	this.cacheObjects();
 }
 
+/** Initializes an outpost room with necessary memory structures.
+ * @param roomName - The name of the room to initialize as an outpost
+ */
 Room.prototype.initOutpost = function (roomName): void {
-	if (this.memory.outposts === undefined) this.memory.outposts = { list: {}, array: [], reserverLastAssigned: 0, numSources: 0, numHarvesters: 0, counter: 0 };
+	if (this.memory.outposts === undefined) this.memory.outposts = { list: {}, array: [], reserverLastAssigned: 0, numSources: 0, numHarvesters: 0, counter: 0, guardCounter: 0 };
 
 	const sourceIDs: Id<Source>[] = [];
 	const containerIDs: Id<StructureContainer>[] = [];
@@ -559,78 +545,52 @@ Room.prototype.initOutpost = function (roomName): void {
 	this.memory.outposts.list[roomName] = outpostMemoryObject;
 	this.memory.outposts.array.push(roomName);
 }
+
+/** Initializes room flags with default settings. Sets up various behavior flags for creeps and structures. */
 Room.prototype.initFlags = function () {
+
+	const flagSettings = this.memory.settings.flags;
 
 	if (!this.memory.settings.flags)
 		this.memory.settings.flags = {};
 
-	if (this.memory.settings.flags.craneUpgrades === undefined)
-		this.memory.settings.flags.craneUpgrades = false;
+	if (flagSettings.haulersPickupEnergy === undefined)
+		flagSettings.haulersPickupEnergy = false;
 
-	if (this.memory.settings.flags.repairRamparts === undefined)
-		this.memory.settings.flags.repairRamparts = true;
+	if (flagSettings.closestConSites === undefined)
+		flagSettings.closestConSites = false;
 
-	if (this.memory.settings.flags.repairWalls === undefined)
-		this.memory.settings.flags.repairWalls = true;
-
-	if (this.memory.settings.flags.centralStorageLogic === undefined)
-		this.memory.settings.flags.centralStorageLogic = false;
-
-	if (this.memory.settings.flags.dropHarvestingEnabled === undefined)
-		this.memory.settings.flags.dropHarvestingEnabled = false;
-
-	if (this.memory.settings.flags.haulersDoMinerals === undefined)
-		this.memory.settings.flags.haulersDoMinerals = false;
-
-	if (this.memory.settings.flags.towerRepairBasic === undefined)
-		this.memory.settings.flags.towerRepairBasic = false;
-
-	if (this.memory.settings.flags.towerRepairDefenses === undefined)
-		this.memory.settings.flags.towerRepairDefenses = false;
-
-	if (this.memory.settings.flags.haulersPickupEnergy === undefined)
-		this.memory.settings.flags.haulersPickupEnergy = false;
-
-	if (this.memory.settings.flags.harvestersFixAdjacent === undefined)
-		this.memory.settings.flags.harvestersFixAdjacent = false;
-
-	if (this.memory.settings.flags.repairBasics === undefined)
-		this.memory.settings.flags.repairBasics = true;
-
-	if (this.memory.settings.flags.upgradersSeekEnergy === undefined)
-		this.memory.settings.flags.upgradersSeekEnergy = true;
-
-	if (this.memory.settings.flags.sortConSites === undefined)
-		this.memory.settings.flags.sortConSites = false;
-
-	if (this.memory.settings.flags.closestConSites === undefined)
-		this.memory.settings.flags.closestConSites = false;
-
-	log('Room flags initialized: craneUpgrades(' + this.memory.settings.flags.craneUpgrades + ') centralStorageLogic(' + this.memory.settings.flags.centralStorageLogic + ') dropHarvestingEnabled(' + this.memory.settings.flags.dropHarvestingEnabled + ') repairRamparts(' + this.memory.settings.flags.repairRamparts + ') repairWalls(' + this.memory.settings.flags.repairWalls + ') haulersDoMinerals(' + this.memory.settings.flags.haulersDoMinerals + ') towerRepairBasic(' + this.memory.settings.flags.towerRepairBasic + ') towerRepairDefenses(' + this.memory.settings.flags.towerRepairDefenses + ') haulersPickupEnergy(' + this.memory.settings.flags.haulersPickupEnergy + ') harvestersFixAdjacent(' + this.memory.settings.flags.harvestersFixAdjacent + ') repairBasics(' + this.memory.settings.flags.repairBasics + ') upgradersSeekEnergy(' + this.memory.settings.flags.upgradersSeekEnergy + ')', this);
+	log(`Room flags initialized: haulersPickupEnergy(${flagSettings.haulersPickupEnergy}), closestConSites(${flagSettings.closestConSites})`, this);
 	return;
 }
 
-
+/** Updates source assignments in a room's memory.
+ * @param roomToUpdate - Name of the room to update assignments for
+ * @param updateObject - Object containing the assignment updates
+ * @returns true if the update was successful
+ */
 Room.prototype.updateSourceAssignment = function(roomToUpdate, updateObject: SourceAssignmentUpdate): boolean {
 	let assignmentMap: SourceAssignment[] = [];
 
 	const roomIsOutpost = Game.rooms[roomToUpdate].memory.hostColony ? true : false
-	if (roomIsOutpost)
-		assignmentMap = Game.rooms[this.memory.hostColony!].memory.outposts.list[this.name].sourceAssignmentMap;
-	else
-		assignmentMap = Game.rooms[this.name].memory.outposts.list[roomToUpdate].sourceAssignmentMap;
+	if (roomIsOutpost) assignmentMap = Game.rooms[this.memory.hostColony!].memory.outposts.list[this.name].sourceAssignmentMap;
+	else assignmentMap = Game.rooms[this.name].memory.outposts.list[roomToUpdate].sourceAssignmentMap;
 
 	for (let map of assignmentMap) {
-		if (updateObject.source) map.source = updateObject.source;
-		if (updateObject.container) map.container = updateObject.container;
+		if (updateObject.source) 							map.source = updateObject.source;
+		if (updateObject.container) 					map.container = updateObject.container;
 		if (updateObject.pathLengthToStorage) map.pathLengthToStorage = updateObject.pathLengthToStorage;
-		if (updateObject.pathToStorage) map.pathToStorage = updateObject.pathToStorage;
-		if (updateObject.creepAssigned) map.creepAssigned = updateObject.creepAssigned;
-		if (updateObject.creepDeathTick) map.creepDeathTick = updateObject.creepDeathTick;
+		if (updateObject.pathToStorage) 			map.pathToStorage = updateObject.pathToStorage;
+		if (updateObject.creepAssigned) 			map.creepAssigned = updateObject.creepAssigned;
+		if (updateObject.creepDeathTick) 			map.creepDeathTick = updateObject.creepDeathTick;
 	}
 	return true;
 }
 
+/** Discovers and registers all possible resource transfer routes in the room.
+ * Creates pairs of source/destination structures for haulers to work between
+ * @returns true if valid pairs were registered, false otherwise
+ */
 Room.prototype.registerLogisticalPairs = function (): boolean {
 
 	//* Discover all resource locations, and any links in the room
@@ -662,19 +622,15 @@ Room.prototype.registerLogisticalPairs = function (): boolean {
 	let sourceBoxes: Array<StructureContainer> = [];
 	if (this.memory.containers.sourceOne) {
 		const sourceOneBox: StructureContainer | null = Game.getObjectById(this.memory.containers.sourceOne);
-		if (sourceOneBox)
-			sourceBoxes.push(sourceOneBox);
+		if (sourceOneBox)	sourceBoxes.push(sourceOneBox);
 	}
 	if (this.memory.containers.sourceTwo) {
 		const sourceTwoBox: StructureContainer | null = Game.getObjectById(this.memory.containers.sourceTwo);
-		if (sourceTwoBox)
-			sourceBoxes.push(sourceTwoBox);
+		if (sourceTwoBox)	sourceBoxes.push(sourceTwoBox);
 	}
 
 	if (sourceBoxes.length == 0 && !sourceBoxes) this.memory.data.noPairs = true;
-	else {
-		if (this.memory.data.noPairs) delete this.memory.data.noPairs;
-	}
+	else if (this.memory.data.noPairs) delete this.memory.data.noPairs;
 
 	//* Ensure that our found energyInbox conforms to the room's container memory
 	if (energyInboxArray && this.memory.containers.controller !== energyInboxArray[0].id)
@@ -689,6 +645,8 @@ Room.prototype.registerLogisticalPairs = function (): boolean {
 			else log('Malformed Pair: ' + onePair, this);
 		}
 
+		// DEPRECATED CODE BLOCK FOR PROCESSING "REMOTE LINKS"
+		//(links built along room borders for transferring from remote sources from other rooms to the room storage, typically)
 		/*
 		if (this.memory.outposts) {
 			if (this.memory.data.linkRegistry) {
@@ -788,8 +746,9 @@ Room.prototype.registerLogisticalPairs = function (): boolean {
 		}
 	}
 
-	//* For path lengths over 60, cut the length in half and create two pairs (this will divide the job into two haulers, lessening the energy burden for lower room levels)
-	/*let finalizedPairs: LogisticsPair[] = [];
+	// DEPRECATED/UNUSED CODE BLOCK FOR SPLITTING LONG ROUTES INTO TWO PAIRS TO TRICK THE SPAWN LOGIC INTO PUTTING MLTIPLE HAULERS ON THE ROUTE
+	/*
+	let finalizedPairs: LogisticsPair[] = [];
 	for (let i = 0; i < logisticalPairs.length; i++) {
 	  if (logisticalPairs[i].distance >= 60) {
 		let clonedHalfPair: LogisticsPair = logisticalPairs[i];
@@ -800,12 +759,14 @@ Room.prototype.registerLogisticalPairs = function (): boolean {
 		const clonedPair: LogisticsPair = logisticalPairs[i];
 		finalizedPairs.push(clonedPair);
 	  }
-	}*/
-	//* Ensure data objects exist
+	}
+	*/
 
+	//* Ensure data objects exist
 	if (!this.memory.data) this.memory.data = {};
 	if (!this.memory.data.logisticalPairs) this.memory.data.logisticalPairs = [];
 	if (!this.memory.data.pairCounter) this.memory.data.pairCounter = 0;
+
 	//* Clear the pair paths if they exist already
 	if (this.memory.data.pairPaths) {
 		delete this.memory.data.pairPaths;
@@ -822,7 +783,7 @@ Room.prototype.registerLogisticalPairs = function (): boolean {
 			pairReport.push(' PAIR #' + (i + 1) + ': OUTBOX> ' + logisticalPairs[i].source + ' | INBOX> ' + logisticalPairs[i].destination + ' | CARGO> ' + logisticalPairs[i].resource + ' | LOCALITY> ' + logisticalPairs[i].locality + ' | TYPE> ' + logisticalPairs[i].descriptor + '');
 	} else pairReport = ['No pairs available to register properly.'];
 
-	//* Push those pairs to memory and set the hauler spawn target to match the number of pairs
+	//* Push those pairs to memory then set the hauler spawn target to match the number of pairs
 	this.memory.data.logisticalPairs = logisticalPairs;
 
 	this.setQuota('hauler', this.memory.data.logisticalPairs.length);
@@ -831,6 +792,10 @@ Room.prototype.registerLogisticalPairs = function (): boolean {
 	else return false;
 }
 
+/** Sets the target number of creeps for a specific role.
+ * @param roleTarget - The role to set the quota for
+ * @param newTarget - The new target number of creeps
+ */
 Room.prototype.setQuota = function (roleTarget: CreepRole, newTarget: number) {
 
 	const pluralRoleTarget: string = roleTarget + 's';
@@ -840,3 +805,39 @@ Room.prototype.setQuota = function (roleTarget: CreepRole, newTarget: number) {
 	log('Set role \'' + pluralRoleTarget + '\' quota to ' + newTarget + ' (was ' + oldTarget + ').', this);
 	return;
 }
+
+/* POTENTIALLY DEPRECATED
+/** Adds a new spawn order to the room's spawn queue
+ * @deprecated This function may be deprecated in future versions
+ * @param role - The role of the creep to spawn (or a SpawnOrder object for legacy support)
+ * @param critical - Whether this spawn order is critical (default: false)
+ * @param maxEnergy - Maximum energy to use for spawning (default: room's energy capacity)
+ * @param name - Custom name for the creep (optional)
+ */
+/*
+Room.prototype.roomSpawnQueue = function(role: any, critical: boolean = false, maxEnergy?: number, name?: string): void {
+
+	const room: Room = this;
+
+	if (maxEnergy === undefined)
+		maxEnergy = this.energyCapacityAvailable;
+
+	const colonyNum = this.memory.data.colonyNumber;
+
+	const spawnOrder = {
+		role: role,
+		body: [], // body can be determined later by the spawn using determineBodyParts
+		memory: {
+			role: role,
+			home: this.name,
+			room: this.name,
+			working: false
+		} as CreepMemory,
+		name: name || `${role}_${Game.time}_${Math.floor(Math.random() * 1000)}`,
+		critical: critical
+	}
+
+	if (!this.roomSpawnQueue) this.roomSpawnQueue = [];
+	this.roomSpawnQueue.push(spawnOrder as SpawnOrder);
+}
+*/

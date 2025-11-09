@@ -1,30 +1,30 @@
 {
-  "compilerOptions": {
-    "module": "esnext",
-    "lib": ["es2018"],
-    "target": "es2018",
-    "moduleResolution": "Node",
-    "outDir": "dist",
-    "baseUrl": "src/",
-    "sourceMap": false,
-    "strict": true,
-    "experimentalDecorators": true,
-    "noImplicitReturns": true,
-    "noImplicitAny": false,
-    "allowSyntheticDefaultImports": true,
-    "allowUnreachableCode": false
-  },
-  "include": [
-	"src/**/*.ts", "src/**/*.d.ts", "src/functions/**/*.ts"
-  ],
-  "exclude": [
-    "node_modules"
-  ],
-	"paths": {
-		"@globals": ["./src/functions/utils/globalFuncs"],
-		"@protos/*": ["./src/prototypes/*"],
-		"@managers/*": ["./src/managers/*"],
-		"@utils/*": ["./src/functions/utils/*"],
-		"@functions/*": ["./src/functions/*"],
-	}
+	"compilerOptions": {
+		"module": "esnext",
+		"lib": ["es2018"],
+		"target": "es2018",
+		"moduleResolution": "Node",
+		"outDir": "C:/Users/danvi/AppData/Local/Screeps/scripts/screeps_newbieland_net___21025/default",
+		"baseUrl": "./src/",
+		"sourceMap": false,
+		"strict": true,
+		"experimentalDecorators": true,
+		"noImplicitReturns": true,
+		"noImplicitAny": false,
+		"allowSyntheticDefaultImports": true,
+		"allowUnreachableCode": false,
+		"paths": {
+			"@globals": ["./functions/utils/globals"],
+			"@constants": ["./functions/utils/constants"],
+			"@protos/*": ["./prototypes/*"],
+			"@roles/*": ["./roles/*"],
+			"@managers/*": ["./managers/*"],
+			"@modules/*": ["./modules/*"],
+			"@utils/*": ["./functions/utils/*"],
+			"@funcs/*": ["./functions/*"],
+			"@main": ["./main"],
+		}
+	},
+	"include": [ "src/**/*.ts", "src/**/*.d.ts", "src/functions/**/*.ts" ],
+	"exclude": [ "node_modules", "unused/**/*.ts" ],
 }
