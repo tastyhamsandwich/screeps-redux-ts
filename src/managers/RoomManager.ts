@@ -22,7 +22,7 @@ export default class RoomManager {
 		this.stats = this.gatherStats();
 		this.spawnManager = new SpawnManager(room);
 		this.legacySpawnManager = legacySpawnManager;
-		this.basePlanner = new BasePlanner(room);
+		this.basePlanner = null; // Only create when regeneration is needed
 
 		// Initialize all required room memory structures
 		if (!this.room.memory.data) this.room.memory.data = {};
@@ -81,7 +81,7 @@ export default class RoomManager {
 		// Determine whether to regenerate plan
 		if (!mem.basePlan) regenerate = true;
 		else if (mem.basePlan.rclAtGeneration !== rcl) regenerate = true;
-		else if (Game.time - mem.basePlan.lastGenerated > 10000) regenerate = true; // optional periodic refresh
+		// Removed periodic refresh - base plans are deterministic and don't need regeneration
 
 		// If regeneration is required
 		if (regenerate) {
@@ -688,10 +688,9 @@ export default class RoomManager {
 		// Early return: Skip expensive room.find() calls if we've completed all structures for current RCL
 		const plannedForCurrentRCL = plan.rclSchedule[rcl] || [];
 		if (mem.buildQueue.index >= plannedForCurrentRCL.length) {
-			// Only recheck every 50 ticks to see if something was destroyed
-			if (now - mem.buildQueue.lastBuiltTick < 50) {
-				return;
-			}
+			// All structures for this RCL are complete - no need to process build queue
+			// RCL upgrades will reset the build queue at line 679
+			return;
 		}
 
 		// Safety limit: 5 new sites per tick unless CPU is constrained
@@ -777,11 +776,14 @@ export default class RoomManager {
 			}
 		}
 
-		// If we've finished the current RCL batch, clear or prepare for next
+		// If we've finished the current RCL batch, log completion
+		// Don't reset index - leave it at length to prevent repeated expensive room.find() calls
 		if (mem.buildQueue.index >= plannedForRCL.length) {
-			mem.buildQueue.index = 0;
-			mem.buildQueue.activeRCL = rcl + 1;
-			console.log(`[${this.room.name}] Finished building all RCL${rcl} structures.`);
+			// Log only once when first completing the RCL, not every tick
+			if (mem.buildQueue.index === plannedForRCL.length) {
+				console.log(`[${this.room.name}] Finished building all RCL${rcl} structures.`);
+				mem.buildQueue.index++; // Increment past length to prevent this log from repeating
+			}
 		}
 
 		const visual = new RoomVisual(this.room.name);
