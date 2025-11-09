@@ -1,7 +1,7 @@
 
 // Import Global Functions and VizFuncs
-import { visualRCProgress, calcTickTime 	} from "@globals";
-import { buildProgress, 	 repairProgress } from '@functions/visual/progress';
+import * as FUNC from '@functions/index';
+
 
 // Import Manager Daemons
 import RoomManager 					from "@managers/RoomManager";
@@ -29,25 +29,16 @@ export const creepRoleCounts: { [key: string]: any } = {
 	remoteharvester: 1,
 }
 let tickCount = 0;
-if (Memory.globalData.onBirthInitComplete === undefined || Memory.globalData.onBirthInitComplete === false)
-	global.initGlobal();
 
 module.exports.loop = function() {
 
-	global.initGlobal();
+	if (Memory.globalData.onBirthInitComplete === undefined || Memory.globalData.onBirthInitComplete === false)
+		FUNC.initGlobal();
 
-	calcTickTime();
-
-	// Generate pixels with extra CPU time
-	if (Game.shard.name === 'shard3') {
-		if (Game.cpu.bucket >= 10000) {
-			Game.cpu.generatePixel()
-			console.log('[GENERAL]: CPU Bucket at limit, generating pixel...');
-		}
-	}
+	FUNC.calcTickTime();
 
 	// Automatically delete memory of missing creeps
-	for (const name in Memory.creeps) if (!(name in Game.creeps))	delete Memory.creeps[name];
+	FUNC.creepCleanup(creepRoleCounts);
 
 	// Execute specific role-based creep script for every creep, based on role assigned in CreepMemory
 	for (const name in Game.creeps) {
@@ -148,7 +139,7 @@ module.exports.loop = function() {
 		if (numCSites < numCSitesPrevious) 			room.cacheObjects();
 
 		_.forEach(cSites, function (cSite: ConstructionSite) {
-			if (cSite.progress > 0) buildProgress(cSite, room);
+			if (cSite.progress > 0) FUNC.buildProgress(cSite, room);
 		});
 
 		//* From here, only rooms where we own the controller have this code ran
@@ -200,7 +191,7 @@ module.exports.loop = function() {
 				} */
 			}
 
-			if (room.controller.level >= 1) visualRCProgress(room.controller);
+			if (room.controller.level >= 1) FUNC.visualRCProgress(room.controller);
 		} //* end of if (room.controller && room.controller.my) {}
 	}) //* end of _.forEach(Game.rooms, room => {}) loop
 

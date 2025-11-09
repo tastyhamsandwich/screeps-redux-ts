@@ -1,6 +1,4 @@
-import { creepRoleCounts } from '@main';
-
-export default function creepCleanup(countObj: { [key: string]: number }): void {
+export function creepCleanup(countObj: { [key: string]: number }): void {
 	for (let name in Memory.creeps) {
 		if (!Game.creeps[name]) {
 			const role = Memory.creeps[name].role;

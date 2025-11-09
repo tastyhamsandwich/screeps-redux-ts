@@ -3,6 +3,39 @@ import RoomManager from '@managers/RoomManager';
 declare global {
 
 	// MAIN.TS INTERFACES
+	namespace NodeJS {
+		interface Global {
+			adjustPathingValues(role: string, reuseValue: number, ignoreCreeps: boolean): void;
+			splitRoomName(roomName: string): [string, number, string, number];
+			roomExitsTo(roomName: string, direction: DirectionConstant | number | string): string;
+			calcPath(startPos: RoomPosition, endPos: RoomPosition): { path: RoomPosition[], length: number, ops: number, cost: number, incomplete: boolean };
+			calcPathLength(startPos: RoomPosition, endPos: RoomPosition): number;
+			asRoomPosition(value: RoomPosition | { pos?: RoomPosition } | undefined | null): RoomPosition | null;
+			log(logMsg: string | string[], room: Room | false): void;
+			createRoomFlag(room: string): string | null;
+			validateRoomName(roomName: string): RoomName;
+			randomInt(min: number, max: number): number;
+			randomColor(): ColorConstant;
+			randomColorAsInt(): number;
+			determineBodyParts(role: string, maxEnergy: number, extras?: { [key: string]: any }): BodyPartConstant[] | undefined;
+			initGlobal(override?: boolean): boolean;
+			calcBodyCost(body: BodyPartConstant[] | undefined | null): number;
+			capitalize(string: string): string;
+			log(): void;
+			PART_COST: Record<BodyPartConstant, number>;
+			pathing: { [key: string]: any };
+			roomManagers: { [roomName: string]: RoomManager };
+			tickTime: number;
+			tickCount: number;
+			RoomVis: {
+				toggle(roomName: string, layer: string): void;
+				enableAll(roomName: string): void;
+				disableAll(roomName: string): void;
+				status(roomName: string): void;
+			}
+		}
+	}
+
 
 	// INTERFACE: Base Memory Extension
 	interface Memory {
@@ -348,38 +381,6 @@ declare global {
 	type alignment = 'left' | 'right' | 'center';
 	type CreepRole = "harvester" | "upgrader" | "builder" | "repairer" | "defender" | "filler" | "hauler"
 	type RoomName = `${'W' | 'E'}${number}${'N' | 'S'}${number}`
-
-	// Syntax for adding properties to `global` (ex "global.log")
-	namespace NodeJS {
-		interface Global {
-			roomManagers: { [roomName: string]: RoomManager };
-			splitRoomName(roomName: string): [string, number, string, number];
-			roomExitsTo(roomName: string, direction: DirectionConstant | number | string): string;
-			calcPath(startPos: RoomPosition, endPos: RoomPosition): { path: RoomPosition[], length: number, ops: number, cost: number, incomplete: boolean };
-			calcPathLength(startPos: RoomPosition, endPos: RoomPosition): number;
-			asRoomPosition(value: RoomPosition | { pos?: RoomPosition } | undefined | null): RoomPosition | null;
-			log(logMsg: string | string[], room: Room | false): void;
-			createRoomFlag(room: string): string | null;
-			validateRoomName(roomName: string): RoomName;
-			randomInt(min: number, max: number): number;
-			randomColor(): ColorConstant;
-			randomColorAsInt(): number;
-			determineBodyParts(role: string, maxEnergy: number, extras?: { [key: string]: any }): BodyPartConstant[] | undefined;
-			initGlobal(override?: boolean): boolean;
-			calcBodyCost(body: BodyPartConstant[] | undefined | null): number;
-			PART_COST: Record<BodyPartConstant, number>;
-			pathing: { [key: string]: any };
-			log(): void;
-			tickTime: number;
-			tickCount: number;
-			RoomVis: {
-				toggle(roomName: string, layer: string): void;
-				enableAll(roomName: string): void;
-				disableAll(roomName: string): void;
-				status(roomName: string): void;
-			}
-		}
-	}
 
 	// ROOM MANAGER INTERFACES
 	interface RoomData {
