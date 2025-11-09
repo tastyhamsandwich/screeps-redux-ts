@@ -24,9 +24,19 @@ export default class RoomManager {
 		this.legacySpawnManager = legacySpawnManager;
 		this.basePlanner = new BasePlanner(room);
 
-		// Initialize room memory if needed
-		if (!this.room.memory.data) {
-			this.room.memory.data = {};
+		// Initialize all required room memory structures
+		if (!this.room.memory.data) this.room.memory.data = {};
+		if (!this.room.memory.flags) this.room.memory.flags = {};
+		if (!this.room.memory.visuals) this.room.memory.visuals = {};
+		if (!this.room.memory.quotas) this.room.memory.quotas = {};
+		if (!this.room.memory.objects) this.room.memory.objects = {};
+		if (!this.room.memory.containers) {
+			this.room.memory.containers = {} as any; // Will be populated as containers are discovered
+		}
+		if (!this.room.memory.settings) {
+			this.room.memory.settings = {
+				basePlanning: { debug: false }
+			} as any; // Partial initialization - other settings added as needed
 		}
 	}
 
@@ -50,10 +60,6 @@ export default class RoomManager {
 
 		rmData.firstTimeInit ??= true;
 
-		// Run spawn manager according to advSpawnSystem flag
-		if (rmData.advSpawnSystem) this.spawnManager.run();
-		else this.legacySpawnManager.run(this.room);
-
 		// Assess need for bootstrapping mode
 		this.updateBootstrapState();
 
@@ -61,10 +67,9 @@ export default class RoomManager {
 		const rcl = this.room.controller?.level ?? 0;
 		const mem = this.room.memory;
 
-		// Initialize if needed
-		if (!this.basePlan) this.basePlan = null;
-		if (!this.basePlanner) this.basePlanner = null;
+		// Initialize visual settings if needed
 		if (!rmData.basePlanGenerated) {
+			if (!this.room.memory.visuals) this.room.memory.visuals = {};
 			this.room.memory.visuals.visDistTrans ??= true;
 			this.room.memory.visuals.visFloodFill ??= true;
 			this.room.memory.visuals.visBasePlan ??= true;
@@ -83,24 +88,29 @@ export default class RoomManager {
 			this.basePlanner = new BasePlanner(this.room);
 			this.basePlan = this.basePlanner.createPlan();
 
-			mem.basePlan = {
-				lastGenerated: Game.time,
-				rclAtGeneration: rcl,
-				checksum: computePlanChecksum(this.basePlan),
-				data: this.basePlan
-			};
-			console.log(`[${this.room.name}] Base plan regenerated for RCL${rcl}`);
-			// Otherwise, load cached plan (only assign from memory if not already loaded)
+			if (this.basePlan) {
+				mem.basePlan = {
+					lastGenerated: Game.time,
+					rclAtGeneration: rcl,
+					checksum: computePlanChecksum(this.basePlan),
+					data: this.basePlan
+				};
+				console.log(`[${this.room.name}] Base plan regenerated for RCL${rcl}`);
+				// Otherwise, load cached plan (only assign from memory if not already loaded)
+			}
 		} else if (!this.basePlan && mem.basePlan) this.basePlan = mem.basePlan.data;
 
 		// Process the plan if available
 		if (this.basePlan) this.handleBasePlan(this.basePlan);
 
 		// Assess creep needs and submit spawn requests if using advanced spawn manager
-		if (rmData.advancedSpawnLogic)
+		if (rmData.advSpawnSystem) {
+			this.spawnManager.run();
 			this.assessCreepNeeds();
-		else // Otherwise executre Legacy spawn manager logic
+		} else {
+			// Otherwise execute legacy spawn manager logic
 			this.legacySpawnManager.run(this.room);
+		}
 
 		// Assign tasks to worker creeps
 		this.assignCreepTasks();
@@ -196,6 +206,12 @@ export default class RoomManager {
 		const roomName = this.room.name;
 		const rMem = this.room.memory;
 
+		// Throttle spawn assessments to prevent duplicate requests (every 5 ticks)
+		if (rMem.data.lastSpawnAssessment && Game.time - rMem.data.lastSpawnAssessment < 5) {
+			return;
+		}
+		rMem.data.lastSpawnAssessment = Game.time;
+
 		// Pull creep role caps from room memory, or set to default value if none are set
 		const harvesterTarget 			= _.get(rMem, ['quotas', 'harvesters'], 2);
 		const fillerTarget 					= _.get(rMem, ['quotas', 'fillers'], 2);
@@ -204,19 +220,23 @@ export default class RoomManager {
 		const repairerTarget 				= _.get(rMem, ['quotas', 'repairers'], 0);
 		const reserverTarget 				= _.get(rMem, ['quotas', 'reservers'], 1);
 		const haulerTarget 					= _.get(rMem, ['quotas', 'haulers'], 2);
-		const defenderTarget				= _.get(rMem, ['quotas', 'defenders', 2]);
+		const defenderTarget				= _.get(rMem, ['quotas', 'defenders'], 2);
 		const remoteharvesterTarget = _.get(rMem, ['quotas', 'remoteharvesters'], 2);
 
-		// Pull current amount of creeps alive by RFQ (Role For Quota)
-		const harvesters 				= _.filter(Game.creeps, (c) => (c.memory.RFQ == 'harvester' 			|| c.memory.role == 'harvester') 			 && c.memory.home == roomName);
-		const fillers 					= _.filter(Game.creeps, (c) => (c.memory.RFQ == 'filler' 					|| c.memory.role == 'filler') 				 && c.memory.home == roomName);
-		const upgraders 				= _.filter(Game.creeps, (c) => (c.memory.RFQ == 'upgrader' 				|| c.memory.role == 'upgrader') 			 && c.memory.home == roomName);
-		const builders 					= _.filter(Game.creeps, (c) => (c.memory.RFQ == 'builder' 				|| c.memory.role == 'builder') 				 && c.memory.home == roomName);
-		const repairers 				= _.filter(Game.creeps, (c) => (c.memory.RFQ == 'repairer' 				|| c.memory.role == 'repairer') 			 && c.memory.home == roomName);
-		const reservers 				= _.filter(Game.creeps, (c) => (c.memory.RFQ == 'reserver' 				|| c.memory.role == 'reserver') 			 && c.memory.home == roomName);
-		const defenders 				= _.filter(Game.creeps, (c) => (c.memory.RFQ == 'defender' 				|| c.memory.role == 'defender') 			 && c.memory.home == roomName);
-		const haulers 					= _.filter(Game.creeps, (c) => (c.memory.RFQ == 'hauler' 					|| c.memory.role == 'hauler') 				 && c.memory.home == roomName);
-		const remoteharvesters 	= _.filter(Game.creeps, (c) => (c.memory.RFQ == 'remoteharvester' || c.memory.role == 'remoteharvester') && c.memory.home == roomName);
+		// Pull current amount of creeps alive by RFQ (Role For Quota) - Single pass optimization
+		const creepsByRole = _.groupBy(
+			_.filter(Game.creeps, c => c.memory.home === roomName),
+			c => c.memory.RFQ || c.memory.role
+		);
+		const harvesters = creepsByRole['harvester'] || [];
+		const fillers = creepsByRole['filler'] || [];
+		const upgraders = creepsByRole['upgrader'] || [];
+		const builders = creepsByRole['builder'] || [];
+		const repairers = creepsByRole['repairer'] || [];
+		const reservers = creepsByRole['reserver'] || [];
+		const defenders = creepsByRole['defender'] || [];
+		const haulers = creepsByRole['hauler'] || [];
+		const remoteharvesters = creepsByRole['remoteharvester'] || [];
 
 		// Get current spawn queue to check pending spawns
 		const queue = this.spawnManager.getQueue();
@@ -460,9 +480,8 @@ export default class RoomManager {
 		const sources = this.resources.sources;
 		let totalWorkParts = 0;
 
-		for (const harvester of harvesters) {
+		for (const harvester of harvesters)
 			totalWorkParts += harvester.body.filter(part => part.type === WORK).length;
-		}
 
 		// Each source can support 5 WORK parts (generates 10 energy/tick), need at least that many
 		const neededWorkParts = sources.length * 5;
@@ -539,177 +558,6 @@ export default class RoomManager {
 		}
 	}
 
-	/** Finds valid terrain positions near a given RoomPos for placing a container. */
-	private findContainerSpotsNear(pos: RoomPosition, range: number): RoomPosition[] {
-		const spots: RoomPosition[] = [];
-
-		for (let dx = -range; dx <= range; dx++) {
-			for (let dy = -range; dy <= range; dy++) {
-				if (dx === 0 && dy === 0) continue;
-
-				const p = new RoomPosition(pos.x + dx, pos.y + dy, pos.roomName);
-
-				// Skip walls
-				if (p.lookFor(LOOK_TERRAIN)[0] === 'wall') continue;
-
-				// Skip existing structures or construction sites
-				if (p.lookFor(LOOK_STRUCTURES).length > 0) continue;
-				if (p.lookFor(LOOK_CONSTRUCTION_SITES).length > 0) continue;
-
-				spots.push(p);
-			}
-		}
-
-		return spots;
-	}
-
-	/** Ensures there is a container near the controller (for upgraders). */
-	private planControllerContainer(): void {
-		const controller = this.room.controller;
-		if (!controller) return;
-
-		const data = (this.room.memory.data ||= {});
-		const debugMode = this.room.memory.settings?.basePlanning?.debug;
-
-		// Skip if we already have a valid record
-		if (data.controllerContainer) {
-			const obj = Game.getObjectById(data.controllerContainer);
-			if (obj && (obj as StructureContainer | ConstructionSite).pos) return;
-		}
-
-		// Look for an existing container or site
-		const existing = controller.pos.findInRange(FIND_STRUCTURES, 3, {
-			filter: s => s.structureType === STRUCTURE_CONTAINER
-		})[0] as StructureContainer | undefined;
-
-		if (existing) {
-			data.controllerContainer = existing.id;
-			return;
-		}
-
-		const site = controller.pos.findInRange(FIND_CONSTRUCTION_SITES, 3, {
-			filter: s => s.structureType === STRUCTURE_CONTAINER
-		})[0] as ConstructionSite | undefined;
-
-		if (site) {
-			data.controllerContainer = site.id;
-			return;
-		}
-
-		// Find a suitable empty position near the controller
-		const openSpots = this.findContainerSpotsNear(controller.pos, 3);
-		if (openSpots.length > 0) {
-			const pos = openSpots[0];
-			const result = this.room.createConstructionSite(pos, STRUCTURE_CONTAINER);
-			if (result === OK) {
-				data.controllerContainer = this.room.lookForAt(LOOK_CONSTRUCTION_SITES, pos.x, pos.y)[0]?.id;
-				if (debugMode) console.log(`${this.room.name}: Planned controller container at ${pos.x},${pos.y}`);
-			}
-		}
-	}
-
-	/** Ensures there is a container near the room's mineral deposit (RCL >= 6). */
-	private planMineralContainer(): void {
-		const mineral = this.resources.minerals[0];
-		if (!mineral || (this.room.controller?.level ?? 0) < 6) return;
-
-		const data = (this.room.memory.data ||= {});
-		const debugMode = this.room.memory.settings?.basePlanning?.debug;
-
-		if (data.mineralContainer?.container) {
-			const obj = Game.getObjectById(data.mineralContainer.container);
-			if (obj && (obj as StructureContainer | ConstructionSite).pos) return;
-		}
-
-		const existing = mineral.pos.findInRange(FIND_STRUCTURES, 2, {
-			filter: s => s.structureType === STRUCTURE_CONTAINER
-		})[0] as StructureContainer | undefined;
-
-		if (existing) {
-			data.mineralContainer = { mineral: mineral.id, container: existing.id };
-			return;
-		}
-
-		const site = mineral.pos.findInRange(FIND_CONSTRUCTION_SITES, 2, {
-			filter: s => s.structureType === STRUCTURE_CONTAINER
-		})[0] as ConstructionSite | undefined;
-
-		if (site) {
-			data.mineralContainer = { mineral: mineral.id, container: site.id };
-			return;
-		}
-
-		const openSpots = this.findContainerSpotsNear(mineral.pos, 2);
-		if (openSpots.length > 0) {
-			const pos = openSpots[0];
-			const result = this.room.createConstructionSite(pos, STRUCTURE_CONTAINER);
-			if (result === OK) {
-				data.mineralContainer = { mineral: mineral.id, container: this.room.lookForAt(LOOK_CONSTRUCTION_SITES, pos.x, pos.y)[0]?.id };
-				if (debugMode) console.log(`${this.room.name}: Planned mineral container at ${pos.x},${pos.y}`);
-			}
-		}
-	}
-
-	/** Plans extension construction sites around spawns, respecting RCL limits. */
-	private planExtensions(): void {
-		if (!this.room.controller?.my) return;
-
-		const debugMode = this.room.memory.settings?.basePlanning?.debug;
-		const spawns = this.resources.spawns;
-		if (spawns.length === 0) return;
-
-		const spawn = spawns[0]; // assume main spawn
-		const rcl = this.stats.controllerLevel;
-		const maxExtensions = CONTROLLER_STRUCTURES[STRUCTURE_EXTENSION][rcl];
-
-		// Count existing and in-progress extensions
-		const existingExtensions = this.room.find(FIND_STRUCTURES, {
-			filter: s => s.structureType === STRUCTURE_EXTENSION
-		}).length;
-		const plannedExtensions = this.room.find(FIND_CONSTRUCTION_SITES, {
-			filter: s => s.structureType === STRUCTURE_EXTENSION
-		}).length;
-
-		const total = existingExtensions + plannedExtensions;
-		if (total >= maxExtensions) return;
-
-		// Place extensions in expanding rings around spawn
-		const spots = this.findOpenPositionsAround(spawn.pos, 2, 8);
-
-		for (const pos of spots) {
-			if (this.isBuildableTile(pos)) {
-				const result = this.room.createConstructionSite(pos, STRUCTURE_EXTENSION);
-				if (result === OK) {
-					if (debugMode) console.log(`${this.room.name}: Planned extension at ${pos.x},${pos.y}`);
-					break; // place one per tick for safety
-				}
-			}
-		}
-	}
-
-	/** Returns an array of positions in concentric rings around a center position. */
-	private findOpenPositionsAround(center: RoomPosition, minRange: number, maxRange: number): RoomPosition[] {
-		const positions: RoomPosition[] = [];
-
-		for (let r = minRange; r <= maxRange; r++) {
-			for (let dx = -r; dx <= r; dx++) {
-				for (let dy = -r; dy <= r; dy++) {
-					if (Math.abs(dx) !== r && Math.abs(dy) !== r) continue; // perimeter only
-					const pos = new RoomPosition(center.x + dx, center.y + dy, center.roomName);
-					positions.push(pos);
-				}
-			}
-		}
-		return positions;
-	}
-
-	/** Checks whether a given position is suitable for construction. */
-	private isBuildableTile(pos: RoomPosition): boolean {
-		if (pos.lookFor(LOOK_TERRAIN)[0] === 'wall') return false;
-		if (pos.lookFor(LOOK_STRUCTURES).length > 0) return false;
-		if (pos.lookFor(LOOK_CONSTRUCTION_SITES).length > 0) return false;
-		return true;
-	}
 
 	/** Manages tower operations (defense and repair) */
 	private manageTowers(): void {
@@ -742,39 +590,6 @@ export default class RoomManager {
 		}
 	}
 
-	private updateRoomContainers(): void {
-		if (!this.room.memory.objects) this.room.cacheObjects();
-
-		const sources = this.room.find(FIND_SOURCES);
-
-		for (let source of sources) {
-			const containers = source.pos.findInRange(FIND_STRUCTURES, 2, { filter: { structureType: STRUCTURE_CONTAINER }});
-
-			if (!this.room.memory.containers.sourceOne) {
-				if (source.id === this.room.memory.objects.sources[0])
-					this.room.memory.containers.sourceOne = containers[0].id;
-				else if (this.room.memory.objects.sources.length > 1 && source.id === this.room.memory.objects.sources[1])
-					this.room.memory.containers.sourceTwo = containers[0].id;
-			}
-		}
-	}
-
-	private findSourceContainers(): StructureContainer[] | boolean {
-		const sources = this.room.find(FIND_SOURCES);
-		let allContainers: StructureContainer[] = [];
-
-		for (let source of sources) {
-			const nearbyContainers: StructureContainer[] = source.pos.findInRange(FIND_STRUCTURES, 2, { filter: { structureType: STRUCTURE_CONTAINER }});
-			allContainers = allContainers.concat(nearbyContainers);
-		}
-
-		return (allContainers.length) ? allContainers : false;
-	}
-
-	/** Calculates the energy cost of a body configuration */
-	private calculateBodyCost(body: BodyPartConstant[]): number {
-		return body.reduce((cost, part) => cost + BODYPART_COST[part], 0);
-	}
 
 	/** Gets the current room resources (for external access) */
 	getResources(): RoomResources {
@@ -789,105 +604,6 @@ export default class RoomManager {
 	/** Gets the SpawnManager instance (for external access) */
 	getSpawnManager(): SpawnManager {
 		return this.spawnManager;
-	}
-
-	/** Ensures each source has a container (or construction site) planned near it. */
-	private planSourceContainers(): void {
-		if (!this.room.controller?.my) return; // only plan in owned rooms
-
-		const debugMode = this.room.memory.settings?.basePlanning?.debug;
-		const data = (this.room.memory.data ||= {});
-		const spawn = this.resources.spawns[0];
-		if (!spawn) return; // Need a spawn to calculate optimal positions
-
-		for (const [index, source] of this.resources.sources.entries()) {
-			const key = index === 0 ? 'sourceOne' : 'sourceTwo';
-
-			// If we already have a valid container reference, skip
-			const existingId = data[key]?.container;
-			if (existingId) {
-				const obj = Game.getObjectById(existingId);
-				if (obj && (obj as StructureContainer | ConstructionSite).pos) continue;
-			}
-
-			// Look for an existing container nearby
-			const existingContainer = source.pos.findInRange(FIND_STRUCTURES, 2, {
-				filter: s => s.structureType === STRUCTURE_CONTAINER
-			})[0] as StructureContainer | undefined;
-
-			if (existingContainer) {
-				data[key] = { source: source.id, container: existingContainer.id };
-				continue;
-			}
-
-			// Look for an existing construction site nearby
-			const site = source.pos.findInRange(FIND_CONSTRUCTION_SITES, 2, {
-				filter: s => s.structureType === STRUCTURE_CONTAINER
-			})[0] as ConstructionSite | undefined;
-
-			if (site) {
-				data[key] = { source: source.id, container: site.id };
-				continue;
-			}
-
-			// Otherwise, plan a new container position optimized for spawn distance
-			const openSpots = this.findContainerSpotsNear(source.pos, 1);
-			if (openSpots.length > 0) {
-				// Find the spot closest to spawn using PathFinder
-				const bestSpot = this.findClosestSpotToSpawn(openSpots, spawn.pos);
-				if (bestSpot) {
-					const result = this.room.createConstructionSite(bestSpot, STRUCTURE_CONTAINER);
-					if (result === OK) {
-						if (debugMode) console.log(`${this.room.name}: Planned container at ${bestSpot.x},${bestSpot.y} for source ${source.id} (optimized for spawn distance)`);
-					}
-				}
-			}
-		}
-	}
-
-	/** Finds the position from a list that has the shortest path distance to the spawn. */
-	private findClosestSpotToSpawn(positions: RoomPosition[], spawnPos: RoomPosition): RoomPosition | null {
-		if (positions.length === 0) return null;
-		if (positions.length === 1) return positions[0];
-
-		let bestPos: RoomPosition | null = null;
-		let shortestPathLength = Infinity;
-
-		for (const pos of positions) {
-			const result = PathFinder.search(spawnPos, { pos, range: 0 }, {
-				plainCost: 2,
-				swampCost: 10,
-				roomCallback: (roomName) => {
-					const room = Game.rooms[roomName];
-					if (!room) return false;
-
-					const costs = new PathFinder.CostMatrix();
-
-					// Avoid structures
-					room.find(FIND_STRUCTURES).forEach(struct => {
-						if (struct.structureType !== STRUCTURE_ROAD && struct.structureType !== STRUCTURE_CONTAINER) {
-							costs.set(struct.pos.x, struct.pos.y, 0xff);
-						}
-					});
-
-					// Prefer roads
-					room.find(FIND_STRUCTURES, {
-						filter: s => s.structureType === STRUCTURE_ROAD
-					}).forEach(road => {
-						costs.set(road.pos.x, road.pos.y, 1);
-					});
-
-					return costs;
-				}
-			});
-
-			if (!result.incomplete && result.path.length < shortestPathLength) {
-				shortestPathLength = result.path.length;
-				bestPos = pos;
-			}
-		}
-
-		return bestPos;
 	}
 
 	/** Sets what tasks need to be prioritized based on new RCL */
@@ -957,7 +673,7 @@ export default class RoomManager {
 		const mem = this.room.memory;
 		const rcl = this.stats.controllerLevel;
 		const now = Game.time;
-		const debugMode = this.room.memory.settings.basePlanning.debug;
+		const debugMode = this.room.memory.settings?.basePlanning?.debug || false;
 
 		// Initialize or reset plan
 		if (!mem.buildQueue || mem.buildQueue.activeRCL !== rcl) {
@@ -1001,6 +717,10 @@ export default class RoomManager {
 				return pa - pb;
 			});
 
+		// Track placements and errors for batch logging
+		const placedStructures: string[] = [];
+		const placementErrors: Array<{structure: string, pos: {x: number, y: number}, error: string}> = [];
+
 		for (const entry of remaining) {
 			const key = `${entry.pos.x},${entry.pos.y},${entry.structure}`;
 			if (existingPositions.has(key)) {
@@ -1015,8 +735,7 @@ export default class RoomManager {
 				created++;
 				mem.buildQueue.index++;
 				mem.buildQueue.lastBuiltTick = now;
-				if (debugMode)
-					console.log(`[${this.room.name}] Queued ${entry.structure} @ ${entry.pos.x},${entry.pos.y} (RCL${rcl})`);
+				placedStructures.push(`${entry.structure}@${entry.pos.x},${entry.pos.y}`);
 				if (created >= MAX_PER_TICK) break;
 			} else {
 				// Handle errors from createConstructionSite
@@ -1030,15 +749,31 @@ export default class RoomManager {
 
 				const errorMsg = errorMessages[result] || `Unknown error (${result})`;
 
-				// Log error but skip this placement and continue
-				if (debugMode)
-					console.log(`[${this.room.name}] Failed to place ${entry.structure} @ ${entry.pos.x},${entry.pos.y}: ${errorMsg}`);
+				// Track error for batch logging
+				placementErrors.push({
+					structure: entry.structure,
+					pos: { x: entry.pos.x, y: entry.pos.y },
+					error: errorMsg
+				});
 
 				// Skip this item and move to next
 				mem.buildQueue.index++;
 
 				// Stop if we hit the construction site limit
 				if (result === ERR_FULL) break;
+			}
+		}
+
+		// Batch log placements and errors (only if debug mode is enabled)
+		if (debugMode) {
+			if (placedStructures.length > 0) {
+				console.log(`[${this.room.name}] Placed ${placedStructures.length} construction sites for RCL${rcl}: ${placedStructures.join(', ')}`);
+			}
+			if (placementErrors.length > 0) {
+				console.log(`[${this.room.name}] Failed to place ${placementErrors.length} structures:`);
+				for (const err of placementErrors) {
+					console.log(`  - ${err.structure}@${err.pos.x},${err.pos.y}: ${err.error}`);
+				}
 			}
 		}
 
