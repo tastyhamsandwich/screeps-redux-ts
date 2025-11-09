@@ -3,9 +3,6 @@ import RoomManager from '@managers/RoomManager';
 declare global {
 
 	// MAIN.TS INTERFACES
-	interface Global {
-		roomManagers: { [roomName: string]: RoomManager };
-	}
 
 	// INTERFACE: Base Memory Extension
 	interface Memory {
@@ -69,8 +66,13 @@ declare global {
 			data: PlanResult;
 		};
 		visuals: {
-			[key: string]: any;
-		}
+			visDistTrans?: boolean;
+			visFloodFill?: boolean;
+			visBasePlan?: boolean;
+			visPlanInfo?: boolean;
+			visBuildProgress?: boolean;
+			showPlanning?: boolean;
+		};
 	}
 
 	// INTERFACE: Creep Memory Extension
@@ -370,6 +372,12 @@ declare global {
 			log(): void;
 			tickTime: number;
 			tickCount: number;
+			RoomVis: {
+				toggle(roomName: string, layer: string): void;
+				enableAll(roomName: string): void;
+				disableAll(roomName: string): void;
+				status(roomName: string): void;
+			}
 		}
 	}
 
@@ -443,21 +451,72 @@ declare global {
 		| 'mineral'
 		| 'wall';
 
-	export interface StructurePlacement {
+	interface StructurePlacement {
 		structure: StructureConstant | 'container' | 'road';
 		pos: Pos;
 	}
 
-	export interface PlanResult {
+	/* interface PlanResult {
 		roomName: string;
 		baseCenter: Pos; // the chosen starting position
 		placements: StructurePlacement[]; // final placements for RCL8
 		tileUsageGrid: TileUsage[][]; // 50x50 grid of usage (y then x)
 		rclSchedule: Record<number, StructurePlacement[]>; // map RCL -> placements to enable at that RCL
 		notes?: string[];
+	} */
+
+	interface PlanResult {
+		startPos: RoomPosition;
+		placements: StructurePlacement[];
+		rclSchedule: RCLSchedule;
+		ramparts: RoomPosition[];
+		controllerArea: RoomPosition[];
+		timestamp: number;
+	}
+
+	interface StampTemplate {
+		size: number;
+		structures: {
+			dx: number;
+			dy: number;
+			structure: StructureConstant;
+			meta?: any;
+		}[];
+	}
+
+	interface StructurePlacement {
+		pos: { x: number; y: number };
+		structure: StructureConstant;
+		priority: number;
+		meta?: any;
+	}
+
+	interface RoomData {
+		basePlanGenerated?: boolean;
+		[key: string]: any;
 	}
 
 
+
+	interface RCLSchedule {
+		[rcl: number]: StructurePlacement[];
+	}
+
+	type RCLLevel = 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8;
+
+
+	type InnerPositions = Array<RoomPosition | { x: number; y: number }>;
+
+	interface DistTransOptions {
+		innerPositions?: InnerPositions;
+		visual?: boolean;
+	}
+
+	interface FloodFillOptions {
+		costMatrix?: CostMatrix;
+		costThreshold?: number;
+		visual?: boolean;
+	}
 }
 
 export {}
