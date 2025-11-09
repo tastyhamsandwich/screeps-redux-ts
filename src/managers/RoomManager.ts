@@ -159,6 +159,34 @@ export default class RoomManager {
 		};
 	}
 
+	// Public API methods
+
+	/** Get current room statistics */
+	public getStats(): RoomStats {
+		return this.stats;
+	}
+
+	/** Get current room resources */
+	public getResources(): RoomResources {
+		return this.resources;
+	}
+
+	/** Toggle base planner visuals */
+	public togglePlanVisuals(): void {
+		if (!this.room.memory.visuals) this.room.memory.visuals = {};
+		const current = this.room.memory.visuals.visBasePlan ?? false;
+		this.room.memory.visuals.visBasePlan = !current;
+		this.room.memory.visuals.visDistTrans = !current;
+		this.room.memory.visuals.visFloodFill = !current;
+		console.log(`[${this.room.name}] Base planner visuals ${!current ? 'enabled' : 'disabled'}`);
+	}
+
+	/** Force regeneration of base plan */
+	public regenerateBasePlan(): void {
+		delete this.room.memory.basePlan;
+		console.log(`[${this.room.name}] Base plan cleared - will regenerate next tick`);
+	}
+
 	/** Gathers current room statistics */
 	private gatherStats(): RoomStats {
 		const damagedStructures = this.room.find(FIND_STRUCTURES, {

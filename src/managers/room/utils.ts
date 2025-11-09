@@ -125,7 +125,10 @@ export const legacySpawnManager = {
 			.map((id: any) => Game.getObjectById(id as Id<StructureSpawn>))
 			.filter((s): s is StructureSpawn => s !== null && s.my);
 
-		const harvesters_and_fillers_satisfied = (totalWorkParts >= (room.memory.objects.sources.length * 2) && fillers.length - fillerTarget === 0);
+		const harvesters_and_fillers_satisfied = (
+			totalWorkParts >= (room.memory.objects.sources.length * 2) &&
+			(room.controller!.level < 2 || fillers.length === fillerTarget)
+		);
 		const colName = `Col1`;
 
 		if (spawns.length) {

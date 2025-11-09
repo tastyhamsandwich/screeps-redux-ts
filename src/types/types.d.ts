@@ -99,6 +99,7 @@ declare global {
 			data: PlanResult;
 		};
 		visuals: {
+			enableVisuals?: boolean;
 			visDistTrans?: boolean;
 			visFloodFill?: boolean;
 			visBasePlan?: boolean;
@@ -135,6 +136,7 @@ declare global {
 		registerLogisticalPairs(): void;
 		setQuota(roleTarget: CreepRole, newTarget: number);
 		toggleBasePlannerVisuals(): void;
+		readonly manager?: RoomManager;
 	}
 
 	type SourceAssignmentUpdate = {

@@ -198,6 +198,17 @@ export default class BasePlanner {
 		const controller = this.room.controller;
 		if (!controller) throw new Error('Room has no controller');
 
+		// Check if there's already a player-placed spawn
+		const existingSpawns = this.room.find(FIND_MY_SPAWNS);
+		if (existingSpawns.length > 0) {
+			// Use one tile below the first spawn as the center point
+			// This aligns the player's spawn with the middle spawn position (dx: 0, dy: -1) in the core stamp
+			const playerSpawn = existingSpawns[0];
+			this.startPos = new RoomPosition(playerSpawn.pos.x, playerSpawn.pos.y + 1, this.room.name);
+			console.log(`[${this.room.name}] Using existing spawn at ${playerSpawn.pos} - center point set to ${this.startPos}`);
+			return;
+		}
+
 		const sources = this.room.find(FIND_SOURCES);
 		const candidates: { pos: RoomPosition; score: number }[] = [];
 
@@ -656,20 +667,21 @@ export default class BasePlanner {
 		if (mineral) {
 			const nearPos = this.findNearestOpenPosition(mineral.pos, 1);
 			if (nearPos) {
-				// Place container and extractor
+				// Place container and extractor (both available at RCL 6)
 				const key = `${nearPos.x},${nearPos.y}`;
 				this.structurePlacements.set(key + '_mineral_container', {
 					pos: { x: nearPos.x, y: nearPos.y },
 					structure: STRUCTURE_CONTAINER,
 					priority: 2,
-					meta: { type: 'mineral' }
+					meta: { type: 'mineral', minRCL: 6 }
 				});
 
 				// Place extractor on mineral
 				this.structurePlacements.set(`${mineral.pos.x},${mineral.pos.y}_extractor`, {
 					pos: { x: mineral.pos.x, y: mineral.pos.y },
 					structure: STRUCTURE_EXTRACTOR,
-					priority: 5
+					priority: 5,
+					meta: { minRCL: 6 }
 				});
 
 				// Create road path
@@ -872,17 +884,27 @@ export default class BasePlanner {
 			const limits = STRUCTURE_LIMITS[type];
 			if (!limits) continue;
 
-			let placed = 0;
-			for (let rcl = 1; rcl <= 8; rcl++) {
-				const limit = limits[rcl];
-				const toPlace = Math.min(limit - placed, placements.length - placed);
+			// Track how many of this structure type have been assigned to each RCL
+			const assignedPerRCL: number[] = [0, 0, 0, 0, 0, 0, 0, 0, 0]; // index 0-8
 
-				for (let i = 0; i < toPlace; i++) {
-					schedule[rcl as RCLLevel].push(placements[placed + i]);
+			for (const placement of placements) {
+				const minRCL = placement.meta?.minRCL || 1;
+
+				// Find the earliest RCL where this can be placed
+				for (let rcl = minRCL; rcl <= 8; rcl++) {
+					const limit = limits[rcl];
+					const alreadyAssigned = assignedPerRCL[rcl];
+
+					// Check if we can add this structure at this RCL
+					if (alreadyAssigned < limit) {
+						schedule[rcl as RCLLevel].push(placement);
+						// Update counts for this and all subsequent RCLs
+						for (let r = rcl; r <= 8; r++) {
+							assignedPerRCL[r]++;
+						}
+						break;
+					}
 				}
-
-				placed += toPlace;
-				if (placed >= placements.length) break;
 			}
 		}
 

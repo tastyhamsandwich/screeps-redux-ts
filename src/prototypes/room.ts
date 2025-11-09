@@ -44,369 +44,173 @@ Room.prototype.link = function(): string {
  */
 Room.prototype.cacheObjects = function () {
 
-	// declare storage array for objects to cache
-	let storageArray: Id<any>[] = [];
-
-	// search room for each object type
-	const sources = 			this.find(FIND_SOURCES);
-	const minerals = 			this.find(FIND_MINERALS);
-	const deposits = 			this.find(FIND_DEPOSITS);
-	const allStructures = this.find(FIND_STRUCTURES,
-		{	filter: (i) =>
-			i.structureType == STRUCTURE_CONTROLLER 	|| i.structureType == STRUCTURE_SPAWN 			||
-			i.structureType == STRUCTURE_EXTENSION 		|| i.structureType == STRUCTURE_TOWER 			||
-			i.structureType == STRUCTURE_CONTAINER 		|| i.structureType == STRUCTURE_STORAGE 		||
-			i.structureType == STRUCTURE_RAMPART 			|| i.structureType == STRUCTURE_LINK 				||
-			i.structureType == STRUCTURE_EXTRACTOR 		|| i.structureType == STRUCTURE_LAB 				||
-			i.structureType == STRUCTURE_TERMINAL 		|| i.structureType == STRUCTURE_FACTORY 		||
-			i.structureType == STRUCTURE_POWER_BANK 	|| i.structureType == STRUCTURE_POWER_SPAWN ||
-			i.structureType == STRUCTURE_PORTAL 			|| i.structureType == STRUCTURE_OBSERVER 		||
-			i.structureType == STRUCTURE_KEEPER_LAIR 	|| i.structureType == STRUCTURE_NUKER 			||
-			i.structureType == STRUCTURE_WALL 				|| i.structureType == STRUCTURE_INVADER_CORE
-	});
-
-	const controller = 		_.filter(allStructures, { structureType: STRUCTURE_CONTROLLER 	});
-	const spawns = 				_.filter(allStructures, { structureType: STRUCTURE_SPAWN 				});
-	const extensions = 		_.filter(allStructures, { structureType: STRUCTURE_EXTENSION 		});
-	const towers = 				_.filter(allStructures, { structureType: STRUCTURE_TOWER 				});
-	const containers = 		_.filter(allStructures, { structureType: STRUCTURE_CONTAINER 		});
-	const storage = 			_.filter(allStructures, { structureType: STRUCTURE_STORAGE 			});
-	const ramparts = 			_.filter(allStructures, { structureType: STRUCTURE_RAMPART 			});
-	const links = 				_.filter(allStructures, { structureType: STRUCTURE_LINK 				});
-	const extractor = 		_.filter(allStructures, { structureType: STRUCTURE_EXTRACTOR 		});
-	const labs = 					_.filter(allStructures, { structureType: STRUCTURE_LAB 					});
-	const terminal = 			_.filter(allStructures, { structureType: STRUCTURE_TERMINAL 		});
-	const factory = 			_.filter(allStructures, { structureType: STRUCTURE_FACTORY 			});
-	const observer = 			_.filter(allStructures, { structureType: STRUCTURE_OBSERVER 		});
-	const powerspawn = 		_.filter(allStructures, { structureType: STRUCTURE_POWER_SPAWN 	});
-	const nuker = 				_.filter(allStructures, { structureType: STRUCTURE_NUKER 				});
-	const keeperlairs = 	_.filter(allStructures, { structureType: STRUCTURE_KEEPER_LAIR 	});
-	const powerbanks = 		_.filter(allStructures, { structureType: STRUCTURE_POWER_BANK 	});
-	const portals = 			_.filter(allStructures, { structureType: STRUCTURE_PORTAL 			});
-	const invadercores = 	_.filter(allStructures, { structureType: STRUCTURE_INVADER_CORE });
-	const walls = 				_.filter(allStructures, { structureType: STRUCTURE_WALL 				});
-
-	// check if the 'objects' object exists in room memory & create it if not
+	// Initialize memory structures
 	if (!this.memory.objects) this.memory.objects = {};
+	if (!this.memory.containers) this.memory.containers = { sourceOne: '', sourceTwo: '', controller: '', mineral: '' };
 
 	log('Caching room objects...', this);
-	// if sources are found, add their IDs to array and add array to room's 'objects' memory
-	if (sources) {
-		for (let i = 0; i < sources.length; i++) storageArray.push(sources[i].id);
-		if (storageArray.length) {
-			this.memory.objects.sources = storageArray;
-			if (this.memory.hostColony !== undefined)	Game.rooms[this.memory.hostColony].memory.outposts.list[this.name].sourceIDs = storageArray;
-			if (storageArray.length > 1) log('Cached ' + storageArray.length + ' sources.', this);
-			else log('Cached 1 source.', this);
+
+	// Helper function to cache objects
+	const cacheObjectArray = (objects: (RoomObject & { id: Id<any> })[], key: string, logName: string, isSingular = false) => {
+		if (objects.length === 0) return;
+
+		const ids = objects.map(obj => obj.id);
+		this.memory.objects[key] = isSingular ? [ids[0]] : ids;
+
+		const count = isSingular ? 1 : objects.length;
+		log(`Cached ${count} ${logName}${count > 1 ? 's' : ''}.`, this);
+		return ids;
+	};
+
+	// Find and cache sources
+	const sources = this.find(FIND_SOURCES);
+	if (sources.length > 0) {
+		const sourceIDs = cacheObjectArray(sources, 'sources', 'source');
+		if (this.memory.hostColony && sourceIDs) {
+			Game.rooms[this.memory.hostColony].memory.outposts.list[this.name].sourceIDs = sourceIDs;
 		}
-		storageArray = [];
 	}
-	// if minerals are found, add their IDs to array and add array to room's 'objects' memory
-	if (minerals) {
-		for (let i = 0; i < minerals.length; i++)	storageArray.push(minerals[i].id);
-		if (storageArray.length) {
-			this.memory.objects.mineral = [storageArray[0]];
-			if (storageArray.length >= 1)	log('Cached 1 mineral.', this);
+
+	// Find and cache minerals
+	const minerals = this.find(FIND_MINERALS);
+	cacheObjectArray(minerals, 'mineral', 'mineral', true);
+
+	// Find and cache deposits
+	const deposits = this.find(FIND_DEPOSITS);
+	cacheObjectArray(deposits, 'deposit', 'deposit', true);
+
+	// Find and cache controller
+	if (this.controller) {
+		this.memory.objects.controller = [this.controller.id];
+		log('Cached 1 controller.', this);
+		if (this.memory.hostColony) {
+			Game.rooms[this.memory.hostColony].memory.outposts.list[this.name].controllerID = this.controller.id;
 		}
-		storageArray = [];
 	}
-	// if deposits are found, add their IDs to array and add array to room's 'objects' memory
-	if (deposits) {
-		for (let i = 0; i < deposits.length; i++)	storageArray.push(deposits[i].id);
-		if (storageArray.length) {
-			this.memory.objects.deposit = [storageArray[0]];
-			if (storageArray.length > 1) log('Cached ' + storageArray.length + ' deposits.', this);
-			else log('Cached 1 deposit.', this);
-		}
-		storageArray = [];
-	}
-	// if a controller is found, add its ID to array and add array to room's 'objects' memory
-	if (controller) {
-		for (let i = 0; i < controller.length; i++)	storageArray.push(controller[i].id);
-		if (storageArray.length) {
-			this.memory.objects.controller = [storageArray[0]];
-			if (this.memory.hostColony !== undefined) {
-				Game.rooms[this.memory.hostColony].memory.outposts.list[this.name].controllerID = storageArray[0];
-			}
-			if (storageArray.length >= 1)	log('Cached ' + storageArray.length + ' controllers.', this);
-			else log('Cached 1 controller.', this);
-		}
-		storageArray = [];
-	}
-	// if a spawn is found, add its ID to array and add array to room's 'objects' memory
-	if (spawns) {
-		for (let i = 0; i < spawns.length; i++) storageArray.push(spawns[i].id);
-		if (storageArray.length) {
-			this.memory.objects.spawns = storageArray;
-			if (storageArray.length > 1) log('Cached ' + storageArray.length + ' spawns.', this);
-			else log('Cached 1 spawn.', this);
-		}
-		storageArray = [];
-	}
-	// if an extension is found, add its ID to array and add array to room's 'objects' memory
-	if (extensions) {
-		for (let i = 0; i < extensions.length; i++)	storageArray.push(extensions[i].id);
-		if (storageArray.length) {
-			this.memory.objects.extensions = storageArray;
-			if (storageArray.length > 1) log('Cached ' + storageArray.length + ' extensions.', this);
-			else log('Cached 1 extension.', this);
-		}
-		storageArray = [];
-	}
-	// if towers are found, add their IDs to array and add array to room's 'objects' memory
-	if (towers) {
-		for (let i = 0; i < towers.length; i++)	storageArray.push(towers[i].id);
-		if (storageArray.length) {
-			this.memory.objects.towers = storageArray;
-			if (storageArray.length > 1) log('Cached ' + storageArray.length + ' towers.', this);
-			else log('Cached 1 tower.', this);
-		}
-		storageArray = [];
-	}
-	// if containers are found, add their IDs to array and add array to room's 'objects' memory
-	if (containers) {
-		for (let i = 0; i < containers.length; i++) {
-			storageArray.push(containers[i].id);
-			// as we iterate through list of containers, check if that container is close to our first room source,
-			// and if so, add it to memory.containers.sourceOne - do the same for sourceTwo
-			const nearbySources = containers[i].pos.findInRange(FIND_SOURCES, 2);
-			if (nearbySources.length == 1) {
-				if (nearbySources[0].id === this.memory.objects.sources[0])
-					this.memory.containers.sourceOne = containers[i].id;
-				else if (nearbySources[0].id === this.memory.objects.sources[1])
-					this.memory.containers.sourceTwo = containers[i].id;
-			} else {
-				// if not nearby any sources, check if container is nearby the controller, and add it to memory.containers.controller
-				const nearbyController = containers[i].pos.findInRange(FIND_STRUCTURES, 3, { filter: { structureType: STRUCTURE_CONTROLLER }});
-				if (nearbyController.length == 1)
-					this.memory.containers.controller = containers[i].id;
-				else {
-					// finally, if container is nearby the room mineral, add it to memory.containrs.mineral
-					const nearbyMineral = containers[i].pos.findInRange(FIND_MINERALS, 2);
-					if (nearbyMineral.length == 1)
-						this.memory.containers.mineral = containers[i].id;
+
+	// Find structures more efficiently by type
+	const spawns = this.find(FIND_MY_SPAWNS);
+	cacheObjectArray(spawns, 'spawns', 'spawn');
+
+	const extensions = this.find(FIND_MY_STRUCTURES, { filter: { structureType: STRUCTURE_EXTENSION }});
+	cacheObjectArray(extensions, 'extensions', 'extension');
+
+	const towers = this.find(FIND_MY_STRUCTURES, { filter: { structureType: STRUCTURE_TOWER }});
+	cacheObjectArray(towers, 'towers', 'tower');
+
+	// Cache containers with position-based assignment
+	const containers = this.find(FIND_STRUCTURES, { filter: { structureType: STRUCTURE_CONTAINER }}) as StructureContainer[];
+	if (containers.length > 0) {
+		// Reset container memory
+		this.memory.containers = { sourceOne: '', sourceTwo: '', controller: '', mineral: '' };
+
+		// Pre-cache positions for efficient lookup
+		const sourcePositions = sources.length > 0 ? sources.map(s => ({ id: s.id, pos: s.pos })) : [];
+		const controllerPos = this.controller?.pos;
+		const mineralPos = minerals.length > 0 ? minerals[0].pos : undefined;
+
+		// Assign containers based on proximity
+		for (const container of containers) {
+			const pos = container.pos;
+
+			// Check if near sources (within range 2)
+			let assigned = false;
+			for (let i = 0; i < sourcePositions.length; i++) {
+				if (pos.inRangeTo(sourcePositions[i].pos, 2)) {
+					if (sourcePositions[i].id === this.memory.objects.sources?.[0])
+						this.memory.containers.sourceOne = container.id;
+					else if (sourcePositions[i].id === this.memory.objects.sources?.[1])
+						this.memory.containers.sourceTwo = container.id;
+					assigned = true;
+					break;
 				}
 			}
-		}
-		// before we push the storageArray to the memory.objects.containers array,
-		// ensure the ordering of items matches the ordering (sourceOne, sourceTwo, controller, mineral)
-		if (storageArray.length) {
-			let s1, s2, c, m;
-			console.log(`Original containers list: ${storageArray}`);
-			// populate the s1/s2/c/m IDs
-			for (let i = 0; i < storageArray.length; i++) {
-				if (storageArray[i] === this.memory.containers.sourceOne)
-					s1 = storageArray[i];
-				else if (storageArray[i] === this.memory.containers.sourceTwo)
-					s2 = storageArray[i];
-				else if (storageArray[i] === this.memory.containers.controller)
-					c  = storageArray[i];
-				else if (storageArray[i] === this.memory.containers.mineral)
-					m  = storageArray[i];
-			}
-			// for each string found, remove entry in its position and replace
-			if (s1) storageArray.splice(0, 1, s1);
-			if (s2) storageArray.splice(1, 1, s2);
-			if (c ) storageArray.splice(2, 1, c );
-			if (m ) storageArray.splice(3, 1, m );
 
-			// testing confirmation output
-			let items = ``;
-			for (let item of storageArray) items = items + `, ${item}`;
-			console.log(`Edited containers list: ${items}`);
-			console.log(`Memory containers list: ${this.memory.containers.sourceOne}, ${this.memory.containers.sourceTwo}, ${this.memory.containers.controller}, ${this.memory.containers.mineral}`);
-
-			this.memory.objects.containers = storageArray;
-			let updateInfo = '';
-			if (this.memory.hostColony) {
-				const hostRoom = this.memory.hostColony;
-				Game.rooms[hostRoom].memory.outposts.list[this.name].containerIDs = storageArray;
-				this.memory.objects.containers = storageArray;
-				updateInfo = "\n>>> NOTICE: Room is an outpost of a main colony. Updated outpost info with new container IDs.";
+			// Check if near controller (within range 3)
+			if (!assigned && controllerPos && pos.inRangeTo(controllerPos, 3)) {
+				this.memory.containers.controller = container.id;
+				assigned = true;
 			}
 
-			if (storageArray.length > 1) log('Cached ' + storageArray.length + ' containers.' + updateInfo, this);
-			else log('Cached 1 container.' + updateInfo, this);
+			// Check if near mineral (within range 2)
+			if (!assigned && mineralPos && pos.inRangeTo(mineralPos, 2))
+				this.memory.containers.mineral = container.id;
 		}
-		storageArray = [];
-	}
-	// if storage is found, add its ID to array and add array to room's 'objects' memory
-	if (storage) {
-		for (let i = 0; i < storage.length; i++)
-			storageArray.push(storage[i].id);
-		if (storageArray.length) {
-			this.memory.objects.storage = [storageArray[0]];
-			if (storageArray.length >= 1)	log('Cached 1 storage.', this);
+
+		// Build ordered container array (sourceOne, sourceTwo, controller, mineral)
+		const containerIDs = containers.map(c => c.id);
+		const orderedContainers: Id<StructureContainer>[] = [];
+
+		if (this.memory.containers.sourceOne) orderedContainers.push(this.memory.containers.sourceOne as Id<StructureContainer>);
+		if (this.memory.containers.sourceTwo) orderedContainers.push(this.memory.containers.sourceTwo as Id<StructureContainer>);
+		if (this.memory.containers.controller) orderedContainers.push(this.memory.containers.controller as Id<StructureContainer>);
+		if (this.memory.containers.mineral) orderedContainers.push(this.memory.containers.mineral as Id<StructureContainer>);
+
+		// Add any remaining containers not assigned to specific positions
+		for (const id of containerIDs) {
+			if (!orderedContainers.includes(id))
+				orderedContainers.push(id);
 		}
-		storageArray = [];
-	}
-	// if ramparts are found, add their IDs to array and add array to room's 'objects' memory
-	if (ramparts) {
-		for (let i = 0; i < ramparts.length; i++)
-			storageArray.push(ramparts[i].id);
-		if (storageArray.length) {
-			this.memory.objects.ramparts = storageArray;
-			if (storageArray.length > 1)
-				log('Cached ' + storageArray.length + ' ramparts.', this);
-			else
-				log('Cached 1 rampart.', this);
+
+		this.memory.objects.containers = orderedContainers;
+
+		// Update outpost info if applicable
+		let updateInfo = '';
+		if (this.memory.hostColony) {
+			Game.rooms[this.memory.hostColony].memory.outposts.list[this.name].containerIDs = orderedContainers;
+			updateInfo = "\n>>> NOTICE: Room is an outpost of a main colony. Updated outpost info with new container IDs.";
 		}
-		storageArray = [];
+
+		log(`Cached ${containers.length} container${containers.length > 1 ? 's' : ''}.${updateInfo}`, this);
 	}
-	// if links are found, add their IDs to array and add array to room's 'objects' memory
-	if (links) {
-		for (let i = 0; i < links.length; i++)
-			storageArray.push(links[i].id);
-		if (storageArray.length) {
-			this.memory.objects.links = storageArray;
-			if (storageArray.length > 1) log('Cached ' + storageArray.length + ' links.', this);
-			else log('Cached 1 link.', this);
-		}
-		storageArray = [];
-	}
-	// if extractors are found, add their IDs to array and add array to room's 'objects' memory
-	if (extractor) {
-		for (let i = 0; i < extractor.length; i++)
-			storageArray.push(extractor[i].id);
-		if (storageArray.length) {
-			this.memory.objects.extractor = [storageArray[0]];
-			if (storageArray.length >= 1)
-				log('Cached 1 extractor.', this);
-		}
-		storageArray = [];
-	}
-	// if labs are found, add their IDs to array and add array to room's 'objects' memory
-	if (labs) {
-		for (let i = 0; i < labs.length; i++)
-			storageArray.push(labs[i].id);
-		if (storageArray.length) {
-			this.memory.objects.labs = storageArray;
-			if (storageArray.length > 1)
-				log('Cached ' + storageArray.length + ' labs.', this);
-			else
-				log('Cached 1 lab.', this);
-		}
-		storageArray = [];
-	}
-	// if terminals are found, add their IDs to array and add array to room's 'objects' memory
-	if (terminal) {
-		for (let i = 0; i < terminal.length; i++)
-			storageArray.push(terminal[i].id);
-		if (storageArray.length) {
-			this.memory.objects.terminal = [storageArray[0]];
-			if (storageArray.length >= 1)
-				log('Cached 1 terminal.', this);
-		}
-		storageArray = [];
-	}
-	// if factory are found, add their IDs to array and add array to room's 'objects' memory
-	if (factory) {
-		for (let i = 0; i < factory.length; i++)
-			storageArray.push(factory[i].id);
-		if (storageArray.length) {
-			this.memory.objects.factory = [storageArray[0]];
-			if (storageArray.length >= 1)
-				log('Cached 1 factory.', this);
-		}
-		storageArray = [];
-	}
-	// if observers are found, add their IDs to array and add array to room's 'objects' memory
-	if (observer) {
-		for (let i = 0; i < observer.length; i++)
-			storageArray.push(observer[i].id);
-		if (storageArray.length) {
-			this.memory.objects.observer = [storageArray[0]];
-			if (storageArray.length >= 1)
-				log('Cached 1 observer.', this);
-		}
-		storageArray = [];
-	}
-	// if power spawns are found, add their IDs to array and add array to room's 'objects' memory
-	if (powerspawn) {
-		for (let i = 0; i < powerspawn.length; i++)
-			storageArray.push(powerspawn[i].id);
-		if (storageArray.length) {
-			this.memory.objects.powerSpawn = [storageArray[0]];
-			if (storageArray.length >= 1)
-				log('Cached 1 power spawn.', this);
-		}
-		storageArray = [];
-	}
-	// if nukers are found, add their IDs to array and add array to room's 'objects' memory
-	if (nuker) {
-		for (let i = 0; i < nuker.length; i++)
-			storageArray.push(nuker[i].id);
-		if (storageArray.length) {
-			this.memory.objects.nuker = [storageArray[0]];
-				log('Cached 1 nuker.', this);
-		}
-		storageArray = [];
-	}
-	// if source keeper lairs are found, add their IDs to array and add array to room's 'objects' memory
-	if (keeperlairs) {
-		for (let i = 0; i < keeperlairs.length; i++)
-			storageArray.push(keeperlairs[i].id);
-		if (storageArray.length) {
-			this.memory.objects.keeperLairs = storageArray;
-			if (storageArray.length > 1)
-				log('Cached ' + storageArray.length + ' keeper lairs.', this);
-			else
-				log('Cached 1 keeper lair.', this);
-		}
-		storageArray = [];
-	}
-	// if invader cores are found, add their IDs to array and add array to room's 'objects' memory
-	if (invadercores) {
-		for (let i = 0; i < invadercores.length; i++)
-			storageArray.push(invadercores[i].id);
-		if (storageArray.length) {
-			this.memory.objects.invaderCores = storageArray;
-			if (storageArray.length > 1)
-				log('Cached ' + storageArray.length + ' invader cores.', this);
-			else
-				log('Cached 1 invader core.', this);
-		}
-		storageArray = [];
-	}
-	// if power banks are found, add their IDs to array and add array to room's 'objects' memory
-	if (powerbanks) {
-		for (let i = 0; i < powerbanks.length; i++)
-			storageArray.push(powerbanks[i].id);
-		if (storageArray.length) {
-			this.memory.objects.powerBanks = storageArray;
-			if (storageArray.length > 1)
-				log('Cached ' + storageArray.length + ' power banks.', this);
-			else
-				log('Cached 1 power bank.', this);
-		}
-		storageArray = [];
-	}
-	// if portals are found, add their IDs to array and add array to room's 'objects' memory
-	if (portals) {
-		for (let i = 0; i < portals.length; i++)
-			storageArray.push(portals[i].id);
-		if (storageArray.length) {
-			this.memory.objects.portals = storageArray;
-			if (storageArray.length > 1)
-				log('Cached ' + storageArray.length + ' portals.', this);
-			else
-				log('Cached 1 portal.', this);
-		}
-		storageArray = [];
-	}
-	// if walls are found, add their IDs to array and add array to room's 'objects' memory
-	if (walls) {
-		for (let i = 0; i < walls.length; i++)
-			storageArray.push(walls[i].id);
-		if (storageArray.length) {
-			this.memory.objects.walls = storageArray;
-			if (storageArray.length > 1)
-				log('Cached ' + storageArray.length + ' walls.', this);
-			else
-				log('Cached 1 wall.', this);
-		}
-		storageArray = [];
-	}
+
+	// Cache remaining structures
+	const storage = this.storage ? [this.storage] : [];
+	cacheObjectArray(storage, 'storage', 'storage', true);
+
+	const ramparts = this.find(FIND_MY_STRUCTURES, { filter: { structureType: STRUCTURE_RAMPART }});
+	cacheObjectArray(ramparts, 'ramparts', 'rampart');
+
+	const links = this.find(FIND_MY_STRUCTURES, { filter: { structureType: STRUCTURE_LINK }});
+	cacheObjectArray(links, 'links', 'link');
+
+	const extractor = this.find(FIND_MY_STRUCTURES, { filter: { structureType: STRUCTURE_EXTRACTOR }});
+	cacheObjectArray(extractor, 'extractor', 'extractor', true);
+
+	const labs = this.find(FIND_MY_STRUCTURES, { filter: { structureType: STRUCTURE_LAB }});
+	cacheObjectArray(labs, 'labs', 'lab');
+
+	const terminal = this.terminal ? [this.terminal] : [];
+	cacheObjectArray(terminal, 'terminal', 'terminal', true);
+
+	const factory = this.find(FIND_MY_STRUCTURES, { filter: { structureType: STRUCTURE_FACTORY }});
+	cacheObjectArray(factory, 'factory', 'factory', true);
+
+	const observer = this.find(FIND_MY_STRUCTURES, { filter: { structureType: STRUCTURE_OBSERVER }});
+	cacheObjectArray(observer, 'observer', 'observer', true);
+
+	const powerspawn = this.find(FIND_MY_STRUCTURES, { filter: { structureType: STRUCTURE_POWER_SPAWN }});
+	cacheObjectArray(powerspawn, 'powerSpawn', 'power spawn', true);
+
+	const nuker = this.find(FIND_MY_STRUCTURES, { filter: { structureType: STRUCTURE_NUKER }});
+	cacheObjectArray(nuker, 'nuker', 'nuker', true);
+
+	// Cache hostile/neutral structures
+	const keeperlairs = this.find(FIND_STRUCTURES, { filter: { structureType: STRUCTURE_KEEPER_LAIR }});
+	cacheObjectArray(keeperlairs, 'keeperLairs', 'keeper lair');
+
+	const invadercores = this.find(FIND_HOSTILE_STRUCTURES, { filter: { structureType: STRUCTURE_INVADER_CORE }});
+	cacheObjectArray(invadercores, 'invaderCores', 'invader core');
+
+	const powerbanks = this.find(FIND_STRUCTURES, { filter: { structureType: STRUCTURE_POWER_BANK }});
+	cacheObjectArray(powerbanks, 'powerBanks', 'power bank');
+
+	const portals = this.find(FIND_STRUCTURES, { filter: { structureType: STRUCTURE_PORTAL }});
+	cacheObjectArray(portals, 'portals', 'portal');
+
+	const walls = this.find(FIND_STRUCTURES, { filter: { structureType: STRUCTURE_WALL }});
+	cacheObjectArray(walls, 'walls', 'wall');
+
 	log('Caching objects for room \'' + this.name + '\' completed.', this);
 	return true;
 }
@@ -465,6 +269,16 @@ Room.prototype.toggleBasePlannerVisuals = function (): void {
 	this.memory.visuals.visBasePlan  = !this.memory.visuals.visBasePlan;
 	log(`Base Planner visuals are now set to '${this.memory.visuals.visDistTrans}'`);
 }
+
+/** Gets the RoomManager instance for this room (if it exists) */
+Object.defineProperty(Room.prototype, 'manager', {
+	get: function(this: Room) {
+		if (!global.roomManagers) return undefined;
+		return global.roomManagers[this.name];
+	},
+	enumerable: false,
+	configurable: true
+});
 
 /** Initializes an outpost room with necessary memory structures.
  * @param roomName - The name of the room to initialize as an outpost
