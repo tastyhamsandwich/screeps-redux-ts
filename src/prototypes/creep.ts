@@ -470,7 +470,7 @@ if (typeof Creep !== 'undefined') {
 				if (!nearbyObj) {
 					if (this.drop(RESOURCE_ENERGY) === OK) {
 						this.say('🗑️');
-						console.log(`${this.room.link()}Harvester '${this.name}' dropped energy.`);
+						console.log(`${this.room.link()} Harvester '${this.name}' dropped energy.`);
 					}
 					return;
 				} else {
