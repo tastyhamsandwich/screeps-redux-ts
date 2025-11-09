@@ -9,17 +9,22 @@ const Reserver = {
 		const rMem: RoomMemory = Game.rooms[cMem.home].memory;
 		const pos: RoomPosition = creep.pos;
 
-		if (cMem.disable === undefined) cMem.disable = false;
-		if (cMem.rally === undefined) cMem.rally = 'none';
+		cMem.disable ??= false;
+		cMem.rally ??= 'none';
 
 		//# If no targetOutpost pre-defined, assign one to self based on reserverLastAssigned index in room's outposts memory
 		//# Increment RLA index and wrap to zero if at length value of outposts array
 		if (cMem.targetOutpost === undefined) {
-			cMem.targetOutpost = rMem.outposts.array[rMem.outposts.reserverLastAssigned];
-			rMem.outposts.reserverLastAssigned = (rMem.outposts.reserverLastAssigned + 1) % rMem.outposts.array.length;
+			if (rMem?.outposts?.array && rMem.outposts.reserverLastAssigned !== undefined) {
+				cMem.targetOutpost = rMem.outposts.array[rMem.outposts.reserverLastAssigned];
+				rMem.outposts.reserverLastAssigned = (rMem.outposts.reserverLastAssigned + 1) % rMem.outposts.array.length;
+			}
 		}
-		if (cMem.controller === undefined) {
-			cMem.controller = Game.rooms[cMem.home].memory.outposts.list[cMem.targetOutpost].controllerID;
+		if (cMem.controller === undefined && cMem.targetOutpost) {
+			const outpostData = Game.rooms[cMem.home]?.memory?.outposts?.list?.[cMem.targetOutpost];
+			if (outpostData?.controllerID) {
+				cMem.controller = outpostData.controllerID;
+			}
 		}
 		//# If creep is at home room, has no rally point, and has a targetOutpost in memory, set rally point to target outpost flag
 		//if (creep.room.name === cMem.home && cMem.rally === 'none' && cMem.targetOutpost !== undefined)

@@ -65,14 +65,15 @@ const Harvester = {
 										s.store.getFreeCapacity(RESOURCE_ENERGY) > 0
 								});
 								if (spawn) {
-									(creep.transfer(spawn, RESOURCE_ENERGY) === ERR_NOT_IN_RANGE)
-									creep.moveTo(spawn, pathing.harvesterPathing);
+									if (creep.transfer(spawn, RESOURCE_ENERGY) === ERR_NOT_IN_RANGE) {
+										creep.moveTo(spawn, pathing.harvesterPathing);
+									}
 								} else buildContainer(creep);
 								return;
 							}
 							if (cMem.bucket) creep.unloadEnergy(cMem.bucket);
 							else {
-								const containers: StructureContainer[] = pos.findInRange(FIND_STRUCTURES, 3, { filter: (i) => { i.structureType === STRUCTURE_CONTAINER } });
+								const containers: StructureContainer[] = pos.findInRange(FIND_STRUCTURES, 3, { filter: (i) => i.structureType === STRUCTURE_CONTAINER }) as StructureContainer[];
 								if (containers.length) {
 									const target: StructureContainer = pos.findClosestByRange(containers)!;
 									if (target) {
@@ -144,7 +145,7 @@ const Harvester = {
 						} else {
 							if (cMem.bucket) creep.unloadEnergy(cMem.bucket);
 							else {
-								const containers: StructureContainer[] = pos.findInRange(FIND_STRUCTURES, 3, { filter: (i) => { i.structureType === STRUCTURE_CONTAINER } });
+								const containers: StructureContainer[] = pos.findInRange(FIND_STRUCTURES, 3, { filter: (i) => i.structureType === STRUCTURE_CONTAINER }) as StructureContainer[];
 								if (containers.length) {
 									const target: StructureContainer = pos.findClosestByRange(containers)!;
 									if (target) {

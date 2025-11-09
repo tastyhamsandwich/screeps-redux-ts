@@ -37,7 +37,7 @@ const Defender = {
 					if (hostiles.length > 0) {
 						const target = pos.findClosestByRange(hostiles);
 						if (target) {
-							if (creep.rangedAttack(target) == ERR_NOT_IN_RANGE)
+							if (creep.rangedAttack(target) === ERR_NOT_IN_RANGE)
 								creep.moveTo(target, pathing.remoteGuard);
 						}
 					} else {
