@@ -361,9 +361,7 @@ export function determineBodyParts(role: string, maxEnergy: number, extras?: { [
 
 export function initGlobal(override: boolean = false): boolean {
 
-	if (override)	Memory.globalSettings = {};
-	if (!Memory.globalSettings) {
-
+	if (!Memory.globalSettings) Memory.globalSettings = {};
 		Memory.globalSettings = {
 			consoleSpawnInterval: 25,
 			alertDisabled: true,
@@ -404,11 +402,12 @@ export function initGlobal(override: boolean = false): boolean {
 				},
 			}
 		}
+
+		if (!Memory.globalData) Memory.globalData = {};
+		Memory.globalData.numColonies = 0;
 		console.log(`Initialized global settings!`);
 		return true;
-	} else
-		return false;
-}
+	}
 
 /**
  * Calculate the total energy cost of a body array.

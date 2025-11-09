@@ -9,6 +9,13 @@ export const legacySpawnManager = {
 
 		const roomName = room.name;
 
+		// Throttle spawn assessments to prevent excessive CPU usage (every 3 ticks for legacy system)
+		if (!room.memory.data) room.memory.data = {};
+		if (room.memory.data.lastLegacySpawnCheck && Game.time - room.memory.data.lastLegacySpawnCheck < 3) {
+			return;
+		}
+		room.memory.data.lastLegacySpawnCheck = Game.time;
+
 		// pull creep role caps from room memory, or set to default value if none are set
 		let harvesterTarget: number = _.get(room.memory, ['quotas', 'harvesters'], 2);
 		let fillerTarget: number = _.get(room.memory, ['quotas', 'fillers'], 2);
@@ -21,20 +28,22 @@ export const legacySpawnManager = {
 
 		let remoteharvesterTarget: number = _.get(room.memory, ['quotas', 'remoteharvesters'], 2);
 
-		// pull current amount of creeps alive by RFQ (Role For Quota)
-		// with RFQ, this separates execution code from identity, so reassigning
-		// a creep to a new role won't make it spawn a replacement unless you change RFQ too)
-
-		let harvesters: Creep[] = _.filter(Game.creeps, (creep) => (creep.memory.RFQ == 'harvester' || creep.memory.role == 'harvester') && creep.memory.home == roomName);
-		let fillers: Creep[] = _.filter(Game.creeps, (creep) => (creep.memory.RFQ == 'filler' || creep.memory.role == 'filler') && creep.memory.home == roomName);
-		let haulers: Creep[] = _.filter(Game.creeps, (creep) => (creep.memory.RFQ == 'hauler' || creep.memory.role == 'hauler') && creep.memory.home == roomName);
-		let upgraders: Creep[] = _.filter(Game.creeps, (creep) => (creep.memory.RFQ == 'upgrader' || creep.memory.role == 'upgrader') && creep.memory.home == roomName);
-		let builders: Creep[] = _.filter(Game.creeps, (creep) => (creep.memory.RFQ == 'builder' || creep.memory.role == 'builder') && creep.memory.home == roomName);
-		let repairers: Creep[] = _.filter(Game.creeps, (creep) => (creep.memory.RFQ == 'repairer' || creep.memory.role == 'repairer') && creep.memory.home == roomName);
-		let defenders: Creep[] = _.filter(Game.creeps, (creep) => (creep.memory.RFQ == 'defender' || creep.memory.role == 'defender') && creep.memory.home == roomName);
-		let reservers: Creep[] = _.filter(Game.creeps, (creep) => (creep.memory.RFQ == 'reserver' || creep.memory.role == 'reserver') && creep.memory.home == roomName);
-
-		let remoteharvesters: Creep[] = _.filter(Game.creeps, (creep) => (creep.memory.RFQ == 'remoteharvester' || creep.memory.role == 'remoteharvester') && creep.memory.home == roomName);
+		// Pull current amount of creeps alive by RFQ (Role For Quota) - Single pass optimization
+		// With RFQ, this separates execution code from identity, so reassigning
+		// a creep to a new role won't make it spawn a replacement unless you change RFQ too
+		const creepsByRole = _.groupBy(
+			_.filter(Game.creeps, c => c.memory.home === roomName),
+			c => c.memory.RFQ || c.memory.role
+		);
+		let harvesters: Creep[] = creepsByRole['harvester'] || [];
+		let fillers: Creep[] = creepsByRole['filler'] || [];
+		let haulers: Creep[] = creepsByRole['hauler'] || [];
+		let upgraders: Creep[] = creepsByRole['upgrader'] || [];
+		let builders: Creep[] = creepsByRole['builder'] || [];
+		let repairers: Creep[] = creepsByRole['repairer'] || [];
+		let defenders: Creep[] = creepsByRole['defender'] || [];
+		let reservers: Creep[] = creepsByRole['reserver'] || [];
+		let remoteharvesters: Creep[] = creepsByRole['remoteharvester'] || [];
 
 		const nameSuffix = {
 			harvester: `_H${creepRoleCounts.harvester}`,
@@ -71,7 +80,7 @@ export const legacySpawnManager = {
 					//! Spawn Harvesters and Fillers before anything else
 					if (!harvesters_and_fillers_satisfied) {
 						//# Spawn Harvesters
-						if (needMoreHarvesters(spawn.room)) { // Determine if we have enough harvesters (by work parts per total sources in room)
+						if (needMoreHarvesters(spawn.room, harvesters)) { // Determine if we have enough harvesters (by work parts per total sources in room)
 							const body = spawn.determineBodyParts('harvester', cap);
 							const ticksToSpawn = body.length * 3;
 							let sourceID, containerID;
@@ -200,10 +209,7 @@ export const legacySpawnManager = {
 }
 
 /** Helper method to determine if more harvesters are needed (from main.ts logic) */
-function needMoreHarvesters(room: Room): boolean {
-	const roomName = room.name;
-	const harvesters = _.filter(Game.creeps, (c) => (c.memory.RFQ == 'harvester' || c.memory.role == 'harvester') && c.memory.home == roomName);
-
+function needMoreHarvesters(room: Room, harvesters: Creep[]): boolean {
 	const sources = room.find(FIND_SOURCES);
 	let totalWorkParts = 0;
 

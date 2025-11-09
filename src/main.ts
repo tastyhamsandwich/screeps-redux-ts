@@ -29,13 +29,12 @@ export const creepRoleCounts: { [key: string]: any } = {
 	remoteharvester: 1,
 }
 let tickCount = 0;
-if (!Memory.globalData) Memory.globalData = {};
-if (!Memory.globalData.numColonies)
-	Memory.globalData.numColonies = 0;
+if (Memory.globalData.onBirthInitComplete === undefined || Memory.globalData.onBirthInitComplete === false)
+	global.initGlobal();
 
 module.exports.loop = function() {
 
-	if (!Memory.globalSettings) global.initGlobal();
+	global.initGlobal();
 
 	calcTickTime();
 
