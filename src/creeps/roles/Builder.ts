@@ -28,12 +28,8 @@ const Builder = {
 				navRallyPoint(cMem.rally);
 			} else {
 				// State transition logic: toggle working flag based on energy levels
-				if (creep.store.getUsedCapacity(RESOURCE_ENERGY) === 0) {
-					cMem.working = false;
-				}
-				if (creep.store.getFreeCapacity(RESOURCE_ENERGY) === 0) {
-					cMem.working = true;
-				}
+				if (creep.store.getUsedCapacity(RESOURCE_ENERGY) === 0)	cMem.working = false;
+				if (creep.store.getFreeCapacity(RESOURCE_ENERGY) === 0)	cMem.working = true;
 
 				// Harvest phase - collect energy
 				if (!cMem.working) {
@@ -41,9 +37,9 @@ const Builder = {
 
 					if (energySource) {
 						const result = creep.withdraw(energySource, RESOURCE_ENERGY);
-						if (result === ERR_NOT_IN_RANGE) {
+						if (result === ERR_NOT_IN_RANGE)
 							creep.moveTo(energySource, pathing.builderPathing);
-						} else if (result === OK) {
+						else if (result === OK) {
 							// Successfully withdrew - check if we should transition to working
 							if (creep.store.getFreeCapacity(RESOURCE_ENERGY) === 0) {
 								cMem.working = true;
