@@ -165,7 +165,7 @@ export default class SpawnManager {
 					return scheduled;
 			}
 
-			// Energy conflict - check if we'll have enough energy
+			// Energy conflict - check if we have enough energy
 			const ticksUntilScheduled = scheduled.scheduledTick - currentTick;
 			if (ticksUntilScheduled > 0 && ticksUntilScheduled < spawnTime) {
 				const energyAtScheduledTime = this.energyForecast.projectedEnergy(ticksUntilScheduled);
