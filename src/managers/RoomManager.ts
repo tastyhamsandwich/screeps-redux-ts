@@ -5,6 +5,7 @@ import { STRUCTURE_PRIORITY } from '../functions/utils/constants';
 import { legacySpawnManager } from './room/utils';
 import { log } from '../functions/utils/globals';
 import { determineBodyParts } from '../functions/creep/body';
+import RoomPlanningVisualizer from '@modules/PlanVisualizer';
 
 /** Manages all logic and operations for a single room. */
 export default class RoomManager {
@@ -15,6 +16,7 @@ export default class RoomManager {
 	private legacySpawnManager;
 	private basePlanner: BasePlanner | null;
 	private basePlan: PlanResult | null = null;
+	public planVisualizer: RoomPlanningVisualizer | null = null;
 
 	constructor(room: Room) {
 		this.room = room;
@@ -23,6 +25,7 @@ export default class RoomManager {
 		this.spawnManager = new SpawnManager(room);
 		this.legacySpawnManager = legacySpawnManager;
 		this.basePlanner = null; // Only create when regeneration is needed
+		this.planVisualizer = new RoomPlanningVisualizer(room);
 
 		// Initialize all required room memory structures
 		if (!this.room.memory.data) this.room.memory.data = {};
@@ -56,6 +59,9 @@ export default class RoomManager {
 		if (!rmData.firstTimeInit) {
 			rmData.advSpawnSystem = false;
 			Memory.globalData.numColonies++;
+			this.room.initRoom();
+			rmData.firstTimeInit = true;
+			console.log(`${this.room.link()} First Time Room Initialization Complete!`);
 		}
 
 		rmData.firstTimeInit ??= true;
@@ -95,7 +101,7 @@ export default class RoomManager {
 					checksum: computePlanChecksum(this.basePlan),
 					data: this.basePlan
 				};
-				console.log(`[${this.room.name}] Base plan regenerated for RCL${rcl}`);
+				console.log(`${this.room.link()} Base plan regenerated for RCL${rcl}`);
 				// Otherwise, load cached plan (only assign from memory if not already loaded)
 			}
 		} else if (!this.basePlan && mem.basePlan) this.basePlan = mem.basePlan.data;
@@ -104,6 +110,14 @@ export default class RoomManager {
 		if (this.basePlan) this.handleBasePlan(this.basePlan);
 
 		// Assess creep needs and submit spawn requests if using advanced spawn manager
+		if (rmData.pendingSpawn && this.room.energyAvailable === this.room.energyCapacityAvailable) {
+			const spawns = this.room.find(FIND_MY_SPAWNS, { filter: i => !i.spawning});
+			for (const spawn of spawns) {
+				const result = spawn.retryPending();
+				if (result === OK) break;
+			}
+		}
+
 		if (rmData.advSpawnSystem) {
 			this.spawnManager.run();
 			this.assessCreepNeeds();
@@ -123,7 +137,8 @@ export default class RoomManager {
 			this.manageLinks();
 		}
 
-		this.drawPlanningVisuals();
+		if (this.room.memory.visuals.enableVisuals)
+			this.planVisualizer?.visualize(this.basePlan?.dtGrid, this.basePlan?.floodFill, this.basePlan?.placements);
 	}
 
 	/** Sets current bootstrapping state in room memory */
@@ -159,18 +174,6 @@ export default class RoomManager {
 		};
 	}
 
-	// Public API methods
-
-	/** Get current room statistics */
-	public getStats(): RoomStats {
-		return this.stats;
-	}
-
-	/** Get current room resources */
-	public getResources(): RoomResources {
-		return this.resources;
-	}
-
 	/** Toggle base planner visuals */
 	public togglePlanVisuals(): void {
 		if (!this.room.memory.visuals) this.room.memory.visuals = {};
@@ -178,13 +181,13 @@ export default class RoomManager {
 		this.room.memory.visuals.visBasePlan = !current;
 		this.room.memory.visuals.visDistTrans = !current;
 		this.room.memory.visuals.visFloodFill = !current;
-		console.log(`[${this.room.name}] Base planner visuals ${!current ? 'enabled' : 'disabled'}`);
+		console.log(`${this.room.link()} Base planner visuals ${!current ? 'enabled' : 'disabled'}`);
 	}
 
 	/** Force regeneration of base plan */
 	public regenerateBasePlan(): void {
 		delete this.room.memory.basePlan;
-		console.log(`[${this.room.name}] Base plan cleared - will regenerate next tick`);
+		console.log(`${this.room.link()} Base plan cleared - will regenerate next tick`);
 	}
 
 	/** Gathers current room statistics */
@@ -638,7 +641,7 @@ export default class RoomManager {
 	private setRclTasks(rcl: number): void {
 		switch (rcl) {
 			case 0:
-				// For new room, set quotas for harvesters, ensure source containers are placed
+				// For new room, set quotas for harvesters (they will build their own containers)
 				// Then built, and focus energy into upgrader output
 				log(`Setting creep role quotas for early, low-tech spawn system.`);
 				this.room.setQuota('harvester', 4) // Ensures 80% utilization per source
@@ -705,19 +708,39 @@ export default class RoomManager {
 
 		// Initialize or reset plan
 		if (!mem.buildQueue || mem.buildQueue.activeRCL !== rcl) {
+			const plannedForRCL = plan.rclSchedule[rcl] || [];
+
 			mem.buildQueue = {
 				plannedAt: now,
 				lastBuiltTick: 0,
 				index: 0,
-				activeRCL: rcl
+				activeRCL: rcl,
+				failedPlacements: []  // Track structures that failed to place
 			};
+
+			// Log RCL schedule contents for debugging
+			if (plannedForRCL.length > 0) {
+				const structureCounts: { [key: string]: number } = {};
+				for (const p of plannedForRCL) {
+					structureCounts[p.structure] = (structureCounts[p.structure] || 0) + 1;
+				}
+				const structureList = Object.entries(structureCounts)
+					.map(([type, count]) => `${count}x ${type}`)
+					.join(', ');
+				console.log(`${this.room.link()} RCL${rcl} build schedule: ${structureList} (${plannedForRCL.length} total structures)`);
+			} else {
+				console.log(`${this.room.link()} WARNING: RCL${rcl} build schedule is empty!`);
+			}
 		}
+
+		// Ensure buildQueue is defined before continuing
+		if (!mem.buildQueue) return;
 
 		// Early return: Skip expensive room.find() calls if we've completed all structures for current RCL
 		const plannedForCurrentRCL = plan.rclSchedule[rcl] || [];
-		if (mem.buildQueue.index >= plannedForCurrentRCL.length) {
+		if (mem.buildQueue.index >= plannedForCurrentRCL.length && (!mem.buildQueue.failedPlacements || mem.buildQueue.failedPlacements.length === 0)) {
 			// All structures for this RCL are complete - no need to process build queue
-			// RCL upgrades will reset the build queue at line 679
+			// RCL upgrades will reset the build queue when RCL changes
 			return;
 		}
 
@@ -776,31 +799,40 @@ export default class RoomManager {
 
 				const errorMsg = errorMessages[result] || `Unknown error (${result})`;
 
-				// Track error for batch logging
+				// Track error for batch logging and potential retry
 				placementErrors.push({
 					structure: entry.structure,
 					pos: { x: entry.pos.x, y: entry.pos.y },
 					error: errorMsg
 				});
 
-				// Skip this item and move to next
-				mem.buildQueue.index++;
-
-				// Stop if we hit the construction site limit
-				if (result === ERR_FULL) break;
+				// Only skip this item if it's not a temporary error (like ERR_FULL or ERR_RCL_NOT_ENOUGH)
+				// These errors may resolve themselves and should be retried
+				if (result === ERR_FULL) {
+					// Too many construction sites - stop processing and retry next tick
+					break;
+				} else if (result === ERR_RCL_NOT_ENOUGH) {
+					// RCL not high enough yet - this shouldn't happen if BasePlanner is working correctly
+					// Skip this structure and move to next
+					mem.buildQueue.index++;
+					console.log(`${this.room.link()} WARNING: Tried to place ${entry.structure} at RCL${rcl} but it requires higher RCL!`);
+				} else {
+					// Permanent error (invalid position, etc.) - skip and move on
+					mem.buildQueue.index++;
+				}
 			}
 		}
 
-		// Batch log placements and errors (only if debug mode is enabled)
-		if (debugMode) {
-			if (placedStructures.length > 0) {
-				console.log(`[${this.room.name}] Placed ${placedStructures.length} construction sites for RCL${rcl}: ${placedStructures.join(', ')}`);
+		// Batch log placements and errors
+		if (placedStructures.length > 0) {
+			if (debugMode) {
+				console.log(`${this.room.link()} Placed ${placedStructures.length} construction sites for RCL${rcl}: ${placedStructures.join(', ')}`);
 			}
-			if (placementErrors.length > 0) {
-				console.log(`[${this.room.name}] Failed to place ${placementErrors.length} structures:`);
-				for (const err of placementErrors) {
-					console.log(`  - ${err.structure}@${err.pos.x},${err.pos.y}: ${err.error}`);
-				}
+		}
+		if (placementErrors.length > 0 && debugMode) {
+			console.log(`${this.room.link()} Failed to place ${placementErrors.length} structures:`);
+			for (const err of placementErrors) {
+				console.log(`  - ${err.structure}@${err.pos.x},${err.pos.y}: ${err.error}`);
 			}
 		}
 
@@ -809,7 +841,7 @@ export default class RoomManager {
 		if (mem.buildQueue.index >= plannedForRCL.length) {
 			// Log only once when first completing the RCL, not every tick
 			if (mem.buildQueue.index === plannedForRCL.length) {
-				console.log(`[${this.room.name}] Finished building all RCL${rcl} structures.`);
+				console.log(`${this.room.link()} Finished placing all RCL${rcl} construction sites from base plan.`);
 				mem.buildQueue.index++; // Increment past length to prevent this log from repeating
 			}
 		}

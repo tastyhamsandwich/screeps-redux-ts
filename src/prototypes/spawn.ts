@@ -1,12 +1,24 @@
 import { calcBodyCost, log } from "functions/utils/globals";
 import { PART_COST } from 'functions/utils/constants';
 
+const PART = {
+	MOVE: 50,
+	CARRY: 50,
+	WORK: 100,
+	ATTACK: 80,
+	RANGED_ATTACK: 150,
+	HEAL: 250,
+	CLAIM: 600,
+	TOUGH: 10
+}
+
 // PROTODEF: Spawn Structure Prototype Extension
 declare global {
 	interface StructureSpawn {
 		spawnList: CreepRole[];
 		determineBodyParts(role: string, maxEnergy?: number, extras?: { [key: string]: any }): BodyPartConstant[];
 		spawnScout(rally: string | string[], swampScout: boolean): ScreepsReturnCode;
+		retryPending(): ScreepsReturnCode;
 	}
 }
 
@@ -33,7 +45,7 @@ StructureSpawn.prototype.determineBodyParts = function (role: string, maxEnergy?
       if (maxEnergy >= 650)
         totalBodyParts.push(WORK, WORK, WORK, WORK, WORK, CARRY, MOVE, MOVE);
       else {
-				let remainingCost = this.room.energyCapacityAvailable;
+				let remainingCost = maxEnergy;
 
 				totalBodyParts.push(MOVE);
 				totalBodyParts.push(CARRY);
@@ -90,11 +102,38 @@ StructureSpawn.prototype.determineBodyParts = function (role: string, maxEnergy?
 			const bodyParts = partialParts.concat(moveParts);
 
 			// Log cost & return array
-			log(`Cost for '${role}' with ${bodyParts} is ${calcBodyCost(bodyParts)}`);
+			if (this.room.memory.data.debugSpawn)
+				console.log(`${this.room.link()}${this.name}> Cost for '${role}' with ${bodyParts} is ${calcBodyCost(bodyParts)}`);
 			return bodyParts;
 
-		case 'defender':
-			return [];
+		case 'defender': {
+
+			let remainingEnergy = maxEnergy;
+
+			let attackParts: BodyPartConstant[] = [];
+			let moveParts: BodyPartConstant[] = [];
+			let toughParts: BodyPartConstant[] = [];
+
+			while (remainingEnergy >= 150) {
+				attackParts.push(ATTACK);
+				moveParts.push(MOVE);
+				toughParts.push(TOUGH);
+				toughParts.push(TOUGH);
+			}
+
+			if (remainingEnergy >= 100) {
+				moveParts.push(MOVE);
+				moveParts.push(MOVE);
+			}
+			if (remainingEnergy >= 50) {
+				moveParts.push(MOVE);
+			}
+
+			const intermedParts: BodyPartConstant[] = moveParts.concat(toughParts);
+			const bodyParts: BodyPartConstant[] = intermedParts.concat(attackParts);
+
+			return bodyParts;
+		}
 		case 'filler': {
 
 			// Limit fillers to max cost of 300, effectively 4 CARRY and 2 MOVE parts
@@ -121,8 +160,9 @@ StructureSpawn.prototype.determineBodyParts = function (role: string, maxEnergy?
 			const bodyParts: BodyPartConstant[] = carryParts.concat(moveParts);
 
 			// Log cost & return
-			log(`Cost for '${role}' with ${bodyParts} is ${calcBodyCost(bodyParts)}`);
-				return bodyParts;
+			if (this.room.memory.data.debugSpawn)
+				console.log(`${this.room.link()}${this.name}> Cost for '${role}' with ${bodyParts} is ${calcBodyCost(bodyParts)}`);
+			return bodyParts;
 			}
 		case 'hauler': {
 
@@ -131,8 +171,14 @@ StructureSpawn.prototype.determineBodyParts = function (role: string, maxEnergy?
 			let maxCarryParts: number = Math.floor(maxCarryCost / 50);
 			let maxMoveParts: number = Math.floor(maxMoveCost / 50);
 
-			const locality: string = this.room.memory.data.logisticalPairs[this.room.memory.data.pairCounter].locality;
-			const pathLen: number = this.room.memory.data.logisticalPairs[this.room.memory.data.pairCounter].distance;
+			let locality: string = 'local';
+			let pathLen: number = 15;
+
+			if (this.room.memory?.data?.logisticalPairs) {
+				locality = this.room.memory?.data?.logisticalPairs[this.room.memory.data.pairCounter]?.locality;
+				pathLen = this.room.memory?.data?.logisticalPairs[this.room.memory.data.pairCounter]?.distance;
+			}
+
 			const carryParts: number = Math.ceil(pathLen / 5) * 2;
 			const moveParts: number = Math.ceil(carryParts / 2);
 			let carryArray: BodyPartConstant[] = [];
@@ -237,6 +283,37 @@ StructureSpawn.prototype.spawnScout = function(rally: string | string[] = 'none'
 		console.log(`${this.name}: Spawning Scout in room ${this.room.name}`);
 	else
 		console.log(`${this.name}: Failed to spawn Scout in room ${this.room.name}: ${result}`);
+
+	return result;
+}
+
+/**
+ * Attempts to execute a pending spawn stored in room.memory.data.pendingSpawn
+ * @returns Screeps Return Code from the spawnCreep() attempt
+ * @example const result = Game.spawns.Spawn1.retryPending();
+ */
+StructureSpawn.prototype.retryPending = function(): ScreepsReturnCode {
+	const room = this.room;
+	const pending = room.memory.data?.pendingSpawn;
+
+	if (!pending) {
+		return ERR_NOT_FOUND;
+	}
+
+	// Check if we have enough energy for the pending spawn
+	if (room.energyAvailable < pending.cost) {
+		return ERR_NOT_ENOUGH_ENERGY;
+	}
+
+	// Attempt to spawn the creep
+	const result = this.spawnCreep(pending.body, pending.name, { memory: pending.memory });
+
+	if (result === OK) {
+		console.log(`${room.link()}${this.name}> Resuming pending spawn for ${pending.memory.role} (${pending.name})`);
+		delete room.memory.data.pendingSpawn;
+	} else {
+		console.log(`${room.link()}${this.name}> Failed to retry pending ${pending.memory.role}: ${result}`);
+	}
 
 	return result;
 }

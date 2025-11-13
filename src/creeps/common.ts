@@ -130,7 +130,10 @@ export function upgraderBehavior(creep: Creep): void {
 				if (result === ERR_NOT_IN_RANGE) {
 					creep.moveTo(controllerObject, { visualizePathStyle: { stroke: 'green', lineStyle: 'dashed', opacity: 0.3 } });
 					return;
-				}	else if (result === OK)	creep.say('🔋');
+				}	else if (result === OK)	{
+					creep.say('🔋');
+					creep.room.memory.stats.controlPoints += (creep.getActiveBodyparts(WORK));
+				}
 			}
 		}
 	}
