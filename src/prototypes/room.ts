@@ -62,8 +62,13 @@ Room.prototype.cacheObjects = function () {
 		return ids;
 	};
 
-	// Find and cache sources
-	const sources = this.find(FIND_SOURCES);
+	// Find and cache sources (sorted left-to-right, then top-to-bottom)
+	const sources = this.find(FIND_SOURCES).sort((a, b) => {
+		// Sort by X position first (left to right)
+		if (a.pos.x !== b.pos.x) return a.pos.x - b.pos.x;
+		// If X is same, sort by Y position (top to bottom)
+		return a.pos.y - b.pos.y;
+	});
 	if (sources.length > 0) {
 		const sourceIDs = cacheObjectArray(sources, 'sources', 'source');
 		if (this.memory.hostColony && sourceIDs) {
@@ -216,20 +221,21 @@ Room.prototype.cacheObjects = function () {
 }
 
 /** Initializes a room's quota list. */
-Room.prototype.initQuotas = function (): void {
+Room.prototype.initQuotas = function (roleQuotaObject?): void {
 	if (!this.memory.quotas) this.memory.quotas = {};
 
 	this.memory.quotas = {
-		harvesters: 2,
-		upgraders: 2,
-		fillers: 2,
-		haulers: 0,
-		builders: 1,
-		repairers: 1,
-		defenders: 0,
-		reservers: 0,
-		scouts: 0,
-		remoteharvesters: 0,
+		harvesters: roleQuotaObject?.harvester || 2,
+		upgraders: roleQuotaObject?.upgrader || 2,
+		fillers: roleQuotaObject?.filler || 2,
+		haulers: roleQuotaObject?.hauler || 0,
+		builders: roleQuotaObject?.builder || 1,
+		repairers: roleQuotaObject?.repairer || 1,
+		defenders: roleQuotaObject?.defender || 0,
+		reservers: roleQuotaObject?.reserver || 0,
+		scouts: roleQuotaObject?.scout || 0,
+		remoteharvesters: roleQuotaObject?.remoteharvester || 0,
+
 	}
 
 	log(`Quotas initialized: Harvesters (2), Upgraders (2), Fillers (2), Haulers (0), Builders (1), Defenders (0), Reservers (0), Scouts (0), Remote Harvesters (0)`);
@@ -237,7 +243,7 @@ Room.prototype.initQuotas = function (): void {
 
 /** Initializes a room with default memory structure and settings. Sets up quotas, visual settings, repair settings, and stats tracking. */
 Room.prototype.initRoom = function () {
-	if (!this.memory.quotas) this.initQuotas();
+	this.initQuotas();
 
 	const visualSettings: VisualSettings = { progressInfo: { alignment: 'left', xOffset: 1, yOffsetFactor: 0.6, stroke: '#000000', fontSize: 0.6, color: '' } };
 	const towerSettings: TowerRepairSettings = { creeps: true, walls: false, ramparts: false, roads: false, others: false, wallLimit: 10, rampartLimit: 10, maxRange: 10 };
@@ -257,7 +263,7 @@ Room.prototype.initRoom = function () {
 	if (!this.memory.stats) 			this.memory.stats = { energyHarvested: 0, controlPoints: 0, constructionPoints: 0, creepsSpawned: 0, creepPartsSpawned: 0,
 				mineralsHarvested: mineralsHarvested, controllerLevelReached: 0, npcInvadersKilled: 0, hostilePlayerCreepsKilled: 0, labStats: labStats };
 	if (!this.memory.flags) 			this.memory.flags = { advancedSpawnLogic: false, };
-	if (!this.memory.visuals) 		this.memory.visuals = {};
+	if (!this.memory.visuals) 		this.memory.visuals = { visDistTrans: false, visBasePlan: false, visFloodFill: false, visBuildProgress: false, visPlanInfo: false, enableVisuals: false };
 
 	this.cacheObjects();
 }
@@ -267,6 +273,8 @@ Room.prototype.toggleBasePlannerVisuals = function (): void {
 	this.memory.visuals.visDistTrans = !this.memory.visuals.visDistTrans;
 	this.memory.visuals.visFloodFill = !this.memory.visuals.visFloodFill;
 	this.memory.visuals.visBasePlan  = !this.memory.visuals.visBasePlan;
+	this.memory.visuals.visBuildProgress = !this.memory.visuals.visBuildProgress;
+	this.memory.visuals.visPlanInfo = !this.memory.visuals.visBuildProgress;
 	log(`Base Planner visuals are now set to '${this.memory.visuals.visDistTrans}'`);
 }
 

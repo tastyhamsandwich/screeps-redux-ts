@@ -360,7 +360,19 @@ export function randomColorAsInt(): number { // Random color returned as INTEGER
 
 } */
 
-export function initGlobal(override: boolean = false): boolean {
+/** Initializes global data and settings, and zeroes out Memory first if parameter is true.
+ * @param eraseAll Set to true to zero out game Memory
+ */
+export function initGlobal(eraseAll: boolean = false): boolean {
+
+	// Set parameter flag to 'true' to ensure Game Memory is cleared prior to init
+	if (eraseAll) {
+		for (const key in Memory) {
+			if (Object.prototype.hasOwnProperty.call(Memory, key))
+				delete Memory[key];
+		}
+		log(`Zeroed out Game Memory object in advance of Global Initialization!`);
+	} else log(`Executing Global Initialization without pre-clearing Game Memory.`);
 
 	if (!Memory.globalSettings) Memory.globalSettings = {};
 	Memory.globalSettings = {
@@ -404,6 +416,30 @@ export function initGlobal(override: boolean = false): boolean {
 		}
 	}
 
+	if (!Memory.globalSettings.debug)
+		Memory.globalSettings.debug = {
+			suspendCreeps: {
+				all: false,
+				harvester: false,
+				filler: false,
+				hauler: false,
+				upgrader: false,
+				builder: false,
+				repairer: false,
+				defender: false,
+				reserver: false,
+				scout: false,
+				remoteharvester: false
+			},
+			creepDebug: false,
+			spawnDebug: false,
+			plannerDebug: false,
+			visualsDebug: false
+		}
+
+	if (!Memory.stats) Memory.stats = {
+		totalEnergyHarvested: 0,
+	}
 	if (!Memory.globalData) Memory.globalData = {};
 	Memory.globalData.numColonies = 0;
 

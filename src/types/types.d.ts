@@ -91,6 +91,7 @@ declare global {
 			lastBuiltTick: number;
 			index: number;
 			activeRCL: number;
+			failedPlacements?: Array<{pos: {x: number, y: number}, structure: string, error: string}>;
 		};
 		basePlan?: {
 			lastGenerated: number;
@@ -475,6 +476,8 @@ declare global {
 		ramparts: RoomPosition[];
 		controllerArea: RoomPosition[];
 		timestamp: number;
+		dtGrid: number[][];
+		floodFill: number[][];
 	}
 
 	interface StampTemplate {

@@ -122,7 +122,7 @@ export default class BasePlanner {
 	 * @author randomencounter
 	 */
 	public createPlan(): PlanResult {
-		console.log(`[${this.room.name}] Starting base planning...`);
+		console.log(`${this.room.link()} Starting base planning...`);
 
 		// Step 1: Generate distance transform
 		this.generateDistanceTransform();
@@ -160,9 +160,12 @@ export default class BasePlanner {
 		// Generate RCL-specific build schedule
 		const schedule = this.generateRCLSchedule();
 
-		console.log(`[${this.room.name}] Base planning complete. Generated ${this.structurePlacements.size} placements.`);
+		console.log(`${this.room.link()} Base planning complete. Generated ${this.structurePlacements.size} placements.`);
 
 		return {
+			dtGrid: this.dtGrid,
+			floodFill: this.floodGrid,
+
 			startPos: this.startPos!,
 			placements: Array.from(this.structurePlacements.values()),
 			rclSchedule: schedule,
@@ -205,7 +208,7 @@ export default class BasePlanner {
 			// This aligns the player's spawn with the middle spawn position (dx: 0, dy: -1) in the core stamp
 			const playerSpawn = existingSpawns[0];
 			this.startPos = new RoomPosition(playerSpawn.pos.x, playerSpawn.pos.y + 1, this.room.name);
-			console.log(`[${this.room.name}] Using existing spawn at ${playerSpawn.pos} - center point set to ${this.startPos}`);
+			console.log(`${this.room.link()} Using existing spawn at ${playerSpawn.pos} - center point set to ${this.startPos}`);
 			return;
 		}
 
@@ -250,7 +253,7 @@ export default class BasePlanner {
 		}
 
 		this.startPos = candidates[0].pos;
-		console.log(`[${this.room.name}] Selected starting position: ${this.startPos}`);
+		console.log(`${this.room.link()} Selected starting position: ${this.startPos}`);
 	}
 
 	/**
@@ -287,13 +290,13 @@ export default class BasePlanner {
 		for (const rotation of rotations) {
 			for (const mirror of mirrors) {
 				if (this.tryPlaceStamp(this.startPos, CORE_STAMP_5X5, rotation, mirror)) {
-					console.log(`[${this.room.name}] Core stamp placed with rotation ${rotation}, mirror ${mirror}`);
+					console.log(`${this.room.link()} Core stamp placed with rotation ${rotation}, mirror ${mirror}`);
 					return;
 				}
 			}
 		}
 
-		console.log(`[${this.room.name}] Warning: Could not place full core stamp, placing partial`);
+		console.log(`${this.room.link()} Warning: Could not place full core stamp, placing partial`);
 		// Place as much as possible
 		this.tryPlaceStamp(this.startPos, CORE_STAMP_5X5, 0, false, true);
 	}
@@ -434,7 +437,7 @@ export default class BasePlanner {
 				meta: { type: 'controller', upgradeTo: STRUCTURE_LINK }
 			});
 
-			console.log(`[${this.room.name}] Controller area designated at ${bestArea}`);
+			console.log(`${this.room.link()} Controller area designated at ${bestArea}`);
 		}
 	}
 
@@ -624,7 +627,7 @@ export default class BasePlanner {
 		if (bestPos) {
 			// Place lab stamp
 			this.tryPlaceStamp(bestPos, LAB_STAMP, 0, false, true);
-			console.log(`[${this.room.name}] Labs positioned at ${bestPos}`);
+			console.log(`${this.room.link()} Labs positioned at ${bestPos}`);
 		}
 	}
 
@@ -641,19 +644,10 @@ export default class BasePlanner {
 
 		// Create roads from storage to sources
 		for (const source of sources) {
-			// Find nearest position to source
+			// Find nearest position to source for road path
 			const nearPos = this.findNearestOpenPosition(source.pos, 1);
 			if (nearPos) {
-				// Place container and mark for link upgrade
-				const key = `${nearPos.x},${nearPos.y}`;
-				this.structurePlacements.set(key + '_source_container', {
-					pos: { x: nearPos.x, y: nearPos.y },
-					structure: STRUCTURE_CONTAINER,
-					priority: 1,
-					meta: { type: 'source', upgradeTo: STRUCTURE_LINK }
-				});
-
-				// Create road path
+				// Create road path to source (container placement now handled by harvester logic)
 				if (storage) {
 					this.createRoadPath(
 						new RoomPosition(storage.pos.x, storage.pos.y, this.room.name),
@@ -765,7 +759,7 @@ export default class BasePlanner {
 					}
 				}
 
-				console.log(`[${this.room.name}] Placed ${result.length} ramparts using minimum cut`);
+				console.log(`${this.room.link()} Placed ${result.length} ramparts using minimum cut`);
 			}
 		}
 	}
@@ -837,7 +831,7 @@ export default class BasePlanner {
 			towers.push(tower.pos);
 		}
 
-		console.log(`[${this.room.name}] Placed ${towers.length} towers`);
+		console.log(`${this.room.link()} Placed ${towers.length} towers`);
 	}
 
 	/**
@@ -882,7 +876,10 @@ export default class BasePlanner {
 			placements.sort((a, b) => a.priority - b.priority);
 
 			const limits = STRUCTURE_LIMITS[type];
-			if (!limits) continue;
+			if (!limits) {
+				console.log(`${this.room.link()} WARNING: No structure limits found for ${type}`);
+				continue;
+			}
 
 			// Track how many of this structure type have been assigned to each RCL
 			const assignedPerRCL: number[] = [0, 0, 0, 0, 0, 0, 0, 0, 0]; // index 0-8
@@ -891,6 +888,7 @@ export default class BasePlanner {
 				const minRCL = placement.meta?.minRCL || 1;
 
 				// Find the earliest RCL where this can be placed
+				let placed = false;
 				for (let rcl = minRCL; rcl <= 8; rcl++) {
 					const limit = limits[rcl];
 					const alreadyAssigned = assignedPerRCL[rcl];
@@ -902,7 +900,22 @@ export default class BasePlanner {
 						for (let r = rcl; r <= 8; r++) {
 							assignedPerRCL[r]++;
 						}
+						placed = true;
 						break;
+					}
+				}
+
+				if (!placed) {
+					console.log(`${this.room.link()} WARNING: Could not place ${type} at any RCL (minRCL: ${minRCL}, total needed: ${placements.length})`);
+				}
+			}
+
+			// Log diagnostic info for extensions specifically
+			if (type === STRUCTURE_EXTENSION) {
+				console.log(`${this.room.link()} Extension scheduling: ${placements.length} total extensions generated`);
+				for (let rcl = 1; rcl <= 8; rcl++) {
+					if (schedule[rcl as RCLLevel].filter(p => p.structure === STRUCTURE_EXTENSION).length > 0) {
+						console.log(`${this.room.link()}   RCL${rcl}: ${schedule[rcl as RCLLevel].filter(p => p.structure === STRUCTURE_EXTENSION).length} extensions (limit: ${limits[rcl]})`);
 					}
 				}
 			}

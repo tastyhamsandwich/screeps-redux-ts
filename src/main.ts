@@ -32,7 +32,9 @@ let tickCount = 0;
 
 module.exports.loop = function() {
 
-	if (Memory.globalData.onBirthInitComplete === undefined || Memory.globalData.onBirthInitComplete === false)
+	if (Object.keys(Game.spawns).length === 0)
+		FUNC.initGlobal(true);
+	else if (Memory.globalData.onBirthInitComplete === undefined || Memory?.globalData?.onBirthInitComplete === false)
 		FUNC.initGlobal();
 
 	FUNC.calcTickTime();
@@ -41,81 +43,58 @@ module.exports.loop = function() {
 	FUNC.creepCleanup(creepRoleCounts);
 
 	// Execute specific role-based creep script for every creep, based on role assigned in CreepMemory
+
+	const creepSuspend = Memory.globalSettings.debug.suspendCreeps;
+
 	for (const name in Game.creeps) {
 		const creep = Game.creeps[name];
-		switch (creep.memory.role) {
-			case 'harvester':
-				try {
-					CreepAI.Harvester.run(creep);
-				} catch (e) {
-					console.log(`Error with Harvester logic: ${e}`);
-				}
-				break;
-			case 'upgrader':
-				try {
-					CreepAI.Upgrader.run(creep);
-				} catch (e) {
-					console.log(`Error with Upgrader logic: ${e}`);
-				}
-				break;
-			case 'builder':
-				try {
-					CreepAI.Builder.run(creep);
-				} catch (e) {
-					console.log(`Error with Builder logic: ${e}`);
-				}
-				break;
-			case 'repairer':
-				try {
-					CreepAI.Repairer.run(creep);
-				} catch (e) {
-					console.log(`Error with Repairer logic: ${e}`);
-				}
-				break;
-			case 'filler':
-				try {
-					CreepAI.Filler.run(creep);
-				} catch (e) {
-					console.log(`Error with Filler logic: ${e}`);
-				}
-				break;
-			case 'hauler':
-				try {
-					CreepAI.Hauler.run(creep);
-				} catch (e) {
-					console.log(`Error with Hauler logic: ${e}`);
-				}
-				break;
-			case 'defender':
-				try {
-					CreepAI.Defender.run(creep);
-				} catch (e) {
-					console.log(`Error with Defender logic: ${e}`);
-				}
-				break;
-			case 'reserver':
-				try {
-					CreepAI.Reserver.run(creep);
-				} catch (e) {
-					console.log(`Error with Reserver logic: ${e}`);
-				}
-				break;
-			case 'remoteharvester':
-				try {
-					CreepAI.Harvester.runremote(creep);
-				} catch (e) {
-					console.log(`Error with Remote Harvester logic: ${e}`);
-				}
-				break;
-			case 'scout':
-				try {
-					CreepAI.Scout.run(creep);
-				} catch (e) {
-					console.log(`Error with Scout logic: ${e}`);
-				}
-				break;
-			default:
-				break;
+		try {
+			switch (creep.memory.role) {
+				case 'harvester':
+					if (!creepSuspend.all || !creepSuspend.harvester)
+						CreepAI.Harvester.run(creep);
+					break;
+				case 'upgrader':
+					if (!creepSuspend.all || !creepSuspend.upgrader)
+						CreepAI.Upgrader.run(creep);
+					break;
+				case 'builder':
+					if (!creepSuspend.all || !creepSuspend.builder)
+						CreepAI.Builder.run(creep);
+					break;
+				case 'repairer':
+					if (!creepSuspend.all || !creepSuspend.repairer)
+						CreepAI.Repairer.run(creep);
+					break;
+				case 'filler':
+					if (!creepSuspend.all || !creepSuspend.filler)
+						CreepAI.Filler.run(creep);
+					break;
+				case 'hauler':
+					if (!creepSuspend.all || !creepSuspend.hauler)
+						CreepAI.Hauler.run(creep);
+					break;
+				case 'defender':
+					if (!creepSuspend.all || !creepSuspend.defender)
+						CreepAI.Defender.run(creep);
+					break;
+				case 'reserver':
+					if (!creepSuspend.all || !creepSuspend.reserver)
+						CreepAI.Reserver.run(creep);
+					break;
+				case 'remoteharvester':
+					if (!creepSuspend.all || !creepSuspend.remoteharvester)
+						CreepAI.Harvester.runremote(creep);
+					break;
+				case 'scout':
+					if (!creepSuspend.all || !creepSuspend.scout)
+						CreepAI.Scout.run(creep);
+					break;
+				default:
+					break;
+			}
+		} catch (e) {
+			console.log(`<span style="color: red;">[ERROR]:</span> Error logged by ${creep.name} with ${FUNC.capitalize(creep.memory.role)} logic: ${e}`);
 		}
 	}
 
