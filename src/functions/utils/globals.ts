@@ -1,6 +1,6 @@
 import { PART_COST } from "@utils/constants";
 
-declare global {
+/* declare global {
 	interface Global {
 		splitRoomName(roomName: string): [string, number, string, number];
 		roomExitsTo(roomName: string, direction: DirectionConstant | number | string): string;
@@ -16,12 +16,13 @@ declare global {
 		determineBodyParts(role: string, maxEnergy: number, extras?: { [key: string]: any }): BodyPartConstant[] | undefined;
 		initGlobal(override: boolean): boolean;
 		calcBodyCost(body: BodyPartConstant[] | undefined | null): number;
+		log(): void;
+		capitalize(string: string): string;
+		tickTime: number;
 		PART_COST: Record<BodyPartConstant, number>;
 		pathing: { [key: string]: any };
-		log(): void;
-		tickTime: number;
 	}
-}
+} */
 
 let controllerPPTArray: number[] = [];
 let controllerProgress: number = 0;
@@ -264,7 +265,7 @@ export function randomColorAsInt(): number { // Random color returned as INTEGER
 	return randomInt(1, 10);
 }
 
-export function determineBodyParts(role: string, maxEnergy: number, extras?: { [key: string]: any }): BodyPartConstant[] | undefined {
+/* export function determineBodyParts(role: string, maxEnergy: number, extras?: { [key: string]: any }): BodyPartConstant[] | undefined {
 
 	const bodyPartSegment: BodyPartConstant[] = [];
 	const totalBodyParts: BodyPartConstant[] = [];
@@ -357,57 +358,103 @@ export function determineBodyParts(role: string, maxEnergy: number, extras?: { [
 			throw new Error("Invalid parameters passed.");
 	}
 
+} */
+
+/** Initializes global data and settings, and zeroes out Memory first if parameter is true.
+ * @param eraseAll Set to true to zero out game Memory
+ */
+export function initGlobal(eraseAll: boolean = false): boolean {
+
+	// Set parameter flag to 'true' to ensure Game Memory is cleared prior to init
+	if (eraseAll) {
+		for (const key in Memory) {
+			if (Object.prototype.hasOwnProperty.call(Memory, key))
+				delete Memory[key];
+		}
+		log(`Zeroed out Game Memory object in advance of Global Initialization!`);
+	} else log(`Executing Global Initialization without pre-clearing Game Memory.`);
+
+	if (!Memory.globalSettings) Memory.globalSettings = {};
+	Memory.globalSettings = {
+		consoleSpawnInterval: 25,
+		alertDisabled: true,
+		reusePathValue: 5,
+		ignoreCreeps: true,
+		creepSettings: {
+			builder: {
+				reusePathValue: 3,
+				ignoreCreeps: true
+			},
+			defender: {
+				reusePathValue: 3,
+				ignoreCreeps: true
+			},
+			filler: {
+				reusePathValue: 3,
+				ignoreCreeps: true
+			},
+			harvester: {
+				reusePathValue: 3,
+				ignoreCreeps: true
+			},
+			hauler: {
+				reusePathValue: 3,
+				ignoreCreeps: true
+			},
+			repairer: {
+				reusePathValue: 3,
+				ignoreCreeps: true
+			},
+			reserver: {
+				reusePathValue: 3,
+				ignoreCreeps: true
+			},
+			upgrader: {
+				reusePathValue: 3,
+				ignoreCreeps: true
+			},
+		}
+	}
+
+	if (!Memory.globalSettings.debug)
+		Memory.globalSettings.debug = {
+			suspendCreeps: {
+				all: false,
+				harvester: false,
+				filler: false,
+				hauler: false,
+				upgrader: false,
+				builder: false,
+				repairer: false,
+				defender: false,
+				reserver: false,
+				scout: false,
+				remoteharvester: false
+			},
+			creepDebug: false,
+			spawnDebug: false,
+			plannerDebug: false,
+			visualsDebug: false
+		}
+
+	if (!Memory.stats) Memory.stats = {
+		totalEnergyHarvested: 0,
+	}
+	if (!Memory.globalData) Memory.globalData = {};
+	Memory.globalData.numColonies = 0;
+
+	Memory.globalData.onBirthInitComplete = true;
+	console.log(`Initialized global settings!`);
+	return true;
 }
 
-export function initGlobal(override: boolean = false): boolean {
+export function adjustPathingValues(role: string, reuseValue: number = 3, ignoreCreeps: boolean = true): void {
 
-	if (override)	Memory.globalSettings = {};
-	if (!Memory.globalSettings) {
+	Memory.globalSettings.creepSettings[role].reusePathValue = reuseValue;
+	Memory.globalSettings.creepSettings[role].ignoreCreeps = ignoreCreeps;
 
-		Memory.globalSettings = {
-			consoleSpawnInterval: 25,
-			alertDisabled: true,
-			reusePathValue: 5,
-			ignoreCreeps: true,
-			creepSettings: {
-				builder: {
-					reusePathValue: 3,
-					ignoreCreeps: true
-				},
-				defender: {
-					reusePathValue: 3,
-					ignoreCreeps: true
-				},
-				filler: {
-					reusePathValue: 3,
-					ignoreCreeps: true
-				},
-				harvester: {
-					reusePathValue: 3,
-					ignoreCreeps: true
-				},
-				hauler: {
-					reusePathValue: 3,
-					ignoreCreeps: true
-				},
-				repairer: {
-					reusePathValue: 3,
-					ignoreCreeps: true
-				},
-				reserver: {
-					reusePathValue: 3,
-					ignoreCreeps: true
-				},
-				upgrader: {
-					reusePathValue: 3,
-					ignoreCreeps: true
-				},
-			}
-		}
-		console.log(`Initialized global settings!`);
-		return true;
-	} else
-		return false;
+	console.log(`[GENERAL]: Pathing Settings for '${role}' now set to: Ignore Creeps (${ignoreCreeps}), Reuse Path Value (${reuseValue})`);
+	return;
 }
 
 /**
@@ -419,6 +466,13 @@ export function initGlobal(override: boolean = false): boolean {
 export function calcBodyCost(body: BodyPartConstant[] | undefined | null): number {
     if (!body || body.length === 0) return 0;
     return body.reduce((sum, part) => sum + (PART_COST[part] ?? 0), 0);
+}
+
+export function capitalize(string: string): string {
+	if (typeof string !== 'string' || string.length === 0) {
+		return string; // Handle non-string input or empty strings
+	}
+	return string.charAt(0).toUpperCase() + string.slice(1);
 }
 
 export function needMoreHarvesters(room: Room): boolean {
@@ -497,6 +551,25 @@ export function visualRCProgress(controller: StructureController): void {
 
 	const cont: StructureController = controller;
 	const rmName: string = controller.room.name;
+
+	// Initialize settings if they don't exist
+	if (!controller.room.memory.settings) {
+		controller.room.memory.settings = {} as any;
+	}
+	if (!controller.room.memory.settings.visualSettings) {
+		controller.room.memory.settings.visualSettings = {} as any;
+	}
+	if (!controller.room.memory.settings.visualSettings.progressInfo) {
+		controller.room.memory.settings.visualSettings.progressInfo = {
+			fontSize: 0.5,
+			xOffset: 0,
+			yOffsetFactor: 1,
+			stroke: '#000000',
+			alignment: 'center',
+			color: lvlColor
+		} as ProgressInfoSettings;
+	}
+
 	const rmSettingsPInfo: ProgressInfoSettings = controller.room.memory.settings.visualSettings.progressInfo;
 
 
@@ -656,4 +729,42 @@ function determineRemoteHarvestersNeeded(room: Room): number {
 
 	return totalNumSources;
 
+}
+
+export function getReturnCode(code: number): string {
+
+	switch (code) {
+		case 0:
+			return 'OK';
+		case -1:
+			return 'ERR_NOT_OWNER';
+		case -2:
+			return 'ERR_NO_PATH';
+		case -3:
+			return 'ERR_NAME_EXISTS';
+		case -4:
+			return 'ERR_BUSY';
+		case -5:
+			return 'ERR_NOT_FOUND';
+		case -6:
+			return 'ERR_NOT_ENOUGH_RESOURCES';
+		case -7:
+			return 'ERR_INVALID_TARGET';
+		case -8:
+			return 'ERR_FULL';
+		case -9:
+			return 'ERR_NOT_IN_RANGE';
+		case -10:
+			return 'ERR_INVALID_ARGS';
+		case -11:
+			return 'ERR_TIRED';
+		case -12:
+			return 'ERR_NO_BODYPART';
+		case -14:
+			return 'ERR_RCL_NOT_ENOUGH';
+		case -15:
+			return 'ERR_GCL_NOT_ENOUGH';
+		default:
+			return 'UNKNOWN';
+	}
 }

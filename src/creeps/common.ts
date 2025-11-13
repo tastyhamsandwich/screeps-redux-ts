@@ -1,14 +1,13 @@
 import { log, initGlobal } from '../functions/utils/globals';
 import { pathing } from '../functions/utils/constants';
-import '../functions/utils/globals';
+import * as FUNC from '@functions/index';
 import 'prototypes/creep';
 
 let cSet;
 
 if (Memory.globalSettings === undefined || Memory.globalSettings.creepSettings === undefined)
 	initGlobal();
-else
-	cSet = Memory.globalSettings.creepSettings;
+else cSet = Memory.globalSettings.creepSettings;
 
 /**
  * This function allows a creep to navigate a series of Game flags, stored in Creep Memory as either a
@@ -97,31 +96,24 @@ export function upgraderBehavior(creep: Creep): void {
 	}
 
 	if (creep.memory.bucket === undefined) {
-
 		if (creep.room.memory?.containers?.controller === undefined) {
 			const bucket = creep.room.find(FIND_STRUCTURES, { filter: (i) => i.structureType === STRUCTURE_CONTROLLER })[0].pos.findInRange(FIND_STRUCTURES, 3, { filter: (i) => i.structureType === STRUCTURE_CONTAINER })[0];
-			if (bucket)
-				creep.room.memory.containers.controller = bucket.id;
+			if (bucket) creep.room.memory.containers.controller = bucket.id;
 			else {
 				const bucket = creep.room.find(FIND_STRUCTURES, { filter: (i) => i.structureType === STRUCTURE_CONTAINER });
 				const closestBucket = creep.pos.findClosestByRange(bucket);
-				if (closestBucket)
-					creep.memory.bucket = closestBucket.id;
+				if (closestBucket) creep.memory.bucket = closestBucket.id;
 			}
-		}
-		else
-			creep.memory.bucket = creep.room.memory.containers.controller;
+		}	else creep.memory.bucket = creep.room.memory.containers.controller;
 	}
 
-	if (creep.store.getFreeCapacity() === 0)
-		creep.memory.working = true;
+	if (creep.store.getFreeCapacity() === 0) creep.memory.working = true;
 
 	if (creep.store.getUsedCapacity() === 0) {
 		const containers = creep.room.find(FIND_STRUCTURES, { filter: (i) => i.structureType === STRUCTURE_CONTAINER && i.store.getUsedCapacity() >= creep.store.getCapacity() });
 
 		if (containers.length) {
 			const nearestContainer = creep.pos.findClosestByRange(containers);
-
 			if (nearestContainer) {
 				const result = creep.withdraw(nearestContainer, RESOURCE_ENERGY);
 				if (result === ERR_NOT_IN_RANGE)
@@ -138,9 +130,10 @@ export function upgraderBehavior(creep: Creep): void {
 				if (result === ERR_NOT_IN_RANGE) {
 					creep.moveTo(controllerObject, { visualizePathStyle: { stroke: 'green', lineStyle: 'dashed', opacity: 0.3 } });
 					return;
-				}
-				else if (result === OK)
+				}	else if (result === OK)	{
 					creep.say('🔋');
+					creep.room.memory.stats.controlPoints += (creep.getActiveBodyparts(WORK));
+				}
 			}
 		}
 	}
@@ -183,4 +176,12 @@ export function upgraderBehavior(creep: Creep): void {
 			}
 		}
 	}
+}
+
+export function exitMortalCoil(creep: Creep): void {
+	const ttl = creep.ticksToLive;
+	if (ttl && ttl <= 5) creep.say('☠️');
+	if (creep.store.getUsedCapacity() > 0)
+		console.log(`${creep.room.link()} ${FUNC.capitalize(creep.memory.role)} creep '${creep.name}' is expiring momentarily...`);
+	return;
 }

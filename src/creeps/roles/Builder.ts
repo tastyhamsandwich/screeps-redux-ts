@@ -2,7 +2,12 @@ import { aiAlert, navRallyPoint, upgraderBehavior } from "../common";
 import { pathing } from "@constants";
 
 /**
- * A creep whose role it is to locate energy and spend it building structures around the room. Requires worker parts to be effective.
+ * A creep whose role it is to locate energy and spend it building structures around the room.
+ * Requires WORK, CARRY, and MOVE parts to be effective.
+ *
+ * State machine:
+ * - working: false -> Withdraw energy from storage/containers
+ * - working: true  -> Build construction sites or upgrade controller
  */
 const Builder = {
 	run: (creep: Creep) => {
@@ -14,6 +19,7 @@ const Builder = {
 
 		cMem.disable ??= false;
 		cMem.rally ??= 'none';
+		cMem.working ??= false; // Initialize working flag if undefined
 
 		if (cMem.disable === true) {
 			aiAlert(creep);
@@ -21,55 +27,44 @@ const Builder = {
 			if (cMem.rally !== 'none') {
 				navRallyPoint(cMem.rally);
 			} else {
-				if (creep.store.getUsedCapacity() === 0)
-					creep.memory.working = false;
-				if (creep.store.getFreeCapacity() === 0)
-					creep.memory.working = true;
+				// State transition logic: toggle working flag based on energy levels
+				if (creep.store.getUsedCapacity(RESOURCE_ENERGY) === 0)	cMem.working = false;
+				if (creep.store.getFreeCapacity(RESOURCE_ENERGY) === 0)	cMem.working = true;
 
-				if (!creep.memory.working) {
-					if (room.storage && room.storage.store.getUsedCapacity(RESOURCE_ENERGY) > (creep.store.getCapacity() + 1000)) {
-						const result = creep.withdraw(room.storage, RESOURCE_ENERGY)
-						if (result === ERR_NOT_IN_RANGE) {
-							creep.moveTo(room.storage, pathing.builderPathing);
-							return;
-						}	else if (result === OK) {
-							creep.memory.working = true;
-							return;
-						}
-					} else {
-						const containers = room.find(FIND_STRUCTURES, { filter: (i) => i.structureType === STRUCTURE_CONTAINER });
+				// Harvest phase - collect energy
+				if (!cMem.working) {
+					const energySource = findEnergySource(creep);
 
-						if (containers.length) {
-							const nearestContainer = pos.findClosestByRange(containers);
-
-							if (nearestContainer) {
-								const result = creep.withdraw(nearestContainer, RESOURCE_ENERGY);
-								if (result === ERR_NOT_IN_RANGE) {
-									creep.moveTo(nearestContainer, pathing.builderPathing);
-									return;
-								}	else if (result === ERR_NOT_ENOUGH_RESOURCES || OK) {
-									creep.memory.working = true;
-									return;
-								}
+					if (energySource) {
+						const result = creep.withdraw(energySource, RESOURCE_ENERGY);
+						if (result === ERR_NOT_IN_RANGE)
+							creep.moveTo(energySource, pathing.builderPathing);
+						else if (result === OK) {
+							// Successfully withdrew - check if we should transition to working
+							if (creep.store.getFreeCapacity(RESOURCE_ENERGY) === 0) {
+								cMem.working = true;
 							}
 						}
+						// On any other error, keep trying next tick
 					}
-				} else {
+				}
+				// Build phase - construct or upgrade
+				else {
 					const cSites = room.find(FIND_CONSTRUCTION_SITES);
-					if (cSites.length) {
+					if (cSites.length > 0) {
 						const nearestCSite = pos.findClosestByRange(cSites);
 						if (nearestCSite) {
 							const result = creep.build(nearestCSite);
 							if (result === ERR_NOT_IN_RANGE) {
 								creep.moveTo(nearestCSite, pathing.builderPathing);
-								return;
 							} else if (result === ERR_NOT_ENOUGH_ENERGY) {
-								creep.memory.working = false;
-								return;
+								// Out of energy while building - transition back to harvest
+								cMem.working = false;
 							}
 						}
 					} else {
-						if (rMem.containers.controller) cMem.bucket ??= rMem.containers.controller;
+						// No construction sites - upgrade controller instead
+						if (rMem?.containers?.controller) cMem.bucket ??= rMem.containers.controller;
 						cMem.controller ??= room.controller?.id;
 						upgraderBehavior(creep);
 					}
@@ -79,9 +74,38 @@ const Builder = {
 	},
 
 	runremote: function (creep: Creep) {
-
-
+		// Remote builder logic placeholder
 	}
+}
+
+/**
+ * Finds the best energy source for the builder creep.
+ * Priority: Storage (if sufficient) > Containers
+ */
+function findEnergySource(creep: Creep): StructureStorage | StructureContainer | null {
+	const room = creep.room;
+	const pos = creep.pos;
+
+	// Priority 1: Storage (if it has enough energy to justify using it)
+	if (room.storage && room.storage.store.getUsedCapacity(RESOURCE_ENERGY) > (creep.store.getCapacity() + 1000)) {
+		return room.storage;
+	}
+
+	// Priority 2: Containers with energy
+	const containers = room.find(FIND_STRUCTURES, {
+		filter: (s) => s.structureType === STRUCTURE_CONTAINER
+			&& (s as StructureContainer).store.getUsedCapacity(RESOURCE_ENERGY) > 0
+	}) as StructureContainer[];
+
+	if (containers.length > 0) {
+		// Find closest container with energy
+		const nearestContainer = pos.findClosestByRange(containers);
+		if (nearestContainer) {
+			return nearestContainer;
+		}
+	}
+
+	return null;
 }
 
 export default Builder;

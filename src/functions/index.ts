@@ -5,3 +5,4 @@ export * from "./creep"
 export * from "./room"
 export * from "./structure"
 export * from "./cache/utils"
+export * from './visual';

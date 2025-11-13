@@ -53,27 +53,44 @@ const Harvester = {
 				} else {
 					if (creep.store.getFreeCapacity() == 0 || creep.store.getFreeCapacity() < (creep.getActiveBodyparts(WORK) * 2)) {
 						if (cMem.returnEnergy === true) {
-							if (creep.transfer(Game.spawns['Spawn1'], RESOURCE_ENERGY) === ERR_NOT_IN_RANGE) {
-								creep.moveTo(Game.spawns['Spawn1'], pathing.harvesterPathing);
-								return;
+							const spawns = creep.room.find(FIND_MY_SPAWNS);
+							if (spawns.length > 0) {
+								if (creep.transfer(spawns[0], RESOURCE_ENERGY) === ERR_NOT_IN_RANGE) {
+									creep.moveTo(spawns[0], pathing.harvesterPathing);
+									return;
+								}
 							}
 						} else {
 							if (isBootstrap) {
+								// Count harvesters in the room
+								const harvesterCount = creep.room.find(FIND_MY_CREEPS, {
+									filter: (c) => c.memory.role === 'harvester' && c.memory.home === creep.room.name
+								}).length;
+
+								// Once we have 4+ harvesters, focus on building containers
+								if (harvesterCount >= 4) {
+									buildContainer(creep);
+									return;
+								}
+
+								// Otherwise, haul energy to spawn/extensions
 								const spawn: StructureSpawn | StructureExtension | null = creep.pos.findClosestByRange(FIND_MY_STRUCTURES, {
 									filter: (s) =>
 										(s.structureType === STRUCTURE_SPAWN || s.structureType === STRUCTURE_EXTENSION) &&
 										s.store.getFreeCapacity(RESOURCE_ENERGY) > 0
 								});
 								if (spawn) {
-									(creep.transfer(spawn, RESOURCE_ENERGY) === ERR_NOT_IN_RANGE)
-									creep.moveTo(spawn, pathing.harvesterPathing);
+									if (creep.transfer(spawn, RESOURCE_ENERGY) === ERR_NOT_IN_RANGE) {
+										creep.moveTo(spawn, pathing.harvesterPathing);
+									}
 								} else buildContainer(creep);
 								return;
 							}
 							if (cMem.bucket) creep.unloadEnergy(cMem.bucket);
 							else {
-								const containers: StructureContainer[] = pos.findInRange(FIND_STRUCTURES, 3, { filter: (i) => { i.structureType === STRUCTURE_CONTAINER } });
+								const containers: StructureContainer[] = pos.findInRange(FIND_STRUCTURES, 1, { filter: (i) => i.structureType === STRUCTURE_CONTAINER }) as StructureContainer[];
 								if (containers.length) {
+									console.log(`Found container`);
 									const target: StructureContainer = pos.findClosestByRange(containers)!;
 									if (target) {
 										cMem.bucket = target.id;
@@ -87,7 +104,17 @@ const Harvester = {
 								} else buildContainer(creep);
 							}
 						}
-					} else creep.harvestEnergy();
+					} else {
+						// Move to source before harvesting
+						source = Game.getObjectById(cMem.source) as Source;
+						if (!source) {
+							creep.say('No src!');
+						} else if (!pos.isNearTo(source)) {
+							creep.moveTo(source, pathing.harvesterPathing);
+						} else {
+							creep.harvestEnergy();
+						}
+					}
 				}
 			} else navRallyPoint(creep);
 		} else aiAlert(creep);
@@ -139,13 +166,17 @@ const Harvester = {
 				} else {
 					if (creep.store.getFreeCapacity() == 0 || creep.store.getFreeCapacity() < (creep.getActiveBodyparts(WORK) * 2)) {
 						if (cMem.returnEnergy === true) {
-							if (creep.transfer(Game.spawns['Spawn1'], RESOURCE_ENERGY) === ERR_NOT_IN_RANGE)
-								creep.advMoveTo(Game.spawns['Spawn1'], true, pathing.harvesterPathing);
+							const spawns = creep.room.find(FIND_MY_SPAWNS);
+							if (spawns.length > 0) {
+								if (creep.transfer(spawns[0], RESOURCE_ENERGY) === ERR_NOT_IN_RANGE)
+									creep.advMoveTo(spawns[0], true, pathing.harvesterPathing);
+							}
 						} else {
 							if (cMem.bucket) creep.unloadEnergy(cMem.bucket);
 							else {
-								const containers: StructureContainer[] = pos.findInRange(FIND_STRUCTURES, 3, { filter: (i) => { i.structureType === STRUCTURE_CONTAINER } });
+								const containers: StructureContainer[] = pos.findInRange(FIND_STRUCTURES, 1, { filter: (i) => i.structureType === STRUCTURE_CONTAINER }) as StructureContainer[];
 								if (containers.length) {
+									console.log(`Found container)`);
 									const target: StructureContainer = pos.findClosestByRange(containers)!;
 									if (target) {
 										cMem.bucket = target.id;
@@ -173,7 +204,17 @@ const Harvester = {
 								}
 							}
 						}
-					} else creep.harvestEnergy();
+					} else {
+						// Move to source before harvesting
+						source = Game.getObjectById(cMem.source) as Source;
+						if (!source) {
+							creep.say('No src!');
+						} else if (!pos.isNearTo(source)) {
+							creep.advMoveTo(source, true, pathing.harvesterPathing);
+						} else {
+							creep.harvestEnergy();
+						}
+					}
 				}
 			} else navRallyPoint(creep);
 		} else aiAlert(creep);
@@ -183,19 +224,36 @@ const Harvester = {
 function buildContainer(creep: Creep): void {
 	const room = creep.room;
 	const pos = creep.pos;
+	const source = Game.getObjectById(creep.memory.source) as Source;
 
-	const nearbySites = pos.findInRange(FIND_CONSTRUCTION_SITES, 1);
-	if (nearbySites.length == 0) room.createConstructionSite(pos.x, pos.y, STRUCTURE_CONTAINER);
-	else {
-		const buildersNearby = room.find(FIND_MY_CREEPS, { filter: (i) => i.memory.role == 'remotebuilder' || i.memory.role == 'builder' });
-		if (buildersNearby.length > 0) {
-			const mySite = pos.findInRange(FIND_CONSTRUCTION_SITES, 1);
-			if (mySite.length) creep.build(mySite[0]);
-			else {
-				creep.unloadEnergy();
-				creep.harvestEnergy();
+	// Find best position next to source for container
+	if (source) {
+		// Move next to source if not already there
+		if (!pos.isNearTo(source)) {
+			creep.moveTo(source, pathing.harvesterPathing);
+			return;
+		}
+
+		// Check for existing container construction site near source
+		const nearbySites = source.pos.findInRange(FIND_CONSTRUCTION_SITES, 1, {
+			filter: (s) => s.structureType === STRUCTURE_CONTAINER
+		});
+
+		if (nearbySites.length === 0) {
+			// Find the best position next to the source (where the harvester should stand)
+			const walkablePositions = source.pos.getWalkablePositions();
+			if (walkablePositions.length > 0) {
+				// Place container at current position if we're next to source, otherwise pick first walkable spot
+				const containerPos = pos.isNearTo(source) ? pos : walkablePositions[0];
+				room.createConstructionSite(containerPos.x, containerPos.y, STRUCTURE_CONTAINER);
 			}
-		} else creep.build(nearbySites[0]);
+		} else {
+			// Build the container site
+			const site = nearbySites[0];
+			if (creep.build(site) === ERR_NOT_IN_RANGE) {
+				creep.moveTo(site, pathing.harvesterPathing);
+			}
+		}
 	}
 }
 export default Harvester;

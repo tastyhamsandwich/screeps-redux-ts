@@ -1,8 +1,8 @@
 {
 	"compilerOptions": {
 		"module": "esnext",
-		"lib": ["es2018"],
-		"target": "es2018",
+		"lib": ["es2019"],
+		"target": "es2019",
 		"moduleResolution": "Node",
 		"outDir": "C:/Users/danvi/AppData/Local/Screeps/scripts/screeps_newbieland_net___21025/default",
 		"baseUrl": "./src/",
@@ -14,17 +14,20 @@
 		"allowSyntheticDefaultImports": true,
 		"allowUnreachableCode": false,
 		"paths": {
-			"@globals": ["./functions/utils/globals"],
-			"@constants": ["./functions/utils/constants"],
-			"@protos/*": ["./prototypes/*"],
-			"@roles/*": ["./roles/*"],
-			"@managers/*": ["./managers/*"],
-			"@modules/*": ["./modules/*"],
-			"@utils/*": ["./functions/utils/*"],
-			"@funcs/*": ["./functions/*"],
-			"@main": ["./main"],
+			"@globals": 	["./functions/utils/globals"],
+			"@constants": 	["./functions/utils/constants"],
+			"@protos/*":	["./prototypes/*"],
+			"@prototypes/*":["./prototypes/*"],
+			"@creeps/*": 	["./creeps/*"],
+			"@classes/*": 	["./classes/*"],
+			"@managers/*": 	["./managers/*"],
+			"@modules/*": 	["./modules/*"],
+			"@utils/*": 	["./functions/utils/*"],
+			"@funcs/*": 	["./functions/*"],
+			"@functions/*": ["./functions/*"],
+			"@main": 		["./main"]
 		}
 	},
-	"include": [ "src/**/*.ts", "src/**/*.d.ts", "src/functions/**/*.ts" ],
+	"include": [ "src", "src/types/**/*.d.ts"],
 	"exclude": [ "node_modules", "unused/**/*.ts" ],
 }
