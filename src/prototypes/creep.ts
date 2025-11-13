@@ -1,5 +1,6 @@
 import { log } from '../functions/utils/globals';
 import { pathing } from '../functions/utils/constants';
+import * as FUNC from '@functions/index';
 import SmartNavigator from "@modules/SmartNavigator";
 
 const globalRouteCache: Record<string, RoomRoute | ERR_NO_PATH | ERR_INVALID_ARGS> = {};
@@ -404,10 +405,7 @@ if (typeof Creep !== 'undefined') {
 	 */
 	Creep.prototype.harvestEnergy = function (): void {
 
-		let locality: 'local' | 'remote' = 'local';
-
-		if (this.memory.role === 'remoteharvester')
-			locality = 'remote';
+		const locality = (this.memory.role === 'remoteharvester') ? 'remote' : 'local';
 
 		if (this.memory.source === undefined)
 			this.memory.source = this.assignHarvestSource(locality, true, true);
@@ -421,8 +419,12 @@ if (typeof Creep !== 'undefined') {
 					if (this.store.getUsedCapacity() > 0) {
 						this.unloadEnergy();
 						this.harvest(storedSource);
+						this.room.memory.stats.energyHarvested += (this.getActiveBodyparts(WORK) * 2);
 					} else this.say('🚬');
-				} else this.harvest(storedSource);
+				} else {
+					this.harvest(storedSource);
+					this.room.memory.stats.energyHarvested += (this.getActiveBodyparts(WORK) * 2);
+				}
 			} else {
 				if (this.room.name === storedSource.room.name)
 					this.moveTo(storedSource, pathing.harvesterPathing);
@@ -436,58 +438,58 @@ if (typeof Creep !== 'undefined') {
 
 		if (this.spawning) return;
 
-		if (bucketID) {
-			const bucket = Game.getObjectById(bucketID);
-			if (bucket)
-				if (bucket.hits == bucket.hitsMax) {
-					this.say('⛏️');
-					this.transfer(bucket, RESOURCE_ENERGY);
-				}
-				else {
-					this.say('🔧');
-					this.repair(bucket);
-				}
-				return;
-		} else {
-			if (this.memory.bucket) {
-				const id: Id<AnyStoreStructure> = this.memory.bucket;
-				const target = Game.getObjectById(id);
+		const memBucket: Id<AnyStoreStructure> = this.memory?.bucket;
+		let memBucketObj: AnyStoreStructure | null = Game.getObjectById(memBucket);
+		if (this.memory.bucket)
+			memBucketObj = Game.getObjectById(memBucket);
 
-				if (target && target.hits == target.hitsMax) {
-					this.say('⛏️');
-					this.transfer(target, RESOURCE_ENERGY);
+		const bucket: AnyStoreStructure | null = (bucketID) ? Game.getObjectById(bucketID) : memBucketObj;
+
+		if (bucket) {
+			if (bucket.hits == bucket.hitsMax) {
+				const result = this.transfer(bucket, RESOURCE_ENERGY);
+				if (result === OK) {
+					this.say('⬇️');
+					return;
+				} else if (result === ERR_NOT_IN_RANGE) {
+					this.moveTo(bucket, pathing.harvesterPathing);
+					this.say('⏩');
+					return;
+				} else {
+					if (Memory.globalSettings.debug.creepDebug)
+						console.log(`${this.room.link()}${this.name}: ERROR: ${FUNC.getReturnCode(result)}`);
 				}
-				else {
-					this.say('🔧');
-					this.repair(target as Structure<StructureConstant>);
+			}
+			else {
+				this.say('🔧');
+				this.repair(bucket);
+			}
+			return;
+		} else {
+			const sourceTarget: Source = Game.getObjectById(this.memory.source) as unknown as Source;
+			const sourceContainers: Array<StructureLink | StructureStorage | StructureContainer> = sourceTarget.pos.findInRange(FIND_STRUCTURES, 3, { filter: (obj) => (obj.structureType == STRUCTURE_LINK || obj.structureType == STRUCTURE_STORAGE || obj.structureType == STRUCTURE_CONTAINER)/* && obj.pos.isNearTo(this)*/ });
+			const nearbyObj: StructureLink | StructureContainer | StructureStorage = sourceContainers[0];
+
+			if (!nearbyObj) {
+				if (this.drop(RESOURCE_ENERGY) === OK) {
+					this.say('🗑️');
+					console.log(`${this.room.link()} Harvester '${this.name}' dropped energy.`);
 				}
 				return;
 			} else {
-				const sourceTarget: Source = Game.getObjectById(this.memory.source) as unknown as Source;
-				const sourceContainers: Array<StructureLink | StructureStorage | StructureContainer> = sourceTarget.pos.findInRange(FIND_STRUCTURES, 3, { filter: (obj) => (obj.structureType == STRUCTURE_LINK || obj.structureType == STRUCTURE_STORAGE || obj.structureType == STRUCTURE_CONTAINER)/* && obj.pos.isNearTo(this)*/ });
-				const nearbyObj: StructureLink | StructureContainer | StructureStorage = sourceContainers[0];
-
-				if (!nearbyObj) {
-					if (this.drop(RESOURCE_ENERGY) === OK) {
-						this.say('🗑️');
-						console.log(`${this.room.link()} Harvester '${this.name}' dropped energy.`);
-					}
-					return;
-				} else {
-					this.memory.bucket = nearbyObj.id;
-					if (nearbyObj.hits == nearbyObj.hitsMax) {
-						if (this.pos.isNearTo(nearbyObj)) {
-							this.say('⛏️');
-							this.transfer(nearbyObj, RESOURCE_ENERGY);
-						} else
-							this.moveTo(nearbyObj);
-					}
-					else {
-						this.say('🔧');
-						this.repair(nearbyObj);
-					}
-					return;
+				this.memory.bucket = nearbyObj.id;
+				if (nearbyObj.hits == nearbyObj.hitsMax) {
+					if (this.pos.isNearTo(nearbyObj)) {
+						this.say('⬇️');
+						this.transfer(nearbyObj, RESOURCE_ENERGY);
+					} else
+						this.moveTo(nearbyObj);
 				}
+				else {
+					this.say('🔧');
+					this.repair(nearbyObj);
+				}
+				return;
 			}
 		}
 	}

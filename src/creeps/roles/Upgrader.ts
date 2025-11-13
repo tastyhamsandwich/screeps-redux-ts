@@ -55,6 +55,7 @@ const Upgrader = {
 							// Successfully collected - check if we should transition to working
 							if (creep.store.getFreeCapacity(RESOURCE_ENERGY) === 0) {
 								cMem.working = true;
+								creep.say('🔋');
 							}
 						}
 					}
@@ -65,20 +66,16 @@ const Upgrader = {
 						const controllerObject = Game.getObjectById(cMem.controller) as StructureController;
 						if (controllerObject) {
 							const result = creep.upgradeController(controllerObject);
-							if (result === ERR_NOT_IN_RANGE) {
+							if (result === ERR_NOT_IN_RANGE)
 								creep.moveTo(controllerObject, pathing.upgraderPathing);
-							} else if (result === OK) {
-								creep.say('🔋');
-							} else if (result === ERR_NOT_ENOUGH_ENERGY) {
-								// Out of energy while upgrading - transition back to harvest
+							else if (result === OK)
+								rMem.stats.controlPoints += (creep.getActiveBodyparts(WORK));
+						 	else if (result === ERR_NOT_ENOUGH_ENERGY)
 								cMem.working = false;
-							}
 						}
 					}
 				}
-			} else {
-				navRallyPoint(creep);
-			}
+			} else navRallyPoint(creep);
 		}
 	}
 }

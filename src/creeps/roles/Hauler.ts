@@ -12,8 +12,7 @@ const Hauler = {
 		cMem.disable ??= false;
 		cMem.rally ??= 'none';
 
-		if (cMem.disable === true)
-			aiAlert(creep);
+		if (cMem.disable) aiAlert(creep);
 		else {
 			if (cMem.rally === 'none') {
 
@@ -24,7 +23,15 @@ const Hauler = {
 
 				if (creep.ticksToLive! <= 2) creep.say('☠️');
 
-				if (!cMem.pickup && !cMem.dropoff) creep.assignLogisticalPair();
+				if (!cMem.pickup && !cMem.dropoff) {
+					if (rMem.data.logisticalPairs)
+						creep.assignLogisticalPair();
+					else {
+						const haulerCount = Game.rooms[cMem.home].find(FIND_MY_CREEPS, { filter: i => i.memory.role === 'hauler' }).length;
+						cMem.pickup = (haulerCount % 2 === 1) ? rMem.containers.sourceOne : rMem.containers.sourceTwo;
+						cMem.dropoff = rMem.containers.controller;
+					}
+				}
 
 				if (cMem.cargo === undefined) cMem.cargo = 'energy';
 				if (cMem.dropoff == 'none') if (room.storage) cMem.dropoff = room.storage.id;
