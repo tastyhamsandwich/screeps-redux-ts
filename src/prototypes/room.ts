@@ -1,4 +1,5 @@
 import { log, roomExitsTo, calcPath } from '@functions/utils/globals';
+import { spawn } from 'child_process';
 
 Object.defineProperty(Room.prototype, 'sources', {
 	get: function () {
@@ -348,7 +349,7 @@ Room.prototype.initQuotas = function (roleQuotaObject?): void {
 	if (!this.memory.quotas) this.memory.quotas = {};
 
 	this.memory.quotas = {
-		harvesters: roleQuotaObject?.harvester || 2,
+		harvesters: roleQuotaObject?.harvester || 4,
 		upgraders: roleQuotaObject?.upgrader || 2,
 		fillers: roleQuotaObject?.filler || 2,
 		haulers: roleQuotaObject?.hauler || 0,
@@ -365,13 +366,16 @@ Room.prototype.initQuotas = function (roleQuotaObject?): void {
 }
 
 Room.prototype.enableDropHarvesting = function() {
-	this.memory.data.dropHarvestingEnabled ??= true;
+	this.memory.data.flags.dropHarvestingEnabled ??= true;
 }
 /** Initializes a room with default memory structure and settings. Sets up quotas, visual settings, repair settings, and stats tracking. */
 Room.prototype.initRoom = function () {
 	this.initQuotas();
 
 	const visualSettings: VisualSettings = { progressInfo: { alignment: 'left', xOffset: 1, yOffsetFactor: 0.6, stroke: '#000000', fontSize: 0.6, color: '' } };
+	const progressInfo = { alignment: 'left', xOffset: 1, yOffsetFactor: 0.6, stroke: '#000000', fontSize: 0.6, color: '' };
+	const roomFlags = { displayCoords: [0, 49], color: '#ff0033', fontSize: 0.4 };
+	const spawnInfo = { alignment: 'right', color: 'white', fontSize: 0.4 };
 	const towerSettings: TowerRepairSettings = { creeps: true, walls: false, ramparts: false, roads: false, others: false, wallLimit: 10, rampartLimit: 10, maxRange: 10 };
 	const repairSettings: RepairSettings = { walls: false, ramparts: false, roads: true, others: true, wallLimit: 10, rampartLimit: 10, towerSettings: towerSettings };
 	const mineralsHarvested: MineralStats = { hydrogen: 0, oxygen: 0, utrium: 0, lemergium: 0, keanium: 0, zynthium: 0, catalyst: 0, ghodium: 0 };
@@ -382,17 +386,17 @@ Room.prototype.initRoom = function () {
 		catalyzedZynthiumAlkalide: 0, catalyzedGhodiumAcid: 0, catalyzedGhodiumAlkalide: 0 };
 	const labStats: LabStats = { compoundsMade: compoundStats, creepsBoosted: 0, boostsUsed: compoundStats, energySpentBoosting: 0 };
 
-	if (!this.memory.containers) 	this.memory.containers = { sourceOne: '', sourceTwo: '', controller: '', mineral: '', prestorage: '' };
-	if (!this.memory.data) 				this.memory.data = { controllerLevel: 0, numCSites: 0, haulerIndex: 0, spawnEnergyLimit: 0, lastBootstrapRoleIndex: 0, lastNormalRoleIndex: 0, dropHarvestingEnabled: false, sourceData: { source: [], container: [], nextAssigned: 0 } };
-	if (!this.memory.settings) 		this.memory.settings = { visualSettings: visualSettings, repairSettings: repairSettings,	flags: {}, basePlanner: { debug: false } };
-	if (!this.memory.outposts) 		this.memory.outposts = { list: {}, array: [], reserverLastAssigned: 0, numSources: 0, numHarvesters: 0, counter: 0, guardCounter: 0 };
-	if (!this.memory.stats) 			this.memory.stats = { energyHarvested: 0, controlPoints: 0, constructionPoints: 0, creepsSpawned: 0, creepPartsSpawned: 0,
+	this.memory.containers = { sourceOne: '', sourceTwo: '', controller: '', mineral: '', prestorage: '' };
+	this.memory.data = { controllerLevel: 0, numCSites: 0, haulerIndex: 0, spawnEnergyLimit: 0, lastBootstrapRoleIndex: 0, lastNormalRoleIndex: 0, dropHarvestingEnabled: false, sourceData: { source: [], container: [], nextAssigned: 0 } };
+	this.memory.settings = { visualSettings: visualSettings, repairSettings: repairSettings,	flags: {}, basePlanner: { debug: false } };
+	this.memory.outposts = { list: {}, array: [], reserverLastAssigned: 0, numSources: 0, numHarvesters: 0, counter: 0, guardCounter: 0 };
+	this.memory.stats = { energyHarvested: 0, controlPoints: 0, constructionPoints: 0, creepsSpawned: 0, creepPartsSpawned: 0,
 				mineralsHarvested: mineralsHarvested, controllerLevelReached: 0, npcInvadersKilled: 0, hostilePlayerCreepsKilled: 0, labStats: labStats };
-	if (!this.memory.flags) 			this.memory.flags = { advancedSpawnLogic: false, };
-	if (!this.memory.visuals) 		this.memory.visuals = { visDistTrans: false, visBasePlan: false, visFloodFill: false, visBuildProgress: false, visPlanInfo: false, enableVisuals: false };
+	this.memory.visuals = { settings: { spawnInfo: spawnInfo, roomFlags: roomFlags, progressInfo: progressInfo, displayTowerRanges: false, displayControllerUpgradeRange: false }, visDistTrans: false, visBasePlan: false, visFloodFill: false, visBuildProgress: false, visPlanInfo: false, enableVisuals: false };
 
 	this.cacheObjects();
 }
+
 
 /** Disables all BasePlanner room visuals */
 Room.prototype.toggleBasePlannerVisuals = function (): void {
@@ -414,41 +418,6 @@ Object.defineProperty(Room.prototype, 'manager', {
 	configurable: true
 });
 
-/** Initializes an outpost room with necessary memory structures.
- * @param roomName - The name of the room to initialize as an outpost
- */
-Room.prototype.initOutpost = function (roomName): void {
-	if (this.memory.outposts === undefined) this.memory.outposts = { list: {}, array: [], reserverLastAssigned: 0, numSources: 0, numHarvesters: 0, counter: 0, guardCounter: 0 };
-
-	const sourceIDs: Id<Source>[] = [];
-	const containerIDs: Id<StructureContainer>[] = [];
-	const controllerID: Id<StructureController> = Game.rooms[roomName].memory.objects.controller as Id<StructureController>;
-	const outpostMemoryObject = {
-		name: roomName,
-		controllerFlag: roomName,
-		sourceIDs: sourceIDs,
-		containerIDs: containerIDs,
-		controllerID: controllerID,
-		sourceAssignmentMap: []
-	}
-
-	for (let source of sourceIDs) {
-		const sourceAssignment = {
-			source: source,
-			container: null,
-			pathLengthToStorage: null,
-			pathToStorage: null,
-			creepAssigned: null,
-			creepDeathTick: null,
-		};
-		this.memory.outposts.list[this.name].sourceAssignmentMap.push(sourceAssignment);
-	}
-
-	Game.rooms[roomName].memory.hostColony = this.name;
-	this.memory.outposts.list[roomName] = outpostMemoryObject;
-	this.memory.outposts.array.push(roomName);
-}
-
 /** Initializes room flags with default settings. Sets up various behavior flags for creeps and structures. */
 Room.prototype.initFlags = function () {
 
@@ -465,29 +434,6 @@ Room.prototype.initFlags = function () {
 
 	log(`Room flags initialized: haulersPickupEnergy(${flagSettings.haulersPickupEnergy}), closestConSites(${flagSettings.closestConSites})`, this);
 	return;
-}
-
-/** Updates source assignments in a room's memory.
- * @param roomToUpdate - Name of the room to update assignments for
- * @param updateObject - Object containing the assignment updates
- * @returns true if the update was successful
- */
-Room.prototype.updateSourceAssignment = function(roomToUpdate, updateObject: SourceAssignmentUpdate): boolean {
-	let assignmentMap: SourceAssignment[] = [];
-
-	const roomIsOutpost = Game.rooms[roomToUpdate].memory.hostColony ? true : false
-	if (roomIsOutpost) assignmentMap = Game.rooms[this.memory.hostColony!].memory.outposts.list[this.name].sourceAssignmentMap;
-	else assignmentMap = Game.rooms[this.name].memory.outposts.list[roomToUpdate].sourceAssignmentMap;
-
-	for (let map of assignmentMap) {
-		if (updateObject.source) 							map.source = updateObject.source;
-		if (updateObject.container) 					map.container = updateObject.container;
-		if (updateObject.pathLengthToStorage) map.pathLengthToStorage = updateObject.pathLengthToStorage;
-		if (updateObject.pathToStorage) 			map.pathToStorage = updateObject.pathToStorage;
-		if (updateObject.creepAssigned) 			map.creepAssigned = updateObject.creepAssigned;
-		if (updateObject.creepDeathTick) 			map.creepDeathTick = updateObject.creepDeathTick;
-	}
-	return true;
 }
 
 /** Discovers and registers all possible resource transfer routes in the room.

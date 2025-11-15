@@ -42,7 +42,7 @@ StructureSpawn.prototype.determineBodyParts = function (role: string, maxEnergy?
 
 	switch (role) {
 		case 'harvester':
-			if (this.room.memory.data.dropHarvestingEnabled) {
+			if (this.room.memory.data.flags.dropHarvestingEnabled) {
 				if (maxEnergy >= 600) {
 					totalBodyParts.push(WORK, WORK, WORK, WORK, WORK, MOVE, MOVE);
 					return totalBodyParts;
@@ -200,8 +200,8 @@ StructureSpawn.prototype.determineBodyParts = function (role: string, maxEnergy?
 				locality = this.room.memory?.data?.logisticalPairs[this.room.memory.data.pairCounter]?.locality;
 				pathLen = this.room.memory?.data?.logisticalPairs[this.room.memory.data.pairCounter]?.distance;
 			} else if (this.room.memory?.data?.haulerPairs) {
-				if (this.room.memory?.data?.haulerIndex === undefined) this.room.memory.data.haulerIndex = 0;
-				pathLen = this.room.memory?.data?.haulerPairs[this.room.memory.data.haulerIndex].length;
+				if (this.room.memory?.data?.indices.haulerIndex === undefined) this.room.memory.data.indices.haulerIndex = 0;
+				pathLen = this.room.memory?.data?.haulerPairs[this.room.memory.data.indices.haulerIndex].length;
 			}
 
 			const carryParts: number = Math.ceil(pathLen / 5) * 2;
