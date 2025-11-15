@@ -81,9 +81,104 @@ function trySpawnCreep(spawn: StructureSpawn,	role: string,	memory: CreepMemory,
 	}
 }
 
+/** Get the next role to spawn using round-robin scheduling
+ * Switches between bootstrap phase (harvesters/fillers) and normal phase (other roles)
+ * Returns the next role that needs spawning, or null if none are needed */
+function getNextRoleToSpawn(
+	room: Room,
+	spawn: StructureSpawn,
+	harvesters: Creep[],
+	fillers: Creep[],
+	haulers: Creep[],
+	upgraders: Creep[],
+	builders: Creep[],
+	repairers: Creep[],
+	reservers: Creep[],
+	harvesterTarget: number,
+	fillerTarget: number,
+	haulerTarget: number,
+	upgraderTarget: number,
+	builderTarget: number,
+	repairerTarget: number,
+	reserverTarget: number,
+	harvesters_and_fillers_satisfied: boolean
+): string | null {
+
+	let roleConfigs;
+	let currentIndex;
+
+	if (!harvesters_and_fillers_satisfied) {
+		// Bootstrap phase: cycle between harvesters and fillers
+		roleConfigs = [
+			{
+				name: 'harvester',
+				count: harvesters.length,
+				target: harvesterTarget,
+				check: () => needMoreHarvesters(room, harvesters)
+			},
+			{
+				name: 'filler',
+				count: fillers.length,
+				target: fillerTarget,
+				check: () => spawn.room.controller!.level >= 2 || harvesters.length >= harvesterTarget
+			}
+		];
+		currentIndex = (room.memory.data as any).lastBootstrapRoleIndex ?? -1;
+	} else {
+		// Normal phase: cycle through other roles
+		roleConfigs = [
+			{
+				name: 'hauler',
+				count: haulers.length,
+				target: haulerTarget,
+				check: () => spawn.room.storage || room.memory.data.haulerPairs
+			},
+			{
+				name: 'upgrader',
+				count: upgraders.length,
+				target: upgraderTarget,
+				check: () => true
+			},
+			{
+				name: 'builder',
+				count: builders.length,
+				target: builderTarget,
+				check: () => room.memory.data.numCSites > 0
+			},
+			{
+				name: 'repairer',
+				count: repairers.length,
+				target: repairerTarget,
+				check: () => true
+			},
+			{
+				name: 'reserver',
+				count: reservers.length,
+				target: reserverTarget,
+				check: () => spawn.room.energyCapacityAvailable >= 800
+			}
+		];
+		currentIndex = (room.memory.data as any).lastNormalRoleIndex ?? -1;
+	}
+
+	// Try each role in round-robin order
+	for (let i = 0; i < roleConfigs.length; i++) {
+		const roleIndex = (currentIndex + 1 + i) % roleConfigs.length;
+		const roleConfig = roleConfigs[roleIndex];
+
+		if (roleConfig.count < roleConfig.target && roleConfig.check()) {
+			const indexKey = !harvesters_and_fillers_satisfied ? 'lastBootstrapRoleIndex' : 'lastNormalRoleIndex';
+			(room.memory.data as any)[indexKey] = roleIndex;
+			return roleConfig.name;
+		}
+	}
+
+	return null;
+}
+
 /** Legacy version spawn management system which checks against role quotas and existing creep roles saved in their memory to determine spawn requirements.
  *
- * Priority is determined solely by ordering of the conditional statements, and thus is hard-coded. */
+ * Uses round-robin scheduling to spawn roles evenly in two phases: bootstrap (harvesters/fillers) and normal (other roles). */
 export const legacySpawnManager = {
 
 	run: (room: Room) => {
@@ -185,12 +280,13 @@ export const legacySpawnManager = {
 						const result = spawn.retryPending();
 						if (result !== OK) {
 							pending.time = Game.time;
+							room.memory.data.pendingSpawn = pending;
 							return;
 						}
 					}
 
 					if (pending && room.energyAvailable >= pending.cost) {
-						const { role, body, name, memory } = pending;
+						const { role, body, name, memory, time } = pending;
 						const result = spawn.spawnCreep(body, name, { memory });
 						if (result === OK) {
 							console.log(`${room.link()} ${spawns[0].name}: Resumed pending spawn for ${role} (${name})`);
@@ -200,51 +296,59 @@ export const legacySpawnManager = {
 						return; // Skip other spawn logic this tick
 					}
 
-					//! Spawn Harvesters and Fillers before anything else
-					if (!harvesters_and_fillers_satisfied) {
-						if (debugSpawn) console.log(`${room.link()}${spawn.name}: Not satisfied, checking harvester needs`);
-						//# Spawn Harvesters
-						if (needMoreHarvesters(room, harvesters)) {
-							if (debugSpawn) console.log(`${room.link()}${spawn.name}: Need more harvesters, attempting spawn`);
-							const lastAssigned = room.memory.data.lastHarvesterAssigned ?? 0;635555555555555555555555555555555555555555555555555555555555555555555555555555555555554444444444444444444444444444444444444444444444444444444444444444444444444444444444444444444444444444444444444444444444444444444444444444444444444444444444444444444444444444444444444444444444444444444444444444444444444444444444444444444444444444444444444444444444444444444444444444444444444444444444444444444444444444444444444444444444444444444444444444444444444444444444444444444444444444444444444444444444444444444444444444444444444444444444444444444444444444444444444444444444444444444444444444444444444444444444444444444444444444444444444444444444444444444444444444444444444444444444444444444444444444444444444444444444444444444444444444444444444444444444444444444444444444444444444444444444444444444444444444444444444444444444444444444444444444444444444444444444444444444444444444444444444444444444444444444444444444444444444444444444444444444444444444444444444444444444444444444444444444444444444444444444444444444444444444444444444444444444444444444444444444444444444444444444444444444444444444444444
-							const sourceID = room.memory.objects.sources[lastAssigned] || undefined;
-							const containerID = lastAssigned === 0 ? room.memory?.containers?.sourceOne : room.memory?.containers?.sourceTwo;
-							const sourceNum = lastAssigned === 0 ? 1 : 2;
-							room.memory.data.lastHarvesterAssigned = (lastAssigned + 1) % 2;
-							trySpawnCreep( spawn, 'harvester', { role: 'harvester', RFQ: 'harvester', home: room.name, room: room.name, working: false, disable: false, rally: 'none', source: sourceID, bucket: containerID,	sourceNum: sourceNum }, room, colName, cap);
-							return;
-						}
-						//# Spawn Fillers
-						else if ((spawn.room.controller!.level >= 2 && fillers.length < fillerTarget) || (harvesters.length >= harvesterTarget && fillers.length < fillerTarget)) {
-							trySpawnCreep( spawn, 'filler', { role: 'filler', RFQ: 'filler', home: room.name, room: room.name, working: false, disable: false, rally: 'none' }, room, colName);
-							return;
-						}
-						//! Spawn other creep types if harvesters & fillers fulfilled
-					} else {
-						//# Spawn Haulers
-						if ((spawn.room.storage || room.memory.data.haulerPairs) && haulers.length < haulerTarget) {
-							trySpawnCreep(spawn, 'hauler', { role: 'hauler', RFQ: 'hauler', home: room.name, room: room.name, working: false, disable: false, rally: 'none' }, room, colName);
-							return;
-						}
-						//# Spawn Upgraders
-						if (upgraders.length < upgraderTarget) {
-							trySpawnCreep( spawn, 'upgrader', { role: 'upgrader', RFQ: 'upgrader', home: room.name, room: room.name, working: false, disable: false, rally: 'none' }, room, colName);
-							return;
-						}
-						//# Spawn Builders
-						else if (room.memory.data.numCSites > 0 && builders.length < builderTarget) {
-							trySpawnCreep( spawn, 'builder', { role: 'builder', RFQ: 'builder', home: room.name, room: room.name, working: false, disable: false, rally: 'none' }, room, colName);
-							return;
-						}
-						//# Spawn Repairers
-						else if (repairers.length < repairerTarget) {
-							trySpawnCreep( spawn, 'repairer', { role: 'repairer', RFQ: 'repairer', home: room.name, room: room.name, working: false, disable: false, rally: 'none' }, room, colName);
-							return;
-						}
-						//# Spawn Reservers
-						else if (spawn.room.energyCapacityAvailable >= 800 && reservers.length < reserverTarget) {
-							trySpawnCreep(spawn, 'reserver', { role: 'reserver', RFQ: 'reserver', home: room.name, room: room.name, working: false, disable: false, rally: 'none' }, room, colName);
-							return;
+					// Get the next role to spawn using round-robin scheduling
+					const nextRole = getNextRoleToSpawn(
+						room,
+						spawn,
+						harvesters,
+						fillers,
+						haulers,
+						upgraders,
+						builders,
+						repairers,
+						reservers,
+						harvesterTarget,
+						fillerTarget,
+						haulerTarget,
+						upgraderTarget,
+						builderTarget,
+						repairerTarget,
+						reserverTarget,
+						harvesters_and_fillers_satisfied
+					);
+
+					if (nextRole) {
+						if (debugSpawn) console.log(`${room.link()}${spawn.name}: Attempting to spawn ${nextRole} via round-robin`);
+
+						// Handle role-specific spawning logic
+						switch (nextRole) {
+							case 'harvester': {
+								const lastAssigned = room.memory.data.lastHarvesterAssigned ?? 0;
+								const sourceID = (lastAssigned === 0) ? room.sourceOne.id : room.sourceTwo.id;
+								const containerID = (lastAssigned === 0) ? room.containerOne.id : room.containerTwo.id;
+								const sourceNum = (lastAssigned === 0) ? 1 : 2;
+								room.memory.data.lastHarvesterAssigned = (lastAssigned + 1) % 2;
+								trySpawnCreep(spawn, 'harvester', { role: 'harvester', RFQ: 'harvester', home: room.name, room: room.name, working: false, disable: false, rally: 'none', source: sourceID, bucket: containerID, sourceNum: sourceNum }, room, colName, cap);
+								return;
+							}
+							case 'filler':
+								trySpawnCreep(spawn, 'filler', { role: 'filler', RFQ: 'filler', home: room.name, room: room.name, working: false, disable: false, rally: 'none' }, room, colName);
+								return;
+							case 'hauler':
+								trySpawnCreep(spawn, 'hauler', { role: 'hauler', RFQ: 'hauler', home: room.name, room: room.name, working: false, disable: false, rally: 'none' }, room, colName);
+								return;
+							case 'upgrader':
+								trySpawnCreep(spawn, 'upgrader', { role: 'upgrader', RFQ: 'upgrader', home: room.name, room: room.name, working: false, disable: false, rally: 'none' }, room, colName);
+								return;
+							case 'builder':
+								trySpawnCreep(spawn, 'builder', { role: 'builder', RFQ: 'builder', home: room.name, room: room.name, working: false, disable: false, rally: 'none' }, room, colName);
+								return;
+							case 'repairer':
+								trySpawnCreep(spawn, 'repairer', { role: 'repairer', RFQ: 'repairer', home: room.name, room: room.name, working: false, disable: false, rally: 'none' }, room, colName);
+								return;
+							case 'reserver':
+								trySpawnCreep(spawn, 'reserver', { role: 'reserver', RFQ: 'reserver', home: room.name, room: room.name, working: false, disable: false, rally: 'none' }, room, colName);
+								return;
 						}
 					}
 				}

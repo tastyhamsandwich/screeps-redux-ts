@@ -14,8 +14,7 @@ Object.defineProperty(Room.prototype, 'sources', {
 		this._sources = newV;
 	},
 	enumerable: false,
-	configurable: true
-});
+	configurable: true });
 
 Object.defineProperty(Room.prototype, 'sourceOne', {
 	get: function () {
@@ -25,11 +24,10 @@ Object.defineProperty(Room.prototype, 'sourceOne', {
 			}
 			this._sourceOne = this.memory.objects.sources[0];
 		}
-		return this._sourceOne;
+		return Game.getObjectById(this._sourceOne);
 	},
 	enumerable: false,
-	configurable: true
-});
+	configurable: true });
 
 Object.defineProperty(Room.prototype, 'sourceTwo', {
 	get: function () {
@@ -42,11 +40,10 @@ Object.defineProperty(Room.prototype, 'sourceTwo', {
 			else
 				return null;
 		}
-		return this._sourceTwo;
+		return Game.getObjectById(this._sourceTwo);
 	},
 	enumerable: false,
-	configurable: true
-});
+	configurable: true });
 
 Object.defineProperty(Room.prototype, 'containers', {
 	get: function () {
@@ -72,7 +69,7 @@ Object.defineProperty(Room.prototype, 'containerOne', {
 				return this._containerOne = null;
 			else this._containerOne = this.memory.containers.sourceOne;
 		}
-		return this._containerOne
+		return Game.getObjectById(this._containerOne);
 	},
 	enumerable: false,
 	configurable: true
@@ -85,7 +82,7 @@ Object.defineProperty(Room.prototype, 'containerTwo', {
 				return this._containerTwo = null;
 			else this._containerTwo = this.memory.containers.sourceTwo;
 		}
-		return this._containerTwo;
+		return Game.getObjectById(this._containerTwo);
 	},
 	enumerable: false,
 	configurable: true
@@ -98,7 +95,20 @@ Object.defineProperty(Room.prototype, 'containerController', {
 				return this._containerController = null;
 			else this._containerController = this.memory.containers.controller;
 		}
-		return this._containerController;
+		return Game.getObjectById(this._containerController);
+	},
+	enumerable: false,
+	configurable: true
+});
+
+Object.defineProperty(Room.prototype, 'prestorage', {
+	get: function () {
+		if (!this._prestorage) {
+			if (!this.memory.containers.prestorage)
+				return this._prestorage = null;
+			else this._prestorage = this.memory.containers.prestorage;
+		}
+		return Game.getObjectById(this._prestorage);
 	},
 	enumerable: false,
 	configurable: true
@@ -354,6 +364,9 @@ Room.prototype.initQuotas = function (roleQuotaObject?): void {
 	log(`Quotas initialized: Harvesters (2), Upgraders (2), Fillers (2), Haulers (0), Builders (1), Defenders (0), Reservers (0), Scouts (0), Remote Harvesters (0)`);
 }
 
+Room.prototype.enableDropHarvesting = function() {
+	this.memory.data.dropHarvestingEnabled ??= true;
+}
 /** Initializes a room with default memory structure and settings. Sets up quotas, visual settings, repair settings, and stats tracking. */
 Room.prototype.initRoom = function () {
 	this.initQuotas();

@@ -19,6 +19,7 @@ declare global {
 		determineBodyParts(role: string, maxEnergy?: number, extras?: { [key: string]: any }): BodyPartConstant[];
 		spawnScout(rally: string | string[], swampScout: boolean): ScreepsReturnCode;
 		retryPending(): ScreepsReturnCode;
+		cloneCreep(creepName: string): ScreepsReturnCode;
 	}
 }
 
@@ -41,22 +42,44 @@ StructureSpawn.prototype.determineBodyParts = function (role: string, maxEnergy?
 
 	switch (role) {
 		case 'harvester':
+			if (this.room.memory.data.dropHarvestingEnabled) {
+				if (maxEnergy >= 600) {
+					totalBodyParts.push(WORK, WORK, WORK, WORK, WORK, MOVE, MOVE);
+					return totalBodyParts;
+				} else {
+					let remainingCost = maxEnergy;
 
-      if (maxEnergy >= 650)
-        totalBodyParts.push(WORK, WORK, WORK, WORK, WORK, CARRY, MOVE, MOVE);
-      else {
-				let remainingCost = maxEnergy;
+					const moveParts = [MOVE];
+					remainingCost -= 50;
+					const workParts: BodyPartConstant[] = []
+					while (remainingCost >= 100) {
+						workParts.push(WORK);
+						remainingCost -= 100;
+					}
+					if (remainingCost >= 50)
+						moveParts.push(MOVE);
 
-				totalBodyParts.push(MOVE);
-				totalBodyParts.push(CARRY);
-				remainingCost -= 100;
+					const totalBodyParts = workParts.concat(moveParts);
 
-				while (remainingCost >= 100) {
-					totalBodyParts.push(WORK);
-					remainingCost -= 100;
+					return totalBodyParts;
 				}
-      }
-      return totalBodyParts;
+			} else {
+				if (maxEnergy >= 650)
+					totalBodyParts.push(WORK, WORK, WORK, WORK, WORK, CARRY, MOVE, MOVE);
+				else {
+					let remainingCost = maxEnergy;
+
+					totalBodyParts.push(MOVE);
+					totalBodyParts.push(CARRY);
+					remainingCost -= 100;
+
+					while (remainingCost >= 100) {
+						totalBodyParts.push(WORK);
+						remainingCost -= 100;
+					}
+				}
+				return totalBodyParts;
+			}
 		case 'upgrader':
 		case 'builder':
 		case 'repairer':
@@ -110,9 +133,9 @@ StructureSpawn.prototype.determineBodyParts = function (role: string, maxEnergy?
 
 			let remainingEnergy = maxEnergy;
 
-			let attackParts: BodyPartConstant[] = [];
-			let moveParts: BodyPartConstant[] = [];
-			let toughParts: BodyPartConstant[] = [];
+			let attackParts	: BodyPartConstant[] = [];
+			let moveParts 	: BodyPartConstant[] = [];
+			let toughParts	: BodyPartConstant[] = [];
 
 			while (remainingEnergy >= 150) {
 				attackParts.push(ATTACK);
@@ -125,9 +148,8 @@ StructureSpawn.prototype.determineBodyParts = function (role: string, maxEnergy?
 				moveParts.push(MOVE);
 				moveParts.push(MOVE);
 			}
-			if (remainingEnergy >= 50) {
+			if (remainingEnergy >= 50)
 				moveParts.push(MOVE);
-			}
 
 			const intermedParts: BodyPartConstant[] = moveParts.concat(toughParts);
 			const bodyParts: BodyPartConstant[] = intermedParts.concat(attackParts);
@@ -190,19 +212,19 @@ StructureSpawn.prototype.determineBodyParts = function (role: string, maxEnergy?
 			if (maxCarryParts > carryParts) maxCarryParts = carryParts;
 			if (maxMoveParts > moveParts) maxMoveParts = moveParts;
 
-			for (let i = 0; i < maxCarryParts; i++) carryArray.push(CARRY);
-			for (let i = 0; i < maxMoveParts; i++) moveArray.push(MOVE);
+			for (let i = 0; i < maxCarryParts	; i++) carryArray.push(CARRY);
+			for (let i = 0; i < maxMoveParts	; i++) 	moveArray.push(MOVE	);
 
-			let currCarryCost: number = carryArray.length * 50;
-			let currMoveCost: number = moveArray.length * 50;
-			let partCost: number = currCarryCost + currMoveCost;
+			let currCarryCost: 	number = carryArray.length * 50;
+			let currMoveCost: 	number = moveArray.length * 50;
+			let partCost: 			number = currCarryCost + currMoveCost;
 
 			if (maxEnergy - partCost >= 50) carryArray.push(CARRY);
 			if (maxEnergy - partCost >= 100 && carryArray.length % 2 == 1) moveArray.push(MOVE);
 
 			currCarryCost = carryArray.length * 50;
-			currMoveCost = moveArray.length * 50;
-			partCost = currCarryCost + currMoveCost;
+			currMoveCost 	= moveArray.length 	* 50;
+			partCost 			= currCarryCost + currMoveCost;
 
 			let bodyArray: BodyPartConstant[] = carryArray.concat(moveArray);
 			let finalCost: number = bodyArray.length * 50;
@@ -213,11 +235,11 @@ StructureSpawn.prototype.determineBodyParts = function (role: string, maxEnergy?
 					if (maxEnergy - partCost >= 150) {
 						bodyArray.push(WORK);
 						bodyArray.push(MOVE);
-						finalCost += 150
+						finalCost += 150;
 					} else if (maxEnergy - partCost >= 50) {
 						bodyArray.shift();
 						bodyArray.push(WORK);
-						finalCost += 50
+						finalCost += 50;
 					} else {
 						bodyArray.pop();
 						bodyArray.shift();
@@ -248,14 +270,11 @@ StructureSpawn.prototype.determineBodyParts = function (role: string, maxEnergy?
 			return bodyArray;
 		}
 		case 'reserver':
-			if (maxEnergy >= 1300)
-				return [CLAIM, CLAIM, MOVE, MOVE];
-			else if (maxEnergy >= 650)
-				return [CLAIM, MOVE];
-			else
-				return [];
-			default:
-				throw new Error("Invalid parameters passed.");
+			if (maxEnergy >= 1300) return [CLAIM, CLAIM, MOVE, MOVE];
+			else if (maxEnergy >= 650) return [CLAIM, MOVE];
+			else return [];
+		default:
+			throw new Error("Invalid parameters passed.");
 	}
 
 }
@@ -316,6 +335,53 @@ StructureSpawn.prototype.retryPending = function(): ScreepsReturnCode {
 		delete room.memory.data.pendingSpawn;
 	} else {
 		console.log(`${room.link()}${this.name}> Failed to retry pending ${pending.memory.role}: ${result}`);
+	}
+
+	return result;
+}
+
+/**
+ * Clones an existing creep by spawning a new creep with the same body and memory settings (excluding RFQ)
+ * @param creepName The name of the creep to clone
+ * @returns Screeps Return Code from the spawnCreep() attempt
+ * @example const result = Game.spawns.Spawn1.cloneCreep('Col1_Har1');
+ */
+StructureSpawn.prototype.cloneCreep = function(creepName: string): ScreepsReturnCode {
+	const sourceCreep = Game.creeps[creepName];
+	const room = this.room;
+
+	if (!sourceCreep) {
+		console.log(`${room.link()}${this.name}> Clone failed: Source creep '${creepName}' not found`);
+		return ERR_NOT_FOUND;
+	}
+
+	// Create new creep name by appending 'C'
+	const newCreepName = creepName + 'C';
+
+	// Copy memory from source creep, excluding RFQ
+	const clonedMemory: any = {};
+	for (const key in sourceCreep.memory) {
+		if (key !== 'RFQ') {
+			clonedMemory[key] = sourceCreep.memory[key];
+		}
+	}
+
+	// Clone the exact body parts from the source creep
+	const body: BodyPartConstant[] = [...sourceCreep.body.map(part => part.type)];
+	const role = sourceCreep.memory.role || 'harvester';
+
+	if (body.length === 0) {
+		console.log(`${room.link()}${this.name}> Clone failed: Source creep has no body parts`);
+		return ERR_INVALID_ARGS;
+	}
+
+	// Attempt to spawn the cloned creep
+	const result = this.spawnCreep(body, newCreepName, { memory: clonedMemory });
+
+	if (result === OK) {
+		console.log(`${room.link()}${this.name}> Successfully cloned ${creepName} as ${newCreepName} (${role})`);
+	} else {
+		console.log(`${room.link()}${this.name}> Failed to clone ${creepName}: ${result}`);
 	}
 
 	return result;

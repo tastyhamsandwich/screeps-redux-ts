@@ -133,6 +133,7 @@ declare global {
 		cacheObjects(): void;
 		initOutpost(roomName: string): void;
 		initQuotas(): void;
+		enableDropHarvesting(): void;
 		initRoom(): void;
 		initFlags(): void;
 		updateSourceAssignment(roomToUpdate: string, updateObject: SourceAssignmentUpdate);
@@ -140,6 +141,14 @@ declare global {
 		setQuota(roleTarget: CreepRole, newTarget: number);
 		toggleBasePlannerVisuals(): void;
 		readonly manager?: RoomManager;
+		sources: Id<Source>[];
+		sourceOne: Source;
+		sourceTwo: Source;
+		containers: Id<StructureContainer>[];
+		containerOne: StructureContainer;
+		containerTwo: StructureContainer;
+		containerController: StructureContainer;
+		prestorage: StructureContainer;
 	}
 
 	type SourceAssignmentUpdate = {
