@@ -2,7 +2,7 @@ import { creepRoleCounts } from "@main";
 import * as FUNC from '@functions/index';
 
 const pendingSpawns: {
-	[roomName: string]: { role: string; body: BodyPartConstant[]; name: string; memory: CreepMemory; cost: number };
+	[roomName: string]: { role: string; body: BodyPartConstant[]; name: string; memory: CreepMemory; cost: number, time: number };
 } = {};
 
 // Helper function to generate name suffix with current counter
@@ -71,7 +71,8 @@ function trySpawnCreep(spawn: StructureSpawn,	role: string,	memory: CreepMemory,
 		room.memory.stats.creepPartsSpawned += body.length;
 		return OK;
 	} else if (result === ERR_NOT_ENOUGH_ENERGY) {
-		room.memory.data.pendingSpawn = { role, body, name, memory, cost };
+		const time = Game.time;
+		room.memory.data.pendingSpawn = { role, body, name, memory, cost, time };
 		console.log(`${room.link()}${spawn.name}> Not enough energy for ${role} (${cost}). Waiting until room energy >= ${cost}`);
 		return result;
 	} else {
@@ -179,9 +180,18 @@ export const legacySpawnManager = {
 				if (!spawn.spawning) {
 					// Check for pending spawn request
 					const pending = pendingSpawns[room.name];
+
+					if (pending && Game.time - pending.time >= 50) {
+						const result = spawn.retryPending();
+						if (result !== OK) {
+							pending.time = Game.time;
+							return;
+						}
+					}
+
 					if (pending && room.energyAvailable >= pending.cost) {
 						const { role, body, name, memory } = pending;
-						const result = spawns[0].spawnCreep(body, name, { memory });
+						const result = spawn.spawnCreep(body, name, { memory });
 						if (result === OK) {
 							console.log(`${room.link()} ${spawns[0].name}: Resumed pending spawn for ${role} (${name})`);
 							delete pendingSpawns[room.name];
