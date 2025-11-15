@@ -34,14 +34,11 @@ export default class RoomManager {
 		if (!this.room.memory.visuals) this.room.memory.visuals = {};
 		if (!this.room.memory.quotas) this.room.memory.quotas = {};
 		if (!this.room.memory.objects) this.room.memory.objects = {};
-		if (!this.room.memory.containers) {
-			this.room.memory.containers = {} as any; // Will be populated as containers are discovered
-		}
-		if (!this.room.memory.settings) {
+		if (!this.room.memory.containers) this.room.memory.containers = {} as any;
+		if (!this.room.memory.settings)
 			this.room.memory.settings = {
 				basePlanning: { debug: false }
 			} as any; // Partial initialization - other settings added as needed
-		}
 	}
 
 	/** Main run method - called every tick */
@@ -88,7 +85,6 @@ export default class RoomManager {
 		// Determine whether to regenerate plan
 		if (!mem.basePlan) regenerate = true;
 		else if (mem.basePlan.rclAtGeneration !== rcl) regenerate = true;
-		// Removed periodic refresh - base plans are deterministic and don't need regeneration
 
 		// If regeneration is required
 		if (regenerate) {
@@ -593,7 +589,6 @@ export default class RoomManager {
 		}
 	}
 
-
 	/** Manages tower operations (defense and repair) */
 	private manageTowers(): void {
 		for (const tower of this.resources.towers) RoomDefense(tower);
@@ -624,7 +619,6 @@ export default class RoomManager {
 			}
 		}
 	}
-
 
 	/** Gets the current room resources (for external access) */
 	getResources(): RoomResources {
@@ -703,6 +697,7 @@ export default class RoomManager {
 		}
 	}
 
+	/** Determine if there is a need to update or create new hauler route pair information. */
 	private shouldManageContainers(): boolean {
 		const cont = this.room.memory.containers || {};
 		const ids = [
@@ -721,6 +716,7 @@ export default class RoomManager {
 		return false;
 	}
 
+	/** Create/update hauler route pairs. */
 	private manageContainers(): void {
 
 		const pairArray: { start: string, end: string, length: number }[] = [];
@@ -756,6 +752,7 @@ export default class RoomManager {
 		this.haulerPairs = pairArray;
 		this.room.setQuota('hauler', pairArray.length);
 	}
+
 	/** Process construction tasks as created by BasePlanner */
 	private handleBasePlan(plan: PlanResult): void {
 		const mem = this.room.memory;
