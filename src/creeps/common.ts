@@ -1,7 +1,7 @@
 import { log, initGlobal } from '../functions/utils/globals';
 import { pathing } from '../functions/utils/constants';
 import * as FUNC from '@functions/index';
-import 'prototypes/creep';
+import '@protos/creep';
 
 let cSet;
 
