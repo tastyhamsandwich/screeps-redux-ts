@@ -101,6 +101,7 @@ declare global {
 			data: PlanResult;
 		};
 		visuals: {
+			settings?: { [key: string]: any };
 			enableVisuals?: boolean;
 			visDistTrans?: boolean;
 			visFloodFill?: boolean;
@@ -127,16 +128,14 @@ declare global {
 	}
 
 	interface Room {
-		log(message: string, critical: boolean): void;
+		log(message: string, critical?: boolean): void;
 		getSourcePositions(sourceID: string): RoomPosition[];
 		link(): string;
 		cacheObjects(): void;
-		initOutpost(roomName: string): void;
 		initQuotas(): void;
 		enableDropHarvesting(): void;
 		initRoom(): void;
 		initFlags(): void;
-		updateSourceAssignment(roomToUpdate: string, updateObject: SourceAssignmentUpdate);
 		registerLogisticalPairs(): void;
 		setQuota(roleTarget: CreepRole, newTarget: number);
 		toggleBasePlannerVisuals(): void;
@@ -151,28 +150,8 @@ declare global {
 		prestorage: StructureContainer;
 	}
 
-	type SourceAssignmentUpdate = {
-		source: Id<Source> | false,
-		container: Id<StructureContainer> | false,
-		pathLengthToStorage: number | false,
-		pathToStorage: PathFinderPath | false,
-		creepAssigned: string | false,
-		creepDeathTick: number | false
-	}
-
-	type LogisticsPair = {
-		source: string | Id<StructureContainer | StructureStorage>;
-		destination: Id<StructureContainer | StructureStorage | StructureLink>;
-		resource: ResourceConstant;
-		locality: 'local' | 'remote',
-		descriptor: string,
-		distance?: number,
-	}
-
-	type Locality = 'local' | 'remote';
-
 	interface Creep {
-		log(message: string, critical: boolean): void;
+		log(message: string, critical?: boolean): void;
 		smartMoveTo(target: RoomPosition | { pos: RoomPosition }, opts?: MoveToOpts): ScreepsReturnCode;
 		advGet(target: Source | Id<Source> | Mineral | Id<Mineral> | Deposit | Id<Deposit> | AnyStoreStructure | Resource | Tombstone | Ruin | Id<AnyStoreStructure> | Id<Resource> | Id<Tombstone> | Id<Ruin>): ScreepsReturnCode;
 		advGive(target: Creep | AnyStoreStructure | Id<AnyStoreStructure>, pathing?: MoveToOpts, resource?: ResourceConstant, canTravel?: boolean): ScreepsReturnCode;
@@ -183,7 +162,6 @@ declare global {
 		harvestEnergy(): void;
 		unloadEnergy(bucketID?: Id<AnyStoreStructure>): void;
 		cacheLocalObjects(): void;
-		cacheLocalOutpost(): void;
 		executeDirective(): boolean;
 		assignLogisticalPair(): boolean;
 		hasWorked: boolean;
@@ -234,18 +212,10 @@ declare global {
 	}
 
 	interface RoomFlags {
-		bootstrap?: boolean;
-		closestConSites?: boolean;
-		displayTowerRanges?: boolean;
-		haulersPickupEnergy?: boolean;
-		advancedSpawnLogic?: boolean;
-		managerInitialized?: boolean;
+		[key: string]: any;
 	}
 
 	interface RoomSettings {
-		repairSettings: RepairSettings;
-		visualSettings: VisualSettings;
-		flags: RoomFlags;
 		[key: string]: any;
 	}
 
@@ -255,7 +225,6 @@ declare global {
 		sourceIDs: Id<Source>[];
 		containerIDs: Id<StructureContainer>[];
 		controllerID: Id<StructureController>;
-		sourceAssignmentMap: SourceAssignment[];
 	}
 
 	interface RemoteSourceData {
@@ -264,15 +233,6 @@ declare global {
 		containerId: string | null;
 		containerPos: { x: number, y: number, roomName: string } | null;
 		lastChecked: number;
-	}
-
-	interface SourceAssignment {
-		source: Id<Source>;
-		container: Id<StructureContainer> | null;
-		pathLengthToStorage: number | null;
-		pathToStorage: PathFinderPath | null;
-		creepAssigned: string | null;
-		creepDeathTick: number | null;
 	}
 
 	interface ColonyStats {
@@ -342,6 +302,25 @@ declare global {
 		catalyzedGhodiumAlkalide: number;
 	}
 
+	type SourceAssignmentUpdate = {
+		source: Id<Source> | false,
+		container: Id<StructureContainer> | false,
+		pathLengthToStorage: number | false,
+		pathToStorage: PathFinderPath | false,
+		creepAssigned: string | false,
+		creepDeathTick: number | false
+	}
+
+	type LogisticsPair = {
+		source: string | Id<StructureContainer | StructureStorage>;
+		destination: Id<StructureContainer | StructureStorage | StructureLink>;
+		resource: ResourceConstant;
+		locality: 'local' | 'remote',
+		descriptor: string,
+		distance?: number,
+	}
+
+	type Locality = 'local' | 'remote';
 	interface RepairSettings {
 		walls: boolean;
 		ramparts: boolean;
@@ -364,11 +343,7 @@ declare global {
 	}
 
 	interface VisualSettings {
-		spawnInfo?: SpawnInfoSettings;
-		roomFlags?: RoomFlagsSettings;
-		progressInfo: ProgressInfoSettings;
-		displayControllerUpgradeRange?: boolean;
-		displayTowerRanges?: boolean;
+		[key: string]: any;
 	}
 
 	interface SpawnInfoSettings {
