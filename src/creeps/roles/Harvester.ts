@@ -32,12 +32,12 @@ const Harvester = {
 					creep.say('☠️');
 				}
 
-				let source: Source;
+				const sourceID: Id<Source> = cMem.source;
 
 				const isBootstrap = creep.room.memory.flags.bootstrap;
 
 				if (creep.getActiveBodyparts(CARRY) === 0) {
-					source = Game.getObjectById(cMem.source) as unknown as Source;
+						const source: Source = Game.getObjectById(sourceID)!;
 					if (!pos.isNearTo(source)) creep.moveTo(source, pathing.harvesterPathing);
 					else {
 						const containers: StructureContainer[] = source.pos.findInRange(FIND_STRUCTURES, 2, { filter: { structureType: STRUCTURE_CONTAINER } });
@@ -86,8 +86,10 @@ const Harvester = {
 								} else buildContainer(creep);
 								return;
 							}
-							if (cMem.bucket) creep.unloadEnergy(cMem.bucket);
-							else {
+							if (cMem.bucket) {
+								creep.unloadEnergy(cMem.bucket);
+								creep.harvestEnergy();
+							}	else {
 								const containers: StructureContainer[] = pos.findInRange(FIND_STRUCTURES, 1, { filter: (i) => i.structureType === STRUCTURE_CONTAINER }) as StructureContainer[];
 								if (containers.length) {
 									console.log(`Found container`);
@@ -106,14 +108,10 @@ const Harvester = {
 						}
 					} else {
 						// Move to source before harvesting
-						source = Game.getObjectById(cMem.source) as Source;
-						if (!source) {
-							creep.say('No src!');
-						} else if (!pos.isNearTo(source)) {
-							creep.moveTo(source, pathing.harvesterPathing);
-						} else {
-							creep.harvestEnergy();
-						}
+						const source = Game.getObjectById(cMem.source) as Source;
+						if (!source) creep.say('No src!');
+						else if (!pos.isNearTo(source)) creep.moveTo(source, pathing.harvesterPathing);
+						else creep.harvestEnergy();
 					}
 				}
 			} else navRallyPoint(creep);

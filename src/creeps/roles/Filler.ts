@@ -22,21 +22,18 @@ const Filler = {
 		cMem.disable ??= false;
 		cMem.rally ??= 'none';
 
-		if (cMem.disable === true) {
-			aiAlert(creep);
-		} else {
-			if (cMem.rally !== 'none') {
-				navRallyPoint(creep);
-			} else {
+		if (cMem.disable) aiAlert(creep);
+		else {
+			if (cMem.rally !== 'none') navRallyPoint(creep);
+			else {
 				// Withdraw phase - when empty, find resources
 				if (creep.store.getUsedCapacity() === 0) {
 					const target = findEnergySource(creep);
 
 					if (target) {
 						const result = withdrawFromTarget(creep, target);
-						if (result === ERR_NOT_IN_RANGE) {
+						if (result === ERR_NOT_IN_RANGE)
 							creep.moveTo(target, pathing.haulerPathing);
-						}
 					}
 				}
 
@@ -123,7 +120,11 @@ function findEnergySource(creep: Creep): Tombstone | Resource | Ruin | Structure
 		return room.storage;
 	}
 
-	// Priority 5: Containers (with null safety)
+	// Priority 5: Prestorage Container (if built)
+	if (room.memory?.containers?.prestorage)
+		return Game.getObjectById(room.memory.containers.prestorage);
+
+	// Priority 6: Containers (with null safety)
 	const containers = room.find(FIND_STRUCTURES, {
 		filter: (s) => s.structureType === STRUCTURE_CONTAINER
 			&& (s as StructureContainer).store.getUsedCapacity(RESOURCE_ENERGY) > 0
