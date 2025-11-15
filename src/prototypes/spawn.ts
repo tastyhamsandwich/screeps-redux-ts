@@ -177,6 +177,9 @@ StructureSpawn.prototype.determineBodyParts = function (role: string, maxEnergy?
 			if (this.room.memory?.data?.logisticalPairs) {
 				locality = this.room.memory?.data?.logisticalPairs[this.room.memory.data.pairCounter]?.locality;
 				pathLen = this.room.memory?.data?.logisticalPairs[this.room.memory.data.pairCounter]?.distance;
+			} else if (this.room.memory?.data?.haulerPairs) {
+				if (this.room.memory?.data?.haulerIndex === undefined) this.room.memory.data.haulerIndex = 0;
+				pathLen = this.room.memory?.data?.haulerPairs[this.room.memory.data.haulerIndex].length;
 			}
 
 			const carryParts: number = Math.ceil(pathLen / 5) * 2;

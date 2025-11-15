@@ -13,6 +13,17 @@ import CreepAI from '@creeps/index';
 // Import Prototype Extensions
 import '@prototypes/index';
 
+// polyfill for .flat()
+if (!(Array.prototype as any).flat) {
+	(Array.prototype as any).flat = function (depth = 1) {
+		let arr = this;
+		for (let d = 0; d < depth; d++) {
+			arr = arr.reduce((acc: any[], val: any) => acc.concat(val), []);
+		}
+		return arr;
+	};
+}
+
 //! GLOBAL HEAP VARIABLES
 
 // creep role counts for naming purposes
@@ -132,7 +143,9 @@ module.exports.loop = function() {
 
 			if (room.controller.level !== room.memory.data.controllerLevel) {
 				const newLevel = room.controller.level;
-				room.memory.data.controllerLevel = room.controller.level;
+				room.memory.data.controllerLevel = newLevel;
+				if (newLevel > room.memory.stats.controllerLevelReached)
+					room.memory.stats.controllerLevelReached = newLevel;
 
 /* 				switch (newLevel) {
 					case 1:

@@ -1,5 +1,113 @@
-import { log, roomExitsTo, calcPath } from '../functions/utils/globals';
-import OutpostSourceCounter from '../classes/OutpostSourceCounter';
+import { log, roomExitsTo, calcPath } from '@functions/utils/globals';
+
+Object.defineProperty(Room.prototype, 'sources', {
+	get: function () {
+		if (!this._sources) {
+			if (!this.memory.objects.sources)
+				this.cacheObjects();
+			this._sources = this.memory.objects.sources.map(id => Game.getObjectById(id));
+		}
+		return this._sources;
+	},
+	set: function (newV) {
+		this.memory.objects.sources = newV.map(source => source.id);
+		this._sources = newV;
+	},
+	enumerable: false,
+	configurable: true
+});
+
+Object.defineProperty(Room.prototype, 'sourceOne', {
+	get: function () {
+		if (!this._sourceOne) {
+			if (!this.memory.objects.sources) {
+				this.cacheObjects();
+			}
+			this._sourceOne = this.memory.objects.sources[0];
+		}
+		return this._sourceOne;
+	},
+	enumerable: false,
+	configurable: true
+});
+
+Object.defineProperty(Room.prototype, 'sourceTwo', {
+	get: function () {
+		if (!this._sourceTwo) {
+			if (!this.memory.objects.sources) {
+				this.cacheObjects();
+			}
+			if (this.memory.objects.sources.length > 1)
+				this._sourceTwo = this.memory.objects.sources[1];
+			else
+				return null;
+		}
+		return this._sourceTwo;
+	},
+	enumerable: false,
+	configurable: true
+});
+
+Object.defineProperty(Room.prototype, 'containers', {
+	get: function () {
+		if (!this._containers) {
+			if (!this.memory.objects.containers)
+				this.cacheObjects();
+			this._containers = this.memory.objects.containers.map(id => Game.getObjectById(id));
+		}
+		return this._containers;
+	},
+	set: function (newV) {
+		this.memory.objects.containers = newV.map(container => container.id);
+		this._containers = newV;
+	},
+	enumerable: false,
+	configurable: true
+});
+
+Object.defineProperty(Room.prototype, 'containerOne', {
+	get: function() {
+		if (!this._containerOne) {
+			if (!this.memory.containers.sourceOne)
+				return this._containerOne = null;
+			else this._containerOne = this.memory.containers.sourceOne;
+		}
+		return this._containerOne
+	},
+	enumerable: false,
+	configurable: true
+});
+
+Object.defineProperty(Room.prototype, 'containerTwo', {
+	get: function () {
+		if (!this._containerTwo) {
+			if (!this.memory.containers.sourceTwo)
+				return this._containerTwo = null;
+			else this._containerTwo = this.memory.containers.sourceTwo;
+		}
+		return this._containerTwo;
+	},
+	enumerable: false,
+	configurable: true
+});
+
+Object.defineProperty(Room.prototype, 'containerController', {
+	get: function () {
+		if (!this._containerController) {
+			if (!this.memory.containers.controller)
+				return this._containerController = null;
+			else this._containerController = this.memory.containers.controller;
+		}
+		return this._containerController;
+	},
+	enumerable: false,
+	configurable: true
+});
+
+Room.prototype.log = function(message: string, critical: boolean = false): void {
+	if (!critical) return console.log(`${this.link()}${message}`);
+	else return console.log(`${this.link()}<span style="color: red;">${message}</span>`);
+}
 
 /** Gets all walkable positions around a source for optimal harvesting placement.
  * @param sourceID - The ID of the source to check positions for
@@ -46,7 +154,7 @@ Room.prototype.cacheObjects = function () {
 
 	// Initialize memory structures
 	if (!this.memory.objects) this.memory.objects = {};
-	if (!this.memory.containers) this.memory.containers = { sourceOne: '', sourceTwo: '', controller: '', mineral: '' };
+	if (!this.memory.containers) this.memory.containers = { sourceOne: '', sourceTwo: '', controller: '', mineral: '', prestorage: '' };
 
 	log('Caching room objects...', this);
 
@@ -107,12 +215,13 @@ Room.prototype.cacheObjects = function () {
 	const containers = this.find(FIND_STRUCTURES, { filter: { structureType: STRUCTURE_CONTAINER }}) as StructureContainer[];
 	if (containers.length > 0) {
 		// Reset container memory
-		this.memory.containers = { sourceOne: '', sourceTwo: '', controller: '', mineral: '' };
+		this.memory.containers = { sourceOne: '', sourceTwo: '', controller: '', mineral: '', prestorage: '' };
 
 		// Pre-cache positions for efficient lookup
 		const sourcePositions = sources.length > 0 ? sources.map(s => ({ id: s.id, pos: s.pos })) : [];
 		const controllerPos = this.controller?.pos;
 		const mineralPos = minerals.length > 0 ? minerals[0].pos : undefined;
+		const spawnPos = this.find(FIND_MY_SPAWNS)[0].pos || undefined;
 
 		// Assign containers based on proximity
 		for (const container of containers) {
@@ -140,6 +249,10 @@ Room.prototype.cacheObjects = function () {
 			// Check if near mineral (within range 2)
 			if (!assigned && mineralPos && pos.inRangeTo(mineralPos, 2))
 				this.memory.containers.mineral = container.id;
+
+			// Check if near mineral (within range 2)
+			if (!assigned && spawnPos && pos.inRangeTo(spawnPos, 2))
+				this.memory.containers.prestorage = container.id;
 		}
 
 		// Build ordered container array (sourceOne, sourceTwo, controller, mineral)
@@ -150,7 +263,7 @@ Room.prototype.cacheObjects = function () {
 		if (this.memory.containers.sourceTwo) orderedContainers.push(this.memory.containers.sourceTwo as Id<StructureContainer>);
 		if (this.memory.containers.controller) orderedContainers.push(this.memory.containers.controller as Id<StructureContainer>);
 		if (this.memory.containers.mineral) orderedContainers.push(this.memory.containers.mineral as Id<StructureContainer>);
-
+		if (this.memory.containers.prestorage) orderedContainers.push(this.memory.containers.prestorage as Id<StructureContainer>);
 		// Add any remaining containers not assigned to specific positions
 		for (const id of containerIDs) {
 			if (!orderedContainers.includes(id))
@@ -256,7 +369,7 @@ Room.prototype.initRoom = function () {
 		catalyzedZynthiumAlkalide: 0, catalyzedGhodiumAcid: 0, catalyzedGhodiumAlkalide: 0 };
 	const labStats: LabStats = { compoundsMade: compoundStats, creepsBoosted: 0, boostsUsed: compoundStats, energySpentBoosting: 0 };
 
-	if (!this.memory.containers) 	this.memory.containers = { sourceOne: '', sourceTwo: '', controller: '', mineral: ''};
+	if (!this.memory.containers) 	this.memory.containers = { sourceOne: '', sourceTwo: '', controller: '', mineral: '', prestorage: '' };
 	if (!this.memory.data) 				this.memory.data = { controllerLevel: 0, numCSites: 0, sourceData: { source: [], container: [], lastAssigned: 0 } };
 	if (!this.memory.settings) 		this.memory.settings = { visualSettings: visualSettings, repairSettings: repairSettings,	flags: {}, basePlanner: { debug: false } };
 	if (!this.memory.outposts) 		this.memory.outposts = { list: {}, array: [], reserverLastAssigned: 0, numSources: 0, numHarvesters: 0, counter: 0, guardCounter: 0 };

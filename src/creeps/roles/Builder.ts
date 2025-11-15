@@ -60,6 +60,8 @@ const Builder = {
 							} else if (result === ERR_NOT_ENOUGH_ENERGY) {
 								// Out of energy while building - transition back to harvest
 								cMem.working = false;
+							} else if (result === OK) {
+								rMem.stats.constructionPoints += creep.getActiveBodyparts(WORK) * 5;
 							}
 						}
 					} else {
