@@ -31,6 +31,8 @@ function trySpawnCreep(spawn: StructureSpawn,	role: string,	memory: CreepMemory,
 
 	// Determine energy capacity (override for emergency harvesters)
 	let cap = capOverride ?? room.energyCapacityAvailable;
+	if (room.memory.data.spawnEnergyLimit && room.memory.data.spawnEnergyLimit > 0)
+		cap = room.memory.data.spawnEnergyLimit;
 	const body = spawn.determineBodyParts(role, cap);
 	const cost = calculateCreepCost(body);
 	const pending = room.memory.data.pendingSpawn;
@@ -323,11 +325,11 @@ export const legacySpawnManager = {
 						// Handle role-specific spawning logic
 						switch (nextRole) {
 							case 'harvester': {
-								const lastAssigned = room.memory.data.lastHarvesterAssigned ?? 0;
-								const sourceID = (lastAssigned === 0) ? room.sourceOne.id : room.sourceTwo.id;
-								const containerID = (lastAssigned === 0) ? room.containerOne.id : room.containerTwo.id;
-								const sourceNum = (lastAssigned === 0) ? 1 : 2;
-								room.memory.data.lastHarvesterAssigned = (lastAssigned + 1) % 2;
+								const nextAssigned = (room.memory.data.nextHarvesterAssigned % 2) + 1;
+								const sourceID = (nextAssigned === 1) ? room.sourceOne.id : room.sourceTwo.id;
+								const containerID = (nextAssigned === 1) ? room.containerOne.id : room.containerTwo.id;
+								const sourceNum = (nextAssigned === 1) ? 1 : 2;
+								room.memory.data.nextHarvesterAssigned++;
 								trySpawnCreep(spawn, 'harvester', { role: 'harvester', RFQ: 'harvester', home: room.name, room: room.name, working: false, disable: false, rally: 'none', source: sourceID, bucket: containerID, sourceNum: sourceNum }, room, colName, cap);
 								return;
 							}

@@ -306,11 +306,11 @@ export default class RoomManager {
 			if (this.needMoreHarvesters() && totalHarvesters < (rMem.objects?.sources?.length || 2)) {
 				const body = determineBodyParts('harvester', cap, this.room);
 				if (body) {
-					let lastHarvesterAssigned = rMem.data?.lastHarvesterAssigned || 0;
+					let nextHarvesterAssigned = rMem.data?.nextHarvesterAssigned || 0;
 					let sourceID: Id<Source> | undefined;
 					let containerID: string | undefined;
 
-					if (lastHarvesterAssigned === 0 && rMem.objects?.sources) {
+					if (nextHarvesterAssigned === 0 && rMem.objects?.sources) {
 						sourceID = rMem.objects.sources[0] as Id<Source>;
 						containerID = rMem.containers?.sourceOne;
 					} else if (rMem.objects?.sources) {

@@ -403,7 +403,7 @@ declare global {
 		sourceTwo?: { source: Id<Source>; container: Id<StructureContainer | ConstructionSite> };
 		controllerContainer?: Id<StructureContainer | ConstructionSite>;
 		mineralContainer?: { mineral: Id<Mineral>; container: Id<StructureContainer | ConstructionSite> };
-		lastHarvesterAssigned?: number;
+		nextHarvesterAssigned?: number;
 		controllerLevel?: number;
 		numCSites?: number;
 		logisticalPairs?: any;
