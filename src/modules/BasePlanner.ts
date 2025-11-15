@@ -1195,7 +1195,8 @@ export default class BasePlanner {
 	 * @author randomencounter
 	 */
 	private drawDistanceTransform(visual: RoomVisual): void {
-		const max = Math.max(...this.dtGrid.flat());
+		const flatDt = this.dtGrid.reduce((acc, row) => acc.concat(row), [] as number[]);
+		const max = Math.max(...flatDt);
 
 		for (let x = 0; x < 50; x++) {
 			for (let y = 0; y < 50; y++) {
@@ -1227,7 +1228,8 @@ export default class BasePlanner {
 	 * @author randomencounter
 	 */
 	private drawFloodFill(visual: RoomVisual): void {
-		const max = Math.max(...this.floodGrid.flat().filter(v => v < 255));
+		const flatFlood = this.floodGrid.reduce((acc, row) => acc.concat(row), [] as number[]);
+		const max = Math.max(...flatFlood.filter(v => v < 255));
 
 		for (let x = 0; x < 50; x++) {
 			for (let y = 0; y < 50; y++) {

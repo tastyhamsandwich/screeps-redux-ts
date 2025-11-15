@@ -66,7 +66,7 @@ export default class RoomPlanningVisualizer {
 	 * @author randomencounter
 	 */
 	private drawDistanceTransform(grid: number[][]): void {
-		const maxDist = Math.max(...grid.flat());
+		const maxDist = Math.max(...flatten2D(grid));
 
 		for (let x = 0; x < 50; x++) {
 			for (let y = 0; y < 50; y++) {
@@ -112,7 +112,8 @@ export default class RoomPlanningVisualizer {
 	 * @author randomencounter
 	 */
 	private drawFloodFill(grid: number[][]): void {
-		const maxSteps = Math.max(...grid.flat().filter(v => v < 255));
+		const flat = flatten2D(grid);
+		const maxSteps = Math.max(...flat.filter(v => v < 255));
 
 		for (let x = 0; x < 50; x++) {
 			for (let y = 0; y < 50; y++) {
@@ -855,3 +856,14 @@ global.RoomVis = {
 		console.log(`  Build Progress: ${visuals.visBuildProgress ? 'ON' : 'OFF'}`);
 	}
 };
+
+function flatten2D<T>(grid: T[][]): T[] {
+	const out: T[] = [];
+	for (let i = 0; i < grid.length; i++) {
+		const row = grid[i];
+		for (let j = 0; j < row.length; j++) {
+			out.push(row[j]);
+		}
+	}
+	return out;
+}
