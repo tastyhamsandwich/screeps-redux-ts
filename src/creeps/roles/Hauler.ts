@@ -69,14 +69,14 @@ const Hauler = {
 }
 
 function assignHaulRoute(creep: Creep): void {
-	if (creep.room.memory.data.haulerIndex === undefined)
-		creep.room.memory.data.haulerIndex = 0;
+	if (creep.room.memory.data.indices.haulerIndex === undefined)
+		creep.room.memory.data.indices.haulerIndex = 0;
 
 	const routeArray = creep.room.memory.data.haulerPairs;
 	if (!routeArray || routeArray.length === 0) return;
 
 	// Ensure index is always inside [0, routeArray.length-1]
-	const idx = creep.room.memory.data.haulerIndex % routeArray.length;
+	const idx = creep.room.memory.data.indices.haulerIndex % routeArray.length;
 
 	const routeInfo = routeArray[idx];
 	if (!routeInfo) return;
@@ -86,7 +86,7 @@ function assignHaulRoute(creep: Creep): void {
 	creep.memory.pathLength = routeInfo.length;
 
 	// Advance index for the next hauler (wraps to zero automatically)
-	creep.room.memory.data.haulerIndex = (idx + 1) % routeArray.length;
+	creep.room.memory.data.indices.haulerIndex = (idx + 1) % routeArray.length;
 }
 
 export default Hauler;

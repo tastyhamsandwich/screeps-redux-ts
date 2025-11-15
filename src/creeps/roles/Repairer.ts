@@ -1,4 +1,4 @@
-import { aiAlert, navRallyPoint } from '../common';
+import { aiAlert, navRallyPoint, upgraderBehavior } from '../common';
 import { pathing } from '@constants';
 import { repairProgress } from '@funcs/visual';
 
@@ -23,17 +23,14 @@ const Repairer = {
 		cMem.rally ??= 'none';
 		cMem.working ??= false; // Initialize working flag if undefined
 
-		if (cMem.disable === true) {
-			aiAlert(creep);
-		} else {
+		if (cMem.disable) aiAlert(creep);
+		else {
 			if (cMem.rally === 'none') {
 				// State transition logic: toggle working flag based on energy levels
-				if (creep.store.getUsedCapacity(RESOURCE_ENERGY) === 0) {
+				if (creep.store.getUsedCapacity(RESOURCE_ENERGY) === 0)
 					cMem.working = false;
-				}
-				if (creep.store.getFreeCapacity(RESOURCE_ENERGY) === 0) {
+				if (creep.store.getFreeCapacity(RESOURCE_ENERGY) === 0)
 					cMem.working = true;
-				}
 
 				// Harvest phase - collect energy
 				if (!cMem.working) {
@@ -69,27 +66,34 @@ const Repairer = {
 					} else {
 						// Repair structures based on room settings
 						const allSites = findRepairableStructures(room);
-
-						// Locate closest repairable structure, navigate to it, and repair
-						const nearestSite = pos.findClosestByRange(allSites);
-						if (nearestSite) {
-							const result = creep.repair(nearestSite);
-							if (result === ERR_NOT_IN_RANGE) {
-								creep.moveTo(nearestSite, pathing.repairerPathing);
-							} else if (result === OK) {
-								repairProgress(nearestSite, room);
-							} else if (result === ERR_NOT_ENOUGH_ENERGY) {
-								// Out of energy while repairing - transition back to harvest
-								cMem.working = false;
-							} else {
-								console.log(`${creep.name}: Repair result - ${result}`);
+						if (allSites && allSites.length) {
+							// Locate closest repairable structure, navigate to it, and repair
+							const nearestSite = pos.findClosestByRange(allSites);
+							if (nearestSite) {
+								const result = creep.repair(nearestSite);
+								switch (result) {
+									case ERR_NOT_IN_RANGE:
+										creep.moveTo(nearestSite, pathing.repairerPathing);
+										break;
+									case ERR_NOT_ENOUGH_ENERGY:
+										cMem.working = false;
+										break;
+									case OK:
+										repairProgress(nearestSite, room);
+										break;
+									default:
+										creep.log(`Repair result - ${result}`);
+										break;
+								}
+								if (result === ERR_NOT_IN_RANGE) creep.moveTo(nearestSite, pathing.repairerPathing);
+								else if (result === OK) repairProgress(nearestSite, room);
+								else if (result === ERR_NOT_ENOUGH_ENERGY) cMem.working = false;
+								else console.log(`${creep.name}: Repair result - ${result}`);
 							}
-						}
+						} else upgraderBehavior(creep);
 					}
 				}
-			} else {
-				navRallyPoint(creep);
-			}
+			} else navRallyPoint(creep);
 		}
 	}
 }

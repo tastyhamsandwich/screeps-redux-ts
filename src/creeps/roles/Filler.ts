@@ -62,7 +62,7 @@ const Filler = {
  * Finds the best energy source for the filler creep.
  * Priority: Tombstones > Dropped Energy > Ruins > Storage > Containers
  */
-function findEnergySource(creep: Creep): Tombstone | Resource | Ruin | StructureStorage | StructureContainer | null {
+function findEnergySource(creep: Creep): Tombstone | Resource | Ruin | AnyStoreStructure | null {
 	const room = creep.room;
 	const hasStorage = room.storage !== undefined;
 
@@ -136,13 +136,21 @@ function findEnergySource(creep: Creep): Tombstone | Resource | Ruin | Structure
 		return containers[0];
 	}
 
+	// Priority 7: Towers with energy
+	const towers: StructureTower[] = room.find(FIND_MY_STRUCTURES, { filter: (s) => s.structureType === STRUCTURE_TOWER && s.store.getUsedCapacity(RESOURCE_ENERGY) > 0});
+	if (towers.length) {
+		const nearestTower = creep.pos.findClosestByRange(towers);
+		if (nearestTower) {
+			return nearestTower;
+		}
+	}
 	return null;
 }
 
 /**
  * Withdraws resources from the target, handling different target types appropriately.
  */
-function withdrawFromTarget(creep: Creep, target: Tombstone | Resource | Ruin | StructureStorage | StructureContainer): ScreepsReturnCode {
+function withdrawFromTarget(creep: Creep, target: Tombstone | Resource | Ruin | AnyStoreStructure): ScreepsReturnCode {
 	// Handle dropped resources (pickup instead of withdraw)
 	if (target instanceof Resource) {
 		return creep.pickup(target);
