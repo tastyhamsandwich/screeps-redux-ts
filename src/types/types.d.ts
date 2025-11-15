@@ -62,6 +62,7 @@ declare global {
 			sourceTwo: string;
 			mineral: string;
 			controller: string;
+			prestorage: string;
 		};
 		settings: RoomSettings;
 		data: { [key: string]: any };
@@ -126,6 +127,7 @@ declare global {
 	}
 
 	interface Room {
+		log(message: string, critical: boolean): void;
 		getSourcePositions(sourceID: string): RoomPosition[];
 		link(): string;
 		cacheObjects(): void;
@@ -161,6 +163,7 @@ declare global {
 	type Locality = 'local' | 'remote';
 
 	interface Creep {
+		log(message: string, critical: boolean): void;
 		smartMoveTo(target: RoomPosition | { pos: RoomPosition }, opts?: MoveToOpts): ScreepsReturnCode;
 		advGet(target: Source | Id<Source> | Mineral | Id<Mineral> | Deposit | Id<Deposit> | AnyStoreStructure | Resource | Tombstone | Ruin | Id<AnyStoreStructure> | Id<Resource> | Id<Tombstone> | Id<Ruin>): ScreepsReturnCode;
 		advGive(target: Creep | AnyStoreStructure | Id<AnyStoreStructure>, pathing?: MoveToOpts, resource?: ResourceConstant, canTravel?: boolean): ScreepsReturnCode;
