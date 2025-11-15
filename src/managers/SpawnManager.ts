@@ -304,9 +304,9 @@ export default class SpawnManager {
 	/** Handles post-spawn logic for specific roles */
 	private handlePostSpawn(request: SpawnRequest, creepName: string): void {
 		if (request.role === 'harvester') {
-			const nextHarvesterAssigned = this.room.memory.data?.nextHarvesterAssigned || 0;
+			const nextHarvesterAssigned = this.room.memory.data?.indices.nextHarvesterAssigned || 0;
 			if (this.room.memory.data)
-				this.room.memory.data.nextHarvesterAssigned = (nextHarvesterAssigned + 1) % 2;
+				this.room.memory.data.indices.nextHarvesterAssigned = (nextHarvesterAssigned + 1) % 2;
 
 		} else if (request.role === 'remoteharvester' && this.room.memory.outposts)
 			this.room.memory.outposts.numHarvesters++;

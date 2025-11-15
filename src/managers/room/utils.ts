@@ -1,9 +1,28 @@
+/** Manages creep spawning for a room using a legacy round-robin scheduling system.
+ *
+ * Operates in two phases:
+ * - **Bootstrap Phase**: Prioritizes spawning harvesters and fillers until energy production is sufficient
+ * - **Normal Phase**: Cycles through haulers, upgraders, builders, repairers, and reservers
+ *
+ * Features:
+ * - Throttles spawn assessments every 3 ticks to reduce CPU usage
+ * - Uses Role For Quota (RFQ) system to track creep roles independently of identity
+ * - Implements pending spawn tracking for creeps that couldn't spawn due to insufficient energy
+ * - Validates cached sources before proceeding with spawn logic
+ * - Uses cached spawn object IDs for improved performance
+ * - Provides debug logging for spawn operations and state tracking
+ *
+ * @param room - The room to manage spawning for
+ *
+ * @remarks
+ * - Requires room.memory.objects to be populated with cached spawn and source IDs
+ * - Maintains round-robin index in room.memory.data.indices for fair role distribution
+ * - Stores pending spawns in room.memory.data.pendingSpawn with a 100-tick timeout
+ * - Spawned creeps receive role-specific memory configurations including source/container assignments for harvesters
+ */
+
 import { creepRoleCounts } from "@main";
 import * as FUNC from '@functions/index';
-
-const pendingSpawns: {
-	[roomName: string]: { role: string; body: BodyPartConstant[]; name: string; memory: CreepMemory; cost: number, time: number };
-} = {};
 
 // Helper function to generate name suffix with current counter
 const getNameSuffix = (role: string, counter: number): string => {
@@ -27,6 +46,30 @@ function calculateCreepCost(body: BodyPartConstant[]): number {
 	return _.sum(body, p => BODYPART_COST[p]);
 }
 
+/** Attempts to spawn a creep with the specified role and memory configuration.
+ *
+ * Handles pending spawn resumption when energy becomes available, and manages
+ * name collision resolution through counter incrementation.
+ *
+ * @param spawn - The spawn structure to use for spawning
+ * @param role - The role to assign to the spawned creep
+ * @param memory - Memory configuration object for the creep
+ * @param room - The room where spawning occurs
+ * @param colName - Colony name prefix for the creep name
+ * @param capOverride - Optional energy capacity override (used for emergency harvesters)
+ *
+ * @returns A Screeps return code indicating spawn success or failure:
+ * - OK: Creep spawned successfully or pending spawn resumed
+ * - ERR_NOT_ENOUGH_ENERGY: Insufficient energy; spawn stored as pending
+ * - Other error codes: Invalid name, invalid body, etc.
+ *
+ * @remarks
+ * - Pending spawns are stored in room.memory.data.pendingSpawn with a 100-tick timeout
+ * - If a pending spawn exists and has sufficient energy, it takes priority over new spawns
+ * - Automatically increments name counter on ERR_NAME_EXISTS to resolve collisions
+ * - Updates room statistics (creepsSpawned, creepPartsSpawned) on successful spawn
+ * - Respects room.memory.data.spawnEnergyLimit if set (overrides capacity)
+ */
 function trySpawnCreep(spawn: StructureSpawn,	role: string,	memory: CreepMemory, room: Room, colName: string,	capOverride?: number): ScreepsReturnCode {
 
 	// Determine energy capacity (override for emergency harvesters)
@@ -44,7 +87,7 @@ function trySpawnCreep(spawn: StructureSpawn,	role: string,	memory: CreepMemory,
 			console.log(`${room.link()}${spawn.name}> Resuming pending spawn for ${pending.memory.role} (${pending.name})`);
 			delete room.memory.data.pendingSpawn;
 			room.memory.stats.creepsSpawned++;
-			room.memory.stats.creepPartsSpawned += body.length;
+			room.memory.stats.creepPartsSpawned += pending.body.length;  // Use pending.body.length, not current body
 			return OK;
 		}
 		if (room.memory.data.debugSpawn)
@@ -125,7 +168,7 @@ function getNextRoleToSpawn(
 				check: () => spawn.room.controller!.level >= 2 || harvesters.length >= harvesterTarget
 			}
 		];
-		currentIndex = (room.memory.data as any).lastBootstrapRoleIndex ?? -1;
+		currentIndex = (room.memory.data as any).indices.lastBootstrapRoleIndex ?? -1;
 	} else {
 		// Normal phase: cycle through other roles
 		roleConfigs = [
@@ -160,7 +203,7 @@ function getNextRoleToSpawn(
 				check: () => spawn.room.energyCapacityAvailable >= 800
 			}
 		];
-		currentIndex = (room.memory.data as any).lastNormalRoleIndex ?? -1;
+		currentIndex = (room.memory.data as any).indices.lastNormalRoleIndex ?? -1;
 	}
 
 	// Try each role in round-robin order
@@ -170,7 +213,7 @@ function getNextRoleToSpawn(
 
 		if (roleConfig.count < roleConfig.target && roleConfig.check()) {
 			const indexKey = !harvesters_and_fillers_satisfied ? 'lastBootstrapRoleIndex' : 'lastNormalRoleIndex';
-			(room.memory.data as any)[indexKey] = roleIndex;
+			(room.memory.data.indices as any)[indexKey] = roleIndex;
 			return roleConfig.name;
 		}
 	}
@@ -182,7 +225,6 @@ function getNextRoleToSpawn(
  *
  * Uses round-robin scheduling to spawn roles evenly in two phases: bootstrap (harvesters/fillers) and normal (other roles). */
 export const legacySpawnManager = {
-
 	run: (room: Room) => {
 
 		const roomName = room.name;
@@ -253,9 +295,9 @@ export const legacySpawnManager = {
 		const harvesters_and_fillers_satisfied = ((totalWorkParts >= (room.memory.objects.sources.length * 5) || harvesters.length >= harvesterTarget) && fillers.length >= fillerTarget);
 
 		if (harvesters_and_fillers_satisfied)
-			new RoomVisual(roomName).circle(1,1,{fill: 'white'});
+			new RoomVisual(roomName).text('✅', 1,1,{color: 'green', align: 'left', });
 		else
-			new RoomVisual(roomName).rect(1,1,1,1,{fill: 'white'});
+			new RoomVisual(roomName).text('⏳', 1,1,{color: 'red', align: 'left', });
 
 		const colName = `Col1`;
 
@@ -275,27 +317,42 @@ export const legacySpawnManager = {
 				if (debugSpawn) console.log(`${room.link()}${spawn.name}: Spawning=${spawn.spawning}, Cap=${cap}`);
 
 				if (!spawn.spawning) {
-					// Check for pending spawn request
-					const pending = pendingSpawns[room.name];
+					// Check for pending spawn request (stored in room memory)
+					const pending = room.memory.data.pendingSpawn;
 
-					if (pending && Game.time - pending.time >= 50) {
-						const result = spawn.retryPending();
-						if (result !== OK) {
-							pending.time = Game.time;
-							room.memory.data.pendingSpawn = pending;
-							return;
+					if (pending) {
+						const timeSincePending = Game.time - pending.time;
+
+						// Absolute timeout: clear pending spawn if it's been stuck for 100 ticks
+						if (timeSincePending >= 100) {
+							console.log(`${room.link()}${spawn.name}> TIMEOUT: Clearing pending spawn for ${pending.memory.role} (${pending.name}) after ${timeSincePending} ticks`);
+							delete room.memory.data.pendingSpawn;
 						}
-					}
-
-					if (pending && room.energyAvailable >= pending.cost) {
-						const { role, body, name, memory, time } = pending;
-						const result = spawn.spawnCreep(body, name, { memory });
-						if (result === OK) {
-							console.log(`${room.link()} ${spawns[0].name}: Resumed pending spawn for ${role} (${name})`);
-							delete pendingSpawns[room.name];
-						} else if (result !== ERR_BUSY)
-							console.log(`${room.link()} ${spawns[0].name}: Retry for pending ${role} failed: ${result}`);
-						return; // Skip other spawn logic this tick
+						// Retry after 50 ticks
+						else if (timeSincePending >= 50) {
+							const result = spawn.retryPending();
+							if (result !== OK && result !== ERR_NOT_ENOUGH_ENERGY) {
+								if (debugSpawn)
+									console.log(`${room.link()}${spawn.name}> Retry for pending ${pending.memory.role} failed: ${FUNC.getReturnCode(result)}`);
+							}
+							return; // Skip other spawn logic this tick
+						}
+						// Check if we have enough energy every tick
+						else if (room.energyAvailable >= pending.cost) {
+							const result = spawn.retryPending();
+							if (result === OK) {
+								console.log(`${room.link()}${spawn.name}> Resumed pending spawn for ${pending.memory.role} (${pending.name}) after ${timeSincePending} ticks`);
+							} else if (result !== ERR_NOT_ENOUGH_ENERGY) {
+								console.log(`${room.link()}${spawn.name}> Failed to resume pending ${pending.memory.role}: ${FUNC.getReturnCode(result)}`);
+							}
+							return; // Skip other spawn logic this tick
+						}
+						// Pending spawn exists but not enough energy yet
+						else {
+							if (debugSpawn && timeSincePending % 10 === 0)
+								console.log(`${room.link()}${spawn.name}> Pending ${pending.memory.role} waiting for energy (${room.energyAvailable}/${pending.cost}, age: ${timeSincePending}t)`);
+							return; // Skip other spawn logic this tick
+						}
 					}
 
 					// Get the next role to spawn using round-robin scheduling
@@ -325,11 +382,13 @@ export const legacySpawnManager = {
 						// Handle role-specific spawning logic
 						switch (nextRole) {
 							case 'harvester': {
-								const nextAssigned = (room.memory.data.nextHarvesterAssigned % 2) + 1;
+								const nextAssigned = (room.memory.data.indices.nextHarvesterAssigned % 2) + 1;
 								const sourceID = (nextAssigned === 1) ? room.sourceOne.id : room.sourceTwo.id;
-								const containerID = (nextAssigned === 1) ? room.containerOne.id : room.containerTwo.id;
+								let containerID = 'none';
+								if (!room.memory.data.flags.dropHarvestingEnabled)
+									containerID = (nextAssigned === 1) ? room.containerOne.id : room.containerTwo.id;
 								const sourceNum = (nextAssigned === 1) ? 1 : 2;
-								room.memory.data.nextHarvesterAssigned++;
+								room.memory.data.indices.nextHarvesterAssigned++;
 								trySpawnCreep(spawn, 'harvester', { role: 'harvester', RFQ: 'harvester', home: room.name, room: room.name, working: false, disable: false, rally: 'none', source: sourceID, bucket: containerID, sourceNum: sourceNum }, room, colName, cap);
 								return;
 							}

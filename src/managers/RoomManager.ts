@@ -72,12 +72,12 @@ export default class RoomManager {
 		const mem = this.room.memory;
 
 		// Initialize visual settings if needed
-		if (!rmData.basePlanGenerated) {
+		if (!rmData.flags.basePlanGenerated) {
 			if (!this.room.memory.visuals) this.room.memory.visuals = {};
 			this.room.memory.visuals.visDistTrans ??= true;
 			this.room.memory.visuals.visFloodFill ??= true;
 			this.room.memory.visuals.visBasePlan ??= true;
-			rmData.basePlanGenerated = true;
+			rmData.flags.basePlanGenerated = true;
 		}
 
 		let regenerate = false;
@@ -306,7 +306,7 @@ export default class RoomManager {
 			if (this.needMoreHarvesters() && totalHarvesters < (rMem.objects?.sources?.length || 2)) {
 				const body = determineBodyParts('harvester', cap, this.room);
 				if (body) {
-					let nextHarvesterAssigned = rMem.data?.nextHarvesterAssigned || 0;
+					let nextHarvesterAssigned = rMem.data?.indices.nextHarvesterAssigned || 0;
 					let sourceID: Id<Source> | undefined;
 					let containerID: string | undefined;
 
