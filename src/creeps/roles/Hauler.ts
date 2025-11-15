@@ -1,3 +1,4 @@
+import { assign } from 'lodash';
 import { aiAlert, navRallyPoint } from '../common';
 import { pathing } from '@constants';
 
@@ -26,11 +27,8 @@ const Hauler = {
 				if (!cMem.pickup && !cMem.dropoff) {
 					if (rMem.data.logisticalPairs)
 						creep.assignLogisticalPair();
-					else {
-						const haulerCount = Game.rooms[cMem.home].find(FIND_MY_CREEPS, { filter: i => i.memory.role === 'hauler' }).length;
-						cMem.pickup = (haulerCount % 2 === 1) ? rMem.containers.sourceOne : rMem.containers.sourceTwo;
-						cMem.dropoff = rMem.containers.controller;
-					}
+					else if (rMem.data.haulerPairs)
+						assignHaulRoute(creep);
 				}
 
 				if (cMem.cargo === undefined) cMem.cargo = 'energy';
@@ -68,6 +66,27 @@ const Hauler = {
 			} else navRallyPoint(creep);
 		}
 	}
+}
+
+function assignHaulRoute(creep: Creep): void {
+	if (creep.room.memory.data.haulerIndex === undefined)
+		creep.room.memory.data.haulerIndex = 0;
+
+	const routeArray = creep.room.memory.data.haulerPairs;
+	if (!routeArray || routeArray.length === 0) return;
+
+	// Ensure index is always inside [0, routeArray.length-1]
+	const idx = creep.room.memory.data.haulerIndex % routeArray.length;
+
+	const routeInfo = routeArray[idx];
+	if (!routeInfo) return;
+
+	creep.memory.pickup = routeInfo.start;
+	creep.memory.dropoff = routeInfo.end;
+	creep.memory.pathLength = routeInfo.length;
+
+	// Advance index for the next hauler (wraps to zero automatically)
+	creep.room.memory.data.haulerIndex = (idx + 1) % routeArray.length;
 }
 
 export default Hauler;
