@@ -3,7 +3,7 @@ import SpawnManager from './SpawnManager';
 import BasePlanner, { computePlanChecksum } from '../modules/BasePlanner';
 import { STRUCTURE_PRIORITY } from '../functions/utils/constants';
 import { legacySpawnManager } from './room/utils';
-import { log } from '../functions/utils/globals';
+import { calcPathLength, log } from '../functions/utils/globals';
 import { determineBodyParts } from '../functions/creep/body';
 import RoomPlanningVisualizer from '@modules/PlanVisualizer';
 
@@ -16,6 +16,7 @@ export default class RoomManager {
 	private legacySpawnManager;
 	private basePlanner: BasePlanner | null;
 	private basePlan: PlanResult | null = null;
+	private haulerPairs: { start: string, end: string, length: number }[] | null = null;
 	public planVisualizer: RoomPlanningVisualizer | null = null;
 
 	constructor(room: Room) {
@@ -110,7 +111,7 @@ export default class RoomManager {
 		if (this.basePlan) this.handleBasePlan(this.basePlan);
 
 		// Assess creep needs and submit spawn requests if using advanced spawn manager
-		if (rmData.pendingSpawn && this.room.energyAvailable === this.room.energyCapacityAvailable) {
+		if (rmData.advSpawnSystem === false && rmData.pendingSpawn && this.room.energyAvailable === this.room.energyCapacityAvailable) {
 			const spawns = this.room.find(FIND_MY_SPAWNS, { filter: i => !i.spawning});
 			for (const spawn of spawns) {
 				const result = spawn.retryPending();
@@ -131,6 +132,9 @@ export default class RoomManager {
 
 		// Manage towers
 		this.manageTowers();
+
+		// Manage hauler container pairs
+		if (this.shouldManageContainers()) this.manageContainers();
 
 		// Manage links (if any)
 		if (this.resources.links.length > 0) {
@@ -699,6 +703,59 @@ export default class RoomManager {
 		}
 	}
 
+	private shouldManageContainers(): boolean {
+		const cont = this.room.memory.containers || {};
+		const ids = [
+			cont.sourceOne || '',
+			cont.sourceTwo || '',
+			cont.prestorage || '',
+			cont.controller || '',
+			(this.room.storage && this.room.storage.id) || ''
+		].join('|');
+
+		// simple change-detection stored in memory
+		if (this.room.memory.data._lastContainerHash !== ids) {
+			this.room.memory.data._lastContainerHash = ids;
+			return true;
+		}
+		return false;
+	}
+
+	private manageContainers(): void {
+
+		const pairArray: { start: string, end: string, length: number }[] = [];
+		if (this.room.memory.containers.sourceOne && this.room.memory.containers.prestorage) {
+			const sourceOneContainer: StructureContainer = Game.getObjectById(this.room.memory.containers.sourceOne)!;
+			const prestorageContainer: StructureContainer = Game.getObjectById(this.room.memory.containers.prestorage)!;
+			const pathLength = calcPathLength(sourceOneContainer.pos, prestorageContainer.pos);
+			const pair = { start: this.room.memory.containers.sourceOne, end: this.room.memory.containers.prestorage, length: pathLength };
+			pairArray.push(pair);
+		}
+		if (this.room.memory.containers.sourceTwo && this.room.memory.containers.prestorage) {
+			const sourceTwoContainer: StructureContainer = Game.getObjectById(this.room.memory.containers.sourceTwo)!;
+			const prestorageContainer: StructureContainer = Game.getObjectById(this.room.memory.containers.prestorage)!;
+			const pathLength = calcPathLength(sourceTwoContainer.pos, prestorageContainer.pos);
+			const pair = { start: this.room.memory.containers.sourceTwo, end: this.room.memory.containers.prestorage, length: pathLength };
+			pairArray.push(pair);
+		}
+		if (this.room.storage && this.room.memory.containers.controller) {
+			const controllerContainer: StructureContainer = Game.getObjectById(this.room.memory.containers.controller)!;
+			const storage: StructureStorage = this.room.storage;
+			const pathLength = calcPathLength(storage.pos, controllerContainer.pos);
+			const pair = { start: storage.id, end: this.room.memory.containers.controller, length: pathLength };
+			pairArray.push(pair);
+		} else if (this.room.memory.containers.controller && this.room.memory.containers.prestorage) {
+				const controllerContainer: StructureContainer = Game.getObjectById(this.room.memory.containers.controller)!;
+				const prestorageContainer: StructureContainer = Game.getObjectById(this.room.memory.containers.prestorage)!;
+				const pathLength = calcPathLength(prestorageContainer.pos, controllerContainer.pos);
+				const pair = { start: this.room.memory.containers.prestorage, end: this.room.memory.containers.controller, length: pathLength };
+				pairArray.push(pair);
+		}
+
+		this.room.memory.data.haulerPairs = pairArray;
+		this.haulerPairs = pairArray;
+		this.room.setQuota('hauler', pairArray.length);
+	}
 	/** Process construction tasks as created by BasePlanner */
 	private handleBasePlan(plan: PlanResult): void {
 		const mem = this.room.memory;
@@ -943,7 +1000,11 @@ export default class RoomManager {
 	}
 
 	private drawDistanceTransform(vis: RoomVisual, dist: number[][]): void {
-		const max = Math.max(...dist.flat());
+		const flatDist: number[] = [];
+
+		for (let i = 0; i < dist.length; i++) flatDist.push(...dist[i]);
+		const max = Math.max(...flatDist);
+
 		for (let x = 0; x < 50; x++) {
 			for (let y = 0; y < 50; y++) {
 				const val = dist[x][y];
@@ -962,7 +1023,9 @@ export default class RoomManager {
 	}
 
 	private drawFloodFill(vis: RoomVisual, flood: number[][]): void {
-		const max = Math.max(...flood.flat());
+		const flatFlood: number[] = [];
+		for (let i = 0; i < flood.length; i++) flatFlood.push(...flood[i]);
+		const max = Math.max(...flatFlood);
 		for (let x = 0; x < 50; x++) {
 			for (let y = 0; y < 50; y++) {
 				const val = flood[x][y];
@@ -982,7 +1045,7 @@ export default class RoomManager {
 
 	private drawBaseLayout(vis: RoomVisual, plan: PlanResult): void {
 		const rcl = this.room.controller?.level ?? 8;
-		const placements = Object.values(plan.rclSchedule).flat();
+		const placements = Object.values(plan.rclSchedule).reduce((acc, arr) => acc.concat(arr), [] as any[]);
 
 		for (const entry of placements) {
 			const { x, y } = entry.pos;

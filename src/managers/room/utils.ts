@@ -41,8 +41,9 @@ function trySpawnCreep(spawn: StructureSpawn,	role: string,	memory: CreepMemory,
 		if (result === OK) {
 			console.log(`${room.link()}${spawn.name}> Resuming pending spawn for ${pending.memory.role} (${pending.name})`);
 			delete room.memory.data.pendingSpawn;
+			room.memory.stats.creepsSpawned++;
+			room.memory.stats.creepPartsSpawned += body.length;
 			return OK;
-
 		}
 		if (room.memory.data.debugSpawn)
 			console.log(`${room.link()}${spawn.name}> Pending Spawn Result: ${FUNC.getReturnCode(result)}`);
@@ -66,6 +67,8 @@ function trySpawnCreep(spawn: StructureSpawn,	role: string,	memory: CreepMemory,
 
 	if (result === OK) {
 		console.log(`${room.link()}${spawn.name}> Spawning ${role} ${name} in ${room.name}`);
+		room.memory.stats.creepsSpawned++;
+		room.memory.stats.creepPartsSpawned += body.length;
 		return OK;
 	} else if (result === ERR_NOT_ENOUGH_ENERGY) {
 		room.memory.data.pendingSpawn = { role, body, name, memory, cost };
@@ -150,7 +153,6 @@ export const legacySpawnManager = {
 		if (debugSpawn) console.log(`${room.link()}Legacy Spawn Manager: Sources cached (${room.memory.objects.sources.length}), spawns found (${spawns.length})`);
 
 		const harvesters_and_fillers_satisfied = ((totalWorkParts >= (room.memory.objects.sources.length * 5) || harvesters.length >= harvesterTarget) && fillers.length >= fillerTarget);
-		const containersBuilt = (room.memory.containers.sourceOne && room.memory.containers.sourceTwo && room.memory.containers.controller);
 
 		if (harvesters_and_fillers_satisfied)
 			new RoomVisual(roomName).circle(1,1,{fill: 'white'});
@@ -210,7 +212,7 @@ export const legacySpawnManager = {
 						//! Spawn other creep types if harvesters & fillers fulfilled
 					} else {
 						//# Spawn Haulers
-						if ((spawn.room.storage || containersBuilt) && haulers.length < haulerTarget) {
+						if ((spawn.room.storage || room.memory.data.haulerPairs) && haulers.length < haulerTarget) {
 							trySpawnCreep(spawn, 'hauler', { role: 'hauler', RFQ: 'hauler', home: room.name, room: room.name, working: false, disable: false, rally: 'none' }, room, colName);
 							return;
 						}
