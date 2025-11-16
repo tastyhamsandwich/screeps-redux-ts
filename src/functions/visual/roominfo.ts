@@ -85,16 +85,7 @@
 				font: spawnFont
 			});
 
-		// Energy Available, Energy Capacity
-		room.visual.text(
-			'Energy: ' + room.energyAvailable + '('
-			+ room.energyCapacityAvailable + ')',
-			spawnX, 45,
-			{
-				align: alignment,
-				color: spawnColor,
-				font: spawnFont
-			});
+
 
 		//* TOP RIGHT BOX
 		room.visual.rect(
@@ -183,13 +174,31 @@
 
 	//: ROOM CONTROLLER UPGRADE PROGRESS
 	if (room.controller!.level >= 1) FUNC.visualRCProgress(room.controller);
+}
 
+ */
+export function towerDamageOverlay(room: Room) {
+	//: TOWER DAMAGE BOX DISPLAYS
+	_.forEach(room.memory.objects.towers, function (towerID) {
+		const tower: StructureTower | null = Game.getObjectById(towerID)!;
+		tower.room.visual.rect(-0.5, -0.5, 51, 51, { fill: '#550000', opacity: 0.25, stroke: '#880000' });
+		tower.room.visual.rect(tower.pos.x - 19.5, tower.pos.y - 19.5, 39, 39, { fill: '#aa3e00', opacity: 0.15, stroke: '#ff8800' });
+		tower.room.visual.rect(tower.pos.x - 15.5, tower.pos.y - 15.5, 31, 31, { fill: '#aaaa00', opacity: 0.2, stroke: '#ffff00' });
+		tower.room.visual.rect(tower.pos.x - 10.5, tower.pos.y - 10.5, 21, 21, { fill: '#003300', opacity: 0.2, stroke: '#008800' });
+		tower.room.visual.rect(tower.pos.x - 5.5, tower.pos.y - 5.5, 11, 11, { fill: '#4476ff', opacity: 0.25, stroke: '#00e1ff' });
+	});
+}
+
+export function displayEnergyStorage(room: Room) {
 	//: DISPLAY ENERGY ABOVE ROOM STORAGE
-	if (room.storage)
+	const displayItem = (room.storage) ? room.storage : (room.prestorage) ? room.prestorage : null;
+	if (displayItem === null) return;
+
+	if (displayItem)
 		room.visual.text(
-			' Storage: ' + room.storage.store[RESOURCE_ENERGY],
-			room.storage.pos.x,
-			room.storage.pos.y - 1,
+			' Storage: ' + displayItem.store[RESOURCE_ENERGY],
+			displayItem.pos.x,
+			displayItem.pos.y - 1,
 			{
 				align: 'center',
 				opacity: 0.8,
@@ -198,22 +207,39 @@
 					'#000000',
 				color: '#ffff00'
 			});
-
-
 }
 
-export function towerDamageOverlay(room: Room) {
-	//: TOWER DAMAGE BOX DISPLAYS
-	if (room.memory.settings.visualSettings.displayTowerRanges) {
-		_.forEach(room.memory.objects.towers, function (towerID) {
-			const tower: StructureTower | null = Game.getObjectById(towerID)!;
-			tower.room.visual.rect(-0.5, -0.5, 51, 51, { fill: '#550000', opacity: 0.25, stroke: '#880000' });
-			tower.room.visual.rect(tower.pos.x - 19.5, tower.pos.y - 19.5, 39, 39, { fill: '#aa3e00', opacity: 0.15, stroke: '#ff8800' });
-			tower.room.visual.rect(tower.pos.x - 15.5, tower.pos.y - 15.5, 31, 31, { fill: '#aaaa00', opacity: 0.2, stroke: '#ffff00' });
-			tower.room.visual.rect(tower.pos.x - 10.5, tower.pos.y - 10.5, 21, 21, { fill: '#003300', opacity: 0.2, stroke: '#008800' });
-			tower.room.visual.rect(tower.pos.x - 5.5, tower.pos.y - 5.5, 11, 11, { fill: '#4476ff', opacity: 0.25, stroke: '#00e1ff' });
-		});
+export function displayEnergyCapacity(room: Room) {
+
+	const rMem = room.memory;
+	const rmFlgs: RoomFlags = rMem.settings.flags;
+	const rmVis: VisualSettings = rMem.visuals.settings!;
+
+	if (rmVis && rmVis.spawnInfo) {
+		const alignment: alignment = rmVis.spawnInfo.alignment;
+		const spawnColor: string = rmVis.spawnInfo.color;
+		const spawnFont: number = rmVis.spawnInfo.fontSize || 0.5;
+		const spawn: StructureSpawn = Game.getObjectById(room.memory.objects.spawns[0])!;
+		let spawnX = spawn.pos.x;
+		// Energy Available, Energy Capacity
+		/* room.visual.rect(
+			41.75, 44.5, 7.5, 4.75,
+			{
+				fill: '#555555',
+				stroke: '#aaaaaa',
+				opacity: 0.3,
+				strokeWidth: 0.2
+			}); */
+		room.visual.text(
+			'Energy: ' + room.energyAvailable + '('
+			+ room.energyCapacityAvailable + ')',
+			spawnX, spawn.pos.y - 1,
+			{
+				align: 'center',
+				color: spawnColor,
+				font: spawnFont,
+				stroke: '#000000',
+				strokeWidth: 0.2
+			});
 	}
 }
-
- */
