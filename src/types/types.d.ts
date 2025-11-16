@@ -157,7 +157,7 @@ declare global {
 		advGet(target: Source | Id<Source> | Mineral | Id<Mineral> | Deposit | Id<Deposit> | AnyStoreStructure | Resource | Tombstone | Ruin | Id<AnyStoreStructure> | Id<Resource> | Id<Tombstone> | Id<Ruin>): ScreepsReturnCode;
 		advGive(target: Creep | AnyStoreStructure | Id<AnyStoreStructure>, pathing?: MoveToOpts, resource?: ResourceConstant, canTravel?: boolean): ScreepsReturnCode;
 		advHarvest(): void;
-		advMoveTo(target: RoomObject | { pos: RoomPosition } | RoomPosition, pathFinder?: boolean, opts?: MoveToOpts): ScreepsReturnCode;
+		advMoveTo(target: RoomObject | { pos: RoomPosition } | RoomPosition, opts?: MoveToOpts, pathFinder?: boolean): ScreepsReturnCode;
 		reassignSource(locality: Locality, sourceTwo: boolean): boolean;
 		assignHarvestSource(locality: Locality, simpleAssignment: boolean, returnID: boolean): Source | Id<Source>;
 		harvestEnergy(): void;

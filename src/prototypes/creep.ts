@@ -199,7 +199,7 @@ Creep.prototype.advHarvest = function () {
  * @param opts MoveToOpts array that can be passed to PathFinder or other default movement functions
  * @returns Returns standard ScreepsReturnCode
  */
-Creep.prototype.advMoveTo = function (target: RoomObject | { pos: RoomPosition } | RoomPosition, pathFinder = false, opts: MoveToOpts = {}): ScreepsReturnCode {
+Creep.prototype.advMoveTo = function (target: RoomObject | { pos: RoomPosition } | RoomPosition, opts: MoveToOpts = {}, pathFinder = false): ScreepsReturnCode {
 	const targetPos = target instanceof RoomPosition ? target : target.pos;
 
 	// local navigation

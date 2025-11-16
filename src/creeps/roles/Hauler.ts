@@ -51,16 +51,16 @@ const Hauler = {
 								const closestPile = pos.findClosestByRange(piles);
 								if (closestPile) creep.pickup(closestPile);
 							} else creep.withdraw(pickupTarget, cMem.cargo);
-						} else creep.advMoveTo(pickupPos, false, pathing.haulerPathing);
+						} else creep.advMoveTo(pickupPos, pathing.haulerPathing, false);
 					}
 				} else {
 					if (dropoffPos) {
 						if (dropoffTarget && pos.isNearTo(dropoffTarget)) {
 							if (dropoffTarget.store.getFreeCapacity(RESOURCE_ENERGY) > 0) {
 								const result = creep.transfer(dropoffTarget, RESOURCE_ENERGY);
-								if (result === OK) creep.advMoveTo(pickupPos, false, pathing.haulerPathing);
+								if (result === OK) creep.advMoveTo(pickupPos, pathing.haulerPathing, false);
 							}
-						}	else creep.advMoveTo(dropoffPos, false, pathing.haulerPathing);
+						}	else creep.advMoveTo(dropoffPos, pathing.haulerPathing, false);
 					}
 				}
 			} else navRallyPoint(creep);

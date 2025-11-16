@@ -26,17 +26,17 @@ const Reserver = {
 					const targetPos = new RoomPosition(targetRoom.controller?.pos.x, targetRoom.controller?.pos.y, cMem.targetRoom);
 
 					if (!pos.isNearTo(targetRoom?.controller))
-						creep.advMoveTo(targetPos, false, pathing.reserverPathing);
+						creep.advMoveTo(targetPos, pathing.reserverPathing, false);
 					else {
 						const result = creep.reserveController(targetRoom?.controller);
 						if (result === ERR_NOT_IN_RANGE)
-							creep.advMoveTo(targetPos, true, pathing.reserverPathing);
+							creep.advMoveTo(targetPos, pathing.reserverPathing, true);
 						else if (result === OK)
 							return;
 					}
 				} else {
 					const interimTargetPos = new RoomPosition(25, 25, cMem.targetRoom);
-					creep.advMoveTo(interimTargetPos, false, pathing.reserverPathing);
+					creep.advMoveTo(interimTargetPos, pathing.reserverPathing, false);
 				}
 			}
 		}

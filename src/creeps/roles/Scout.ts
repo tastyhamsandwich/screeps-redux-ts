@@ -24,7 +24,7 @@ const Scout = {
 			else {
 				if (cMem.targetRoom) {
 					const targetPos = new RoomPosition(25, 25, cMem.targetRoom);
-					creep.advMoveTo(targetPos, false, pathing.builderPathing);
+					creep.advMoveTo(targetPos, pathing.builderPathing, false);
 				} else {
 					if (Scout.tickCount % 5) creep.say('🥱');
 					else creep.say('💤');

@@ -149,14 +149,14 @@ const Harvester = {
 				let source: Source;
 				if (creep.getActiveBodyparts(CARRY) === 0) {
 					source = Game.getObjectById(cMem.source) as unknown as Source;
-					if (!pos.isNearTo(source)) creep.advMoveTo(source, true, pathing.harvesterPathing);
+					if (!pos.isNearTo(source)) creep.advMoveTo(source, pathing.harvesterPathing, true);
 					else {
 						const containers: StructureContainer[] = source.pos.findInRange(FIND_STRUCTURES, 2, { filter: { structureType: STRUCTURE_CONTAINER } });
 						if (containers.length) {
 							const bucket = pos.findClosestByRange(containers);
 							if (bucket) {
 								cMem.bucket ??= bucket.id;
-								if (!pos.isEqualTo(bucket))	creep.advMoveTo(bucket, true, pathing.harvesterPathing);
+								if (!pos.isEqualTo(bucket))	creep.advMoveTo(bucket, pathing.harvesterPathing, true);
 								else creep.harvestEnergy();
 							}
 						} else creep.harvestEnergy();
@@ -167,7 +167,7 @@ const Harvester = {
 							const spawns = creep.room.find(FIND_MY_SPAWNS);
 							if (spawns.length > 0) {
 								if (creep.transfer(spawns[0], RESOURCE_ENERGY) === ERR_NOT_IN_RANGE)
-									creep.advMoveTo(spawns[0], true, pathing.harvesterPathing);
+									creep.advMoveTo(spawns[0], pathing.harvesterPathing, true);
 							}
 						} else {
 							if (cMem.bucket) creep.unloadEnergy(cMem.bucket);
@@ -178,7 +178,7 @@ const Harvester = {
 									const target: StructureContainer = pos.findClosestByRange(containers)!;
 									if (target) {
 										cMem.bucket = target.id;
-										if (!pos.isEqualTo(target)) creep.advMoveTo(target, true, pathing.harvesterPathing);
+										if (!pos.isEqualTo(target)) creep.advMoveTo(target, pathing.harvesterPathing, true);
 										else if (target.hits < target.hitsMax) creep.repair(target);
 										else {
 											creep.unloadEnergy();
@@ -208,7 +208,7 @@ const Harvester = {
 						if (!source) {
 							creep.say('No src!');
 						} else if (!pos.isNearTo(source)) {
-							creep.advMoveTo(source, true, pathing.harvesterPathing);
+							creep.advMoveTo(source, pathing.harvesterPathing, true);
 						} else {
 							creep.harvestEnergy();
 						}

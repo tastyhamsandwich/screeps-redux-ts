@@ -22,10 +22,10 @@ export function navRallyPoint(creep: Creep): void {
 	if (cMem.rally instanceof Array) {
 		if (cMem.rally.length == 1 && pos.isNearTo(Game.flags[cMem.rally[0]])) cMem.rally = 'none';
 		else if (!pos.isNearTo(Game.flags[cMem.rally[0]]))
-			creep.advMoveTo(Game.flags[cMem.rally[0]].pos, true, pathing.rallyPointPathing);
+			creep.advMoveTo(Game.flags[cMem.rally[0]].pos, pathing.rallyPointPathing, true);
 		else {
 			if (cMem.rally.length > 1)
-				creep.advMoveTo(Game.flags[cMem.rally[1]].pos, true, pathing.rallyPointPathing);
+				creep.advMoveTo(Game.flags[cMem.rally[1]].pos, pathing.rallyPointPathing, true);
 			log('Creep \'' + creep.name + '\' reached rally point \'' + cMem.rally[0] + '\'', creep.room);
 			const nextWaypoint = cMem.rally.shift();
 			if (nextWaypoint === 'undefined') {
@@ -39,7 +39,7 @@ export function navRallyPoint(creep: Creep): void {
 			log('Creep \'' + creep.name + '\' reached rally point \'' + cMem.rally + '\'', creep.room);
 			cMem.rally = 'none';
 		}
-		else creep.advMoveTo(rally.pos, true, pathing.rallyPointPathing);
+		else creep.advMoveTo(rally.pos, pathing.rallyPointPathing, true);
 	}
 }
 
