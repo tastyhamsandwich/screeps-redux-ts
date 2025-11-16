@@ -22,6 +22,7 @@
  */
 
 import { creepRoleCounts } from "@main";
+import { PLAYER_USERNAME } from '@functions/utils/constants';
 import * as FUNC from '@functions/index';
 
 // Helper function to generate name suffix with current counter
@@ -410,6 +411,75 @@ export const legacySpawnManager = {
 							case 'reserver':
 								trySpawnCreep(spawn, 'reserver', { role: 'reserver', RFQ: 'reserver', home: room.name, room: room.name, working: false, disable: false, rally: 'none' }, room, colName);
 								return;
+						}
+					}
+					// If round-robin didn't select a role, attempt remote/reserver spawning using cached remoteRooms
+					if (!nextRole) {
+						try {
+							const remoteRooms = room.memory.remoteRooms || {};
+							const sourceEntries: { roomName: string, sourceId: string }[] = [];
+
+							for (const rName of Object.keys(remoteRooms)) {
+								const info = remoteRooms[rName];
+								if (!info || !info.sources) continue;
+
+								// Skip rooms owned by other players
+								if (info.controllerOwner && info.controllerOwner !== PLAYER_USERNAME) continue;
+
+								for (const sid of info.sources) {
+									sourceEntries.push({ roomName: rName, sourceId: sid });
+								}
+							}
+
+							// Determine sources already assigned to existing remote harvesters
+							const assignedSourceIds = _.compact(_.map(remoteharvesters, c => c.memory && c.memory.source)) as string[];
+							const unassignedSources = sourceEntries.filter(se => !assignedSourceIds.includes(se.sourceId));
+
+							if (unassignedSources.length > 0) {
+								const target = unassignedSources[0];
+								trySpawnCreep(spawn, 'remoteharvester', {
+									role: 'remoteharvester',
+									RFQ: 'remoteharvester',
+									home: room.name,
+									room: room.name,
+									targetRoom: target.roomName,
+									source: target.sourceId,
+									working: false,
+									disable: false,
+									rally: 'none'
+								}, room, colName);
+								return;
+							}
+
+							// Next: look for rooms that need a reserver
+							const roomsNeedingReserve: string[] = [];
+							for (const rName of Object.keys(remoteRooms)) {
+								const info = remoteRooms[rName];
+								if (!info || !info.controllerId) continue;
+
+								const reservation = info.reservation;
+								const reservedByUs = reservation && reservation.username === PLAYER_USERNAME;
+								if (!reservedByUs || (reservation && reservation.ticksToEnd < 500)) {
+									roomsNeedingReserve.push(rName);
+								}
+							}
+
+							if (roomsNeedingReserve.length > 0) {
+								const targetRoom = roomsNeedingReserve[0];
+								trySpawnCreep(spawn, 'reserver', {
+									role: 'reserver',
+									RFQ: 'reserver',
+									home: room.name,
+									room: room.name,
+									targetRoom,
+									working: false,
+									disable: false,
+									rally: 'none'
+								}, room, colName);
+								return;
+							}
+						} catch (err) {
+							console.log(`${room.link()} Legacy Remote spawn error: ${err}`);
 						}
 					}
 				}

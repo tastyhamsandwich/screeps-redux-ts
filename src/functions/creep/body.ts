@@ -314,8 +314,10 @@ export function determineBodyParts(role: string, maxEnergy: number, room: Room, 
 				return [CLAIM, MOVE];
 			else
 				return [];
-			default:
-				throw new Error("Invalid parameters passed.");
+		case 'scout':
+			return [MOVE, MOVE, MOVE];
+		default:
+			throw new Error("Invalid parameters passed.");
 	}
 
 }
