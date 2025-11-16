@@ -53,10 +53,10 @@ export function subordinateNavRally(creep: Creep, waypointArray: string[]): void
 		while (navigating) {
 			if (waypointArray.length == 1 && pos.inRangeTo(Game.flags[waypointArray[0]], 0)) navigating = false;
 			else if (!pos.isNearTo(Game.flags[waypointArray[0]]))
-				creep.moveTo(Game.flags[waypointArray[0]], pathing.subordinatePathing);
+				creep.advMoveTo(Game.flags[waypointArray[0]], pathing.subordinatePathing);
 			else {
 				if (waypointArray.length > 1)
-					creep.moveTo(Game.flags[waypointArray[1]], pathing.rallyPointPathing);
+					creep.advMoveTo(Game.flags[waypointArray[1]], pathing.rallyPointPathing);
 				log('Creep \'' + creep.name + '\' reached rally point \'' + waypointArray[0] + '\'', creep.room);
 				const nextWaypoint = waypointArray.shift();
 				if (nextWaypoint === 'undefined') {
@@ -71,7 +71,7 @@ export function subordinateNavRally(creep: Creep, waypointArray: string[]): void
 			log('Creep \'' + creep.name + '\' reached rally point \'' + waypointArray + '\'', creep.room);
 			return;
 		}
-		else creep.moveTo(rally, pathing.subordinatePathing);
+		else creep.advMoveTo(rally, pathing.subordinatePathing);
 	}
 }
 
@@ -117,7 +117,7 @@ export function upgraderBehavior(creep: Creep): void {
 			if (nearestContainer) {
 				const result = creep.withdraw(nearestContainer, RESOURCE_ENERGY);
 				if (result === ERR_NOT_IN_RANGE)
-					creep.moveTo(nearestContainer, pathing.builderPathing);
+					creep.advMoveTo(nearestContainer, pathing.builderPathing);
 			}
 		}
 	}
@@ -128,7 +128,7 @@ export function upgraderBehavior(creep: Creep): void {
 			if (controllerObject) {
 				const result = creep.upgradeController(controllerObject)
 				if (result === ERR_NOT_IN_RANGE) {
-					creep.moveTo(controllerObject, { visualizePathStyle: { stroke: 'green', lineStyle: 'dashed', opacity: 0.3 } });
+					creep.advMoveTo(controllerObject, { visualizePathStyle: { stroke: 'green', lineStyle: 'dashed', opacity: 0.3 } });
 					return;
 				}	else if (result === OK)	{
 					creep.say('🔋');
@@ -144,7 +144,7 @@ export function upgraderBehavior(creep: Creep): void {
 			if (bucketObject && bucketObject.store.getUsedCapacity(RESOURCE_ENERGY) >= creep.store.getCapacity()) {
 				const result = creep.withdraw(bucketObject, RESOURCE_ENERGY);
 				if (result === ERR_NOT_IN_RANGE) {
-					creep.moveTo(bucketObject, { visualizePathStyle: { stroke: 'yellow', lineStyle: 'dashed', opacity: 0.3 } });
+					creep.advMoveTo(bucketObject, { visualizePathStyle: { stroke: 'yellow', lineStyle: 'dashed', opacity: 0.3 } });
 					return;
 				} else if (result === OK) {
 					creep.memory.working = true;
@@ -159,7 +159,7 @@ export function upgraderBehavior(creep: Creep): void {
 					if (closestPile) {
 						const result = creep.pickup(closestPile);
 						if (result === ERR_NOT_IN_RANGE) {
-							creep.moveTo(closestPile, pathing.upgraderPathing);
+							creep.advMoveTo(closestPile, pathing.upgraderPathing);
 							return;
 						} else if (result === OK) {
 							creep.memory.working = true;
@@ -171,7 +171,7 @@ export function upgraderBehavior(creep: Creep): void {
 				const source = creep.room.controller?.pos.findClosestByRange(FIND_SOURCES_ACTIVE);
 				if (source) {
 					if (creep.harvest(source) === ERR_NOT_IN_RANGE)
-						creep.moveTo(source, { visualizePathStyle: { stroke: 'yellow', lineStyle: 'dashed', opacity: 0.3 } });
+						creep.advMoveTo(source, { visualizePathStyle: { stroke: 'yellow', lineStyle: 'dashed', opacity: 0.3 } });
 				}
 			}
 		}

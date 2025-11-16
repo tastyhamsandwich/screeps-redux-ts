@@ -38,14 +38,14 @@ const Harvester = {
 
 				if (creep.getActiveBodyparts(CARRY) === 0) {
 						const source: Source = Game.getObjectById(sourceID)!;
-					if (!pos.isNearTo(source)) creep.moveTo(source, pathing.harvesterPathing);
+					if (!pos.isNearTo(source)) creep.advMoveTo(source, pathing.harvesterPathing);
 					else {
 						const containers: StructureContainer[] = source.pos.findInRange(FIND_STRUCTURES, 2, { filter: { structureType: STRUCTURE_CONTAINER } });
 						if (containers.length) {
 							const bucket = pos.findClosestByRange(containers);
 							if (bucket) {
 								if (cMem.bucket === undefined) cMem.bucket = bucket.id;
-								if (!pos.isEqualTo(bucket))	creep.moveTo(bucket, pathing.harvesterPathing);
+								if (!pos.isEqualTo(bucket))	creep.advMoveTo(bucket, pathing.harvesterPathing);
 								else creep.harvestEnergy();
 							}
 						} else creep.harvestEnergy();
@@ -56,7 +56,7 @@ const Harvester = {
 							const spawns = creep.room.find(FIND_MY_SPAWNS);
 							if (spawns.length > 0) {
 								if (creep.transfer(spawns[0], RESOURCE_ENERGY) === ERR_NOT_IN_RANGE) {
-									creep.moveTo(spawns[0], pathing.harvesterPathing);
+									creep.advMoveTo(spawns[0], pathing.harvesterPathing);
 									return;
 								}
 							}
@@ -81,7 +81,7 @@ const Harvester = {
 								});
 								if (spawn) {
 									if (creep.transfer(spawn, RESOURCE_ENERGY) === ERR_NOT_IN_RANGE) {
-										creep.moveTo(spawn, pathing.harvesterPathing);
+										creep.advMoveTo(spawn, pathing.harvesterPathing);
 									}
 								} else buildContainer(creep);
 								return;
@@ -96,7 +96,7 @@ const Harvester = {
 									const target: StructureContainer = pos.findClosestByRange(containers)!;
 									if (target) {
 										cMem.bucket = target.id;
-										if (!pos.isEqualTo(target)) creep.moveTo(target, pathing.harvesterPathing);
+										if (!pos.isEqualTo(target)) creep.advMoveTo(target, pathing.harvesterPathing);
 										else if (target.hits < target.hitsMax) creep.repair(target);
 										else {
 											creep.unloadEnergy();
@@ -110,7 +110,7 @@ const Harvester = {
 						// Move to source before harvesting
 						const source = Game.getObjectById(cMem.source) as Source;
 						if (!source) creep.say('No src!');
-						else if (!pos.isNearTo(source)) creep.moveTo(source, pathing.harvesterPathing);
+						else if (!pos.isNearTo(source)) creep.advMoveTo(source, pathing.harvesterPathing);
 						else creep.harvestEnergy();
 					}
 				}
@@ -228,7 +228,7 @@ function buildContainer(creep: Creep): void {
 	if (source) {
 		// Move next to source if not already there
 		if (!pos.isNearTo(source)) {
-			creep.moveTo(source, pathing.harvesterPathing);
+			creep.advMoveTo(source, pathing.harvesterPathing);
 			return;
 		}
 
@@ -249,7 +249,7 @@ function buildContainer(creep: Creep): void {
 			// Build the container site
 			const site = nearbySites[0];
 			if (creep.build(site) === ERR_NOT_IN_RANGE) {
-				creep.moveTo(site, pathing.harvesterPathing);
+				creep.advMoveTo(site, pathing.harvesterPathing);
 			}
 		}
 	}

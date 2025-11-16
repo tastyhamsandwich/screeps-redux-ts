@@ -39,7 +39,7 @@ const Repairer = {
 					if (energySource) {
 						const result = creep.withdraw(energySource, RESOURCE_ENERGY);
 						if (result === ERR_NOT_IN_RANGE) {
-							creep.moveTo(energySource, pathing.repairerPathing);
+							creep.advMoveTo(energySource, pathing.repairerPathing);
 						} else if (result === OK) {
 							// Successfully withdrew - check if we should transition to working
 							if (creep.store.getFreeCapacity(RESOURCE_ENERGY) === 0) {
@@ -55,7 +55,7 @@ const Repairer = {
 						emptyTowers.sort((a, b) => b.store.getFreeCapacity(RESOURCE_ENERGY) - a.store.getFreeCapacity(RESOURCE_ENERGY)); // Sort by emptiest to fullest
 						const result = creep.transfer(emptyTowers[0], RESOURCE_ENERGY);
 						if (result === ERR_NOT_IN_RANGE) {
-							creep.moveTo(emptyTowers[0], pathing.repairerPathing); // Move to & fill up
+							creep.advMoveTo(emptyTowers[0], pathing.repairerPathing); // Move to & fill up
 							creep.say('🏃‍♂️');
 						} else if (result === OK) {
 							creep.say('⚡')
@@ -73,7 +73,7 @@ const Repairer = {
 								const result = creep.repair(nearestSite);
 								switch (result) {
 									case ERR_NOT_IN_RANGE:
-										creep.moveTo(nearestSite, pathing.repairerPathing);
+										creep.advMoveTo(nearestSite, pathing.repairerPathing);
 										break;
 									case ERR_NOT_ENOUGH_ENERGY:
 										cMem.working = false;
@@ -85,7 +85,7 @@ const Repairer = {
 										creep.log(`Repair result - ${result}`);
 										break;
 								}
-								if (result === ERR_NOT_IN_RANGE) creep.moveTo(nearestSite, pathing.repairerPathing);
+								if (result === ERR_NOT_IN_RANGE) creep.advMoveTo(nearestSite, pathing.repairerPathing);
 								else if (result === OK) repairProgress(nearestSite, room);
 								else if (result === ERR_NOT_ENOUGH_ENERGY) cMem.working = false;
 								else console.log(`${creep.name}: Repair result - ${result}`);

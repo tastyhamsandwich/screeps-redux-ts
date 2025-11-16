@@ -33,7 +33,7 @@ const Filler = {
 				if (target) {
 					const result = withdrawFromTarget(creep, target);
 					if (result === ERR_NOT_IN_RANGE)
-						creep.moveTo(target, pathing.haulerPathing);
+						creep.advMoveTo(target, pathing.haulerPathing);
 				}
 			}
 
@@ -49,7 +49,7 @@ const Filler = {
 
 					if (nearestTarget) {
 						if (creep.transfer(nearestTarget, RESOURCE_ENERGY) === ERR_NOT_IN_RANGE)
-							creep.moveTo(nearestTarget, pathing.haulerPathing);
+							creep.advMoveTo(nearestTarget, pathing.haulerPathing);
 					}
 				}
 			}

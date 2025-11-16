@@ -50,7 +50,7 @@ const Upgrader = {
 							: creep.withdraw(energySource, RESOURCE_ENERGY);
 
 						if (result === ERR_NOT_IN_RANGE) {
-							creep.moveTo(energySource, pathing.upgraderPathing);
+							creep.advMoveTo(energySource, pathing.upgraderPathing);
 						} else if (result === OK) {
 							// Successfully collected - check if we should transition to working
 							if (creep.store.getFreeCapacity(RESOURCE_ENERGY) === 0) {
@@ -67,7 +67,7 @@ const Upgrader = {
 						if (controllerObject) {
 							const result = creep.upgradeController(controllerObject);
 							if (result === ERR_NOT_IN_RANGE)
-								creep.moveTo(controllerObject, pathing.upgraderPathing);
+								creep.advMoveTo(controllerObject, pathing.upgraderPathing);
 							else if (result === OK)
 								rMem.stats.controlPoints += (creep.getActiveBodyparts(WORK));
 						 	else if (result === ERR_NOT_ENOUGH_ENERGY)

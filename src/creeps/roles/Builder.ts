@@ -38,7 +38,7 @@ const Builder = {
 					if (energySource) {
 						const result = creep.withdraw(energySource, RESOURCE_ENERGY);
 						if (result === ERR_NOT_IN_RANGE)
-							creep.moveTo(energySource, pathing.builderPathing);
+							creep.advMoveTo(energySource, pathing.builderPathing);
 						else if (result === OK) {
 							// Successfully withdrew - check if we should transition to working
 							if (creep.store.getFreeCapacity(RESOURCE_ENERGY) === 0) {
@@ -56,7 +56,7 @@ const Builder = {
 						if (nearestCSite) {
 							const result = creep.build(nearestCSite);
 							if (result === ERR_NOT_IN_RANGE) {
-								creep.moveTo(nearestCSite, pathing.builderPathing);
+								creep.advMoveTo(nearestCSite, pathing.builderPathing);
 							} else if (result === ERR_NOT_ENOUGH_ENERGY) {
 								// Out of energy while building - transition back to harvest
 								cMem.working = false;

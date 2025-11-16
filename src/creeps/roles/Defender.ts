@@ -31,14 +31,14 @@ const Defender = {
 				else if (pos.y == 0) 	creep.move(BOTTOM);
 
 				if (room.name !== guardPost) {
-					creep.moveTo(Game.flags[guardPost], pathing.remoteGuard);
+					creep.advMoveTo(Game.flags[guardPost], pathing.remoteGuard);
 				} else {
 					if (cMem.target) {
 						const targetId: Id<Creep> = cMem.target;
 						const target: Creep | null = Game.getObjectById(targetId);
 						if (target) {
 							if (creep.attack(target) === ERR_NOT_IN_RANGE)
-								creep.moveTo(target, pathing.remoteGuard);
+								creep.advMoveTo(target, pathing.remoteGuard);
 						} else {
 							delete cMem.target;
 							const hostiles = room.find(FIND_HOSTILE_CREEPS);
@@ -47,7 +47,7 @@ const Defender = {
 								if (target) {
 									cMem.target = target.id;
 									if (creep.attack(target) === ERR_NOT_IN_RANGE)
-										creep.moveTo(target, pathing.remoteGuard);
+										creep.advMoveTo(target, pathing.remoteGuard);
 								}
 							}
 						}
@@ -58,11 +58,11 @@ const Defender = {
 							if (target) {
 								cMem.target = target.id;
 								if (creep.attack(target) === ERR_NOT_IN_RANGE)
-									creep.moveTo(target, pathing.remoteGuard);
+									creep.advMoveTo(target, pathing.remoteGuard);
 							}
 						} else {
 							if (!pos.isNearTo(Game.flags[guardPost]))
-								creep.moveTo(Game.flags[guardPost], pathing.remoteGuard);
+								creep.advMoveTo(Game.flags[guardPost], pathing.remoteGuard);
 						}
 					}
 				}
