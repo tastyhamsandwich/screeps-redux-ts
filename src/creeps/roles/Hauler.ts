@@ -43,7 +43,7 @@ const Hauler = {
 				const pickupPos = pickupTarget?.pos || (cMem.pickupPos? new RoomPosition(cMem.pickupPos.x, cMem.pickupPos.y, cMem.pickupPos.roomName): null);
 				const dropoffPos = dropoffTarget?.pos || (cMem.dropoffPos? new RoomPosition(cMem.dropoffPos.x, cMem.dropoffPos.y, cMem.dropoffPos.roomName): null);
 
-				if (creep.store[RESOURCE_ENERGY] == 0 || creep.store[cMem.cargo] == 0) {
+				if (creep.store.getFreeCapacity(RESOURCE_ENERGY) > 0 || creep.store[cMem.cargo] == 0) {
 					if (pickupPos) {
 						if (pickupTarget && pos.isNearTo(pickupTarget)) {
 							const piles = pos.findInRange(FIND_DROPPED_RESOURCES, 1);

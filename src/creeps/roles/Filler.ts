@@ -10,8 +10,9 @@ import { pathing } from '@constants';
  * 1. Tombstones (all resources if storage exists, energy only otherwise)
  * 2. Dropped energy resources
  * 3. Ruins (all resources if storage exists, energy only otherwise)
- * 4. Storage
+ * 4. Storage / Prestorage
  * 5. Containers
+ * 6. Towers
  */
 const Filler = {
 	run: function (creep: Creep) {
@@ -23,34 +24,32 @@ const Filler = {
 		cMem.rally ??= 'none';
 
 		if (cMem.disable) aiAlert(creep);
+		else if (cMem.rally !== 'none') navRallyPoint(creep);
 		else {
-			if (cMem.rally !== 'none') navRallyPoint(creep);
-			else {
-				// Withdraw phase - when empty, find resources
-				if (creep.store.getUsedCapacity() === 0) {
-					const target = findEnergySource(creep);
+			// Withdraw phase - when empty, find resources
+			if (creep.store.getUsedCapacity() === 0) {
+				const target = findEnergySource(creep);
 
-					if (target) {
-						const result = withdrawFromTarget(creep, target);
-						if (result === ERR_NOT_IN_RANGE)
-							creep.moveTo(target, pathing.haulerPathing);
-					}
+				if (target) {
+					const result = withdrawFromTarget(creep, target);
+					if (result === ERR_NOT_IN_RANGE)
+						creep.moveTo(target, pathing.haulerPathing);
 				}
+			}
 
-				// Transfer phase - when carrying resources, deliver to spawns/extensions
-				if (creep.store.getUsedCapacity() > 0) {
-					const targets = creep.room.find(FIND_MY_STRUCTURES, {
-						filter: (i) => (i.structureType === STRUCTURE_SPAWN || i.structureType === STRUCTURE_EXTENSION)
-							&& i.store.getFreeCapacity(RESOURCE_ENERGY) > 0
-					});
+			// Transfer phase - when carrying resources, deliver to spawns/extensions
+			if (creep.store.getUsedCapacity() > 0) {
+				const targets = creep.room.find(FIND_MY_STRUCTURES, {
+					filter: (i) => (i.structureType === STRUCTURE_SPAWN || i.structureType === STRUCTURE_EXTENSION)
+						&& i.store.getFreeCapacity(RESOURCE_ENERGY) > 0
+				});
 
-					if (targets.length) {
-						const nearestTarget = pos.findClosestByRange(targets);
+				if (targets.length) {
+					const nearestTarget = pos.findClosestByRange(targets);
 
-						if (nearestTarget) {
-							if (creep.transfer(nearestTarget, RESOURCE_ENERGY) === ERR_NOT_IN_RANGE)
-								creep.moveTo(nearestTarget, pathing.haulerPathing);
-						}
+					if (nearestTarget) {
+						if (creep.transfer(nearestTarget, RESOURCE_ENERGY) === ERR_NOT_IN_RANGE)
+							creep.moveTo(nearestTarget, pathing.haulerPathing);
 					}
 				}
 			}
@@ -58,9 +57,9 @@ const Filler = {
 	}
 }
 
-/**
- * Finds the best energy source for the filler creep.
- * Priority: Tombstones > Dropped Energy > Ruins > Storage > Containers
+/** Finds the best energy source for the filler creep.
+ *
+ * Priority: Tombstones > Dropped Energy > Ruins > Storage > Prestorage > Containers > Towers
  */
 function findEnergySource(creep: Creep): Tombstone | Resource | Ruin | AnyStoreStructure | null {
 	const room = creep.room;
@@ -147,9 +146,7 @@ function findEnergySource(creep: Creep): Tombstone | Resource | Ruin | AnyStoreS
 	return null;
 }
 
-/**
- * Withdraws resources from the target, handling different target types appropriately.
- */
+/** Withdraws resources from the target, handling different target types appropriately. */
 function withdrawFromTarget(creep: Creep, target: Tombstone | Resource | Ruin | AnyStoreStructure): ScreepsReturnCode {
 	// Handle dropped resources (pickup instead of withdraw)
 	if (target instanceof Resource) {

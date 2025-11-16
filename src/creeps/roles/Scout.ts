@@ -22,9 +22,14 @@ const Scout = {
 		else {
 			if (cMem.rally !== 'none') navRallyPoint(creep);
 			else {
-				if (Scout.tickCount % 5) creep.say('🥱');
-				else creep.say('💤');
-				Scout.tickCount++;
+				if (cMem.targetRoom) {
+					const targetPos = new RoomPosition(25, 25, cMem.targetRoom);
+					creep.advMoveTo(targetPos, false, pathing.builderPathing);
+				} else {
+					if (Scout.tickCount % 5) creep.say('🥱');
+					else creep.say('💤');
+					Scout.tickCount++;
+				}
 			}
 		}
 	}
