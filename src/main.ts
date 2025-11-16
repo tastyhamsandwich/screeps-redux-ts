@@ -184,6 +184,10 @@ module.exports.loop = function() {
 			}
 
 			if (room.controller.level >= 1) FUNC.visualRCProgress(room.controller);
+			if (room.memory?.visuals?.settings?.displayTowerRanges) FUNC.towerDamageOverlay(room);
+			FUNC.displayEnergyCapacity(room);
+			FUNC.displayEnergyStorage(room);
+
 		} //* end of if (room.controller && room.controller.my) {}
 	}) //* end of _.forEach(Game.rooms, room => {}) loop
 

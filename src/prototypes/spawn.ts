@@ -14,13 +14,7 @@ const PART = {
 
 // PROTODEF: Spawn Structure Prototype Extension
 declare global {
-	interface StructureSpawn {
-		spawnList: CreepRole[];
-		determineBodyParts(role: string, maxEnergy?: number, extras?: { [key: string]: any }): BodyPartConstant[];
-		spawnScout(rally: string | string[], swampScout: boolean): ScreepsReturnCode;
-		retryPending(): ScreepsReturnCode;
-		cloneCreep(creepName: string): ScreepsReturnCode;
-	}
+
 }
 
 StructureSpawn.prototype.spawnList = [];
@@ -80,6 +74,22 @@ StructureSpawn.prototype.determineBodyParts = function (role: string, maxEnergy?
 				}
 				return totalBodyParts;
 			}
+		case 'remoteharvester':
+			if (maxEnergy >= 650)
+				totalBodyParts.push(WORK, WORK, WORK, WORK, WORK, CARRY, MOVE, MOVE);
+			else {
+				let remainingCost = maxEnergy;
+
+				totalBodyParts.push(MOVE);
+				totalBodyParts.push(CARRY);
+				remainingCost -= 100;
+
+				while (remainingCost >= 100) {
+					totalBodyParts.push(WORK);
+					remainingCost -= 100;
+				}
+			}
+			return totalBodyParts;
 		case 'upgrader':
 		case 'builder':
 		case 'repairer':
@@ -273,6 +283,8 @@ StructureSpawn.prototype.determineBodyParts = function (role: string, maxEnergy?
 			if (maxEnergy >= 1300) return [CLAIM, CLAIM, MOVE, MOVE];
 			else if (maxEnergy >= 650) return [CLAIM, MOVE];
 			else return [];
+		case 'scout':
+			return [MOVE,MOVE,MOVE];
 		default:
 			throw new Error("Invalid parameters passed.");
 	}
@@ -286,25 +298,27 @@ StructureSpawn.prototype.determineBodyParts = function (role: string, maxEnergy?
  * @returns Screeps Return Code from the result of the spawnCreep() function
  * @example const result = Game.spawns.Spawn1.spawnCreep(['Flag1','Flag2','Flag3'], true);
  */
-StructureSpawn.prototype.spawnScout = function(rally: string | string[] = 'none', swampScout: boolean = false): ScreepsReturnCode {
+StructureSpawn.prototype.spawnScout = function (rally: string | string[] = 'none', swampScout: boolean = false, memory = { }): ScreepsReturnCode {
 
+	const baseMem = { role: 'scout', RFQ: 'scout', disable: false, rally, home: this.room.name, room: this.room.name};
+	const finalMemory = { ...baseMem, ...memory};
 	let countMod = 1;
 	let name = `Col${1}_Sct${countMod}`;
 	const body = [MOVE];
 	if (swampScout) for (let i = 0; i < 4; i++) body.push(MOVE);
 
-	let result = this.spawnCreep(body, name, { memory: { role: 'scout', RFQ: 'scout', disable: false, rally: rally, home: this.room.name, room: this.room.name}});
+	let result = this.spawnCreep(body, name, { memory: finalMemory});
 
 	while (result === ERR_NAME_EXISTS) {
 		countMod++;
 		name = `Col${1}_Sct${countMod}`;
-		result = this.spawnCreep(body, name, { memory: { role: 'scout', RFQ: 'scout', disable: false, rally: rally, home: this.room.name, room: this.room.name } });
+		result = this.spawnCreep(body, name, { memory: finalMemory });
 	}
 
 	if (result === OK)
-		console.log(`${this.name}: Spawning Scout in room ${this.room.name}`);
+		console.log(`${this.room.link()}${this.name}> Spawning Scout in room ${this.room.name}`);
 	else
-		console.log(`${this.name}: Failed to spawn Scout in room ${this.room.name}: ${result}`);
+		console.log(`${this.room.link()}${this.name}> Failed to spawn Scout in room ${this.room.name}: ${result}`);
 
 	return result;
 }
@@ -386,3 +400,56 @@ StructureSpawn.prototype.cloneCreep = function(creepName: string): ScreepsReturn
 
 	return result;
 }
+
+Spawn.prototype.spawnFiller = function(maxEnergy: number): ScreepsReturnCode {
+
+		// Limit fillers to max cost of 300, effectively 4 CARRY and 2 MOVE parts
+		let maxCost = maxEnergy;
+		if(maxEnergy >= 300)
+		maxCost = 300;
+
+	const carryParts: BodyPartConstant[] = [];
+	const moveParts: BodyPartConstant[] = [];
+	// While there's still at least 50 energy available, iterate loop
+	// Check that we aren't at less than 50 after the first push to ensure we don't break budget
+	while (maxCost >= 50) {
+		carryParts.push(CARRY);
+		maxCost -= 50;
+		if (maxCost < 50) break;
+		moveParts.push(MOVE);
+		maxCost -= 50;
+		if (maxCost < 50) break;
+		carryParts.push(CARRY);
+		maxCost -= 50;
+	}
+
+	// Concatenate the two arrays into one
+	const bodyParts: BodyPartConstant[] = carryParts.concat(moveParts);
+
+	// Log cost & return
+	if (this.room.memory.data.debugSpawn)
+		console.log(`${this.room.link()}${this.name}> Cost for 'filler' with ${bodyParts} is ${calcBodyCost(bodyParts)}`);
+	let counter = 1;
+	let name = `Filler${counter}`
+	const result = this.spawnCreep(bodyParts, name, { memory: { role: 'filler', RFQ: 'filler', home: this.room.name, room: this.room.name, working: false, disable: false, rally: 'none' }})
+	switch (result) {
+		case OK:
+			this.room.memory.stats.creepsSpawned++;
+			this.room.memory.stats.creepPartsSpawned += bodyParts.length;
+			console.log(`${this.room.link()}${this.name}> Spawning emergency filler, ${name}`);
+			break;
+		case ERR_NAME_EXISTS:
+			const secondResult = this.spawnCreep(bodyParts, `Filler${Game.time}`, { memory: { role: 'filler', RFQ: 'filler', home: this.room.name, room: this.room.name, working: false, disable: false, rally: 'none' } });
+				if (secondResult === OK) {
+					this.room.memory.stats.creepsSpawned++;
+					this.room.memory.stats.creepPartsSpawned += bodyParts.length;
+					console.log(`${this.room.link()}${this.name}> Spawning emergency filler, ${name}`);
+					return secondResult;
+				}
+				break;
+		default:
+			console.log(`${this.room.link()}${this.name}> Error spawning emergency filler: ${result}`);
+			break;
+	}
+	return result;
+	}

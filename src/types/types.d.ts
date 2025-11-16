@@ -68,6 +68,7 @@ declare global {
 		data: { [key: string]: any };
 		stats: ColonyStats;
 		availableCreeps: string[];
+		remoteRooms: { [key: string]: any };
 		outposts: {
 			list: { [key: string]: OutpostData };
 			array: string[];
@@ -169,6 +170,14 @@ declare global {
 		stuckTicks?: number;
 	}
 
+	interface StructureSpawn {
+		spawnList: CreepRole[];
+		determineBodyParts(role: string, maxEnergy?: number, extras?: { [key: string]: any }): BodyPartConstant[];
+		spawnScout(rally: string | string[], swampScout: boolean, memory: { [key: string]: any }): ScreepsReturnCode;
+		retryPending(): ScreepsReturnCode;
+		cloneCreep(creepName: string): ScreepsReturnCode;
+		spawnFiller(maxEnergy: number): ScreepsReturnCode;
+	}
 	type RoomRoute = RoomPathStep[];
 
 	interface RoomPathStep {
@@ -241,11 +250,11 @@ declare global {
 		constructionPoints: number,
 		creepsSpawned: number,
 		creepPartsSpawned: number,
-		mineralsHarvested: MineralStats,
+		mineralsHarvested?: MineralStats,
 		controllerLevelReached: number,
 		npcInvadersKilled: number,
 		hostilePlayerCreepsKilled: number,
-		labStats: LabStats;
+		labStats?: LabStats;
 	}
 
 	interface MineralStats {

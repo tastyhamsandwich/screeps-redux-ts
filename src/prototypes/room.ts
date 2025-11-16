@@ -232,8 +232,12 @@ Room.prototype.cacheObjects = function () {
 		const sourcePositions = sources.length > 0 ? sources.map(s => ({ id: s.id, pos: s.pos })) : [];
 		const controllerPos = this.controller?.pos;
 		const mineralPos = minerals.length > 0 ? minerals[0].pos : undefined;
-		const spawnPos = this.find(FIND_MY_SPAWNS)[0].pos || undefined;
-
+		const spawns = this.find(FIND_MY_SPAWNS);
+		let spawnPos;
+		if (this.controller && this.controller.my) {
+			if (spawns.length)
+				spawnPos = spawns[0].pos || undefined;
+		}
 		// Assign containers based on proximity
 		for (const container of containers) {
 			const pos = container.pos;
@@ -261,9 +265,11 @@ Room.prototype.cacheObjects = function () {
 			if (!assigned && mineralPos && pos.inRangeTo(mineralPos, 2))
 				this.memory.containers.mineral = container.id;
 
-			// Check if near mineral (within range 2)
-			if (!assigned && spawnPos && pos.inRangeTo(spawnPos, 2))
-				this.memory.containers.prestorage = container.id;
+			// Check if near spawn (within range 2)
+			if (this.controller && this.controller.my) {
+				if (!assigned && spawnPos && pos.inRangeTo(spawnPos, 2))
+					this.memory.containers.prestorage = container.id;
+			}
 		}
 
 		// Build ordered container array (sourceOne, sourceTwo, controller, mineral)
@@ -387,7 +393,7 @@ Room.prototype.initRoom = function () {
 	const labStats: LabStats = { compoundsMade: compoundStats, creepsBoosted: 0, boostsUsed: compoundStats, energySpentBoosting: 0 };
 
 	this.memory.containers = { sourceOne: '', sourceTwo: '', controller: '', mineral: '', prestorage: '' };
-	this.memory.data = { controllerLevel: 0, numCSites: 0, haulerIndex: 0, spawnEnergyLimit: 0, lastBootstrapRoleIndex: 0, lastNormalRoleIndex: 0, dropHarvestingEnabled: false, sourceData: { source: [], container: [], nextAssigned: 0 } };
+	this.memory.data = { flags: { dropHarvestingEnabled: false }, indices: { lastBootstrapRoleIndex: 0, lastNormalRoleIndex: 0, haulerIndex: 0, nextHarvesterAssigned: 0 }, controllerLevel: 0, numCSites: 0, spawnEnergyLimit: 0 };
 	this.memory.settings = { visualSettings: visualSettings, repairSettings: repairSettings,	flags: {}, basePlanner: { debug: false } };
 	this.memory.outposts = { list: {}, array: [], reserverLastAssigned: 0, numSources: 0, numHarvesters: 0, counter: 0, guardCounter: 0 };
 	this.memory.stats = { energyHarvested: 0, controlPoints: 0, constructionPoints: 0, creepsSpawned: 0, creepPartsSpawned: 0,
