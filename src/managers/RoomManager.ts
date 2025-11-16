@@ -1,9 +1,9 @@
 import RoomDefense from './DefenseManager';
 import SpawnManager from './SpawnManager';
 import BasePlanner, { computePlanChecksum } from '../modules/BasePlanner';
-import { STRUCTURE_PRIORITY } from '../functions/utils/constants';
+import { STRUCTURE_PRIORITY, PLAYER_USERNAME } from '../functions/utils/constants';
 import { legacySpawnManager } from './room/utils';
-import { calcPathLength, log } from '../functions/utils/globals';
+import { calcPathLength, log, getReturnCode, calcPath } from '../functions/utils/globals';
 import { determineBodyParts } from '../functions/creep/body';
 import RoomPlanningVisualizer from '@modules/PlanVisualizer';
 
@@ -35,6 +35,7 @@ export default class RoomManager {
 		if (!this.room.memory.quotas) this.room.memory.quotas = {};
 		if (!this.room.memory.objects) this.room.memory.objects = {};
 		if (!this.room.memory.containers) this.room.memory.containers = {} as any;
+		if (!this.room.memory.remoteRooms) this.room.memory.remoteRooms = {};
 		if (!this.room.memory.settings)
 			this.room.memory.settings = {
 				basePlanning: { debug: false }
@@ -54,11 +55,11 @@ export default class RoomManager {
 			rmData.lastResourceScan = Game.time;
 		}
 
-		if (!rmData.firstTimeInit) {
-			rmData.advSpawnSystem = false;
+		if (!rmData.flags.firstTimeInit) {
+			rmData.flags.advSpawnSystem = false;
 			Memory.globalData.numColonies++;
 			this.room.initRoom();
-			rmData.firstTimeInit = true;
+			rmData.flags.firstTimeInit = true;
 			console.log(`${this.room.link()} First Time Room Initialization Complete!`);
 		}
 
@@ -106,8 +107,13 @@ export default class RoomManager {
 		// Process the plan if available
 		if (this.basePlan) this.handleBasePlan(this.basePlan);
 
+		if (this.room.controller!.level >= 4 && this.room.storage && this.room.energyCapacityAvailable >= 1200) {
+			this.scanAdjacentRooms();
+
+		}
+
 		// Assess creep needs and submit spawn requests if using advanced spawn manager
-		if (rmData.advSpawnSystem === false && rmData.pendingSpawn && this.room.energyAvailable === this.room.energyCapacityAvailable) {
+		if (rmData.flags.advSpawnSystem === false && rmData.pendingSpawn && this.room.energyAvailable === this.room.energyCapacityAvailable) {
 			const spawns = this.room.find(FIND_MY_SPAWNS, { filter: i => !i.spawning});
 			for (const spawn of spawns) {
 				const result = spawn.retryPending();
@@ -115,7 +121,7 @@ export default class RoomManager {
 			}
 		}
 
-		if (rmData.advSpawnSystem) {
+		if (rmData.flags.advSpawnSystem) {
 			this.spawnManager.run();
 			this.assessCreepNeeds();
 		} else {
@@ -472,34 +478,93 @@ export default class RoomManager {
 					});
 				}
 			}
-			// Request Remote Harvesters
-			/*else if (rMem.outposts && totalRemoteHarvesters < rMem.outposts.numSources) {
-				const body = determineBodyParts('harvester', cap, this.room);
-				if (body) {
-					//const returnObj = this.room.counter?.next();
-					//const sourceID = returnObj?.source;
-					//const containerID = returnObj?.container;
+			// Remote/reserver logic: use cached adjacent room data to decide on reservers and remote harvesters
+			try {
+				const remoteRoomsMem = this.room.memory.remoteRooms || {};
+				let totalRemoteSources = 0;
+				const roomsNeedingReserver: string[] = [];
 
-					this.spawnManager.submitRequest({
-						role: 'remoteharvester',
-						priority: 50,
-						body: body,
-						memory: {
-							role: 'remoteharvester',
-							RFQ: 'remoteharvester',
-							home: roomName,
-							room: roomName,
-							working: false,
-							disable: false,
-							rally: 'none',
-							source: sourceID,
-							bucket: containerID
-						},
-						roomName: roomName,
-						urgent: false
-					});
+				// Build counts and determine rooms needing reservation
+				for (const rName of Object.keys(remoteRoomsMem)) {
+					const info = remoteRoomsMem[rName];
+					if (!info) continue;
+					const sources = info.sources || [];
+
+					// If controlled by another player, skip remote harvesting/reserving
+					if (info.controllerOwner && info.controllerOwner !== PLAYER_USERNAME) continue;
+
+					totalRemoteSources += sources.length;
+
+					const reservation = info.reservation;
+					const reservedByUs = reservation && reservation.username === PLAYER_USERNAME;
+					if (info.controllerId && (!reservedByUs || (reservation && reservation.ticksToEnd < 500))) {
+						roomsNeedingReserver.push(rName);
+					}
 				}
-			}*/
+
+				// Count pending role requests
+				const pendingRemoteHarvesters = countPendingRole('remoteharvester');
+				const totalRemoteHarvestersAll = remoteharvesters.length + pendingRemoteHarvesters;
+				const pendingReservers = countPendingRole('reserver');
+				const totalReserversAll = reservers.length + pendingReservers;
+
+				// Request reservers for rooms that need one (one reserver per room)
+				for (const rName of roomsNeedingReserver) {
+					// Ensure we don't already have a reserver queued for this room
+					const inQueueCount = queue.filter((q: any) => q.role === 'reserver' && q.roomName === roomName && q.memory?.targetRoom === rName).length;
+					const inScheduledCount = scheduled.filter((s: any) => s.role === 'reserver' && s.memory?.targetRoom === rName).length;
+					const aliveCount = _.filter(Game.creeps, (c) => (c.memory.role === 'reserver' || c.memory.RFQ === 'reserver') && c.memory.home === roomName && c.memory.targetRoom === rName).length;
+					if (inQueueCount + inScheduledCount + aliveCount > 0) continue;
+
+					const body = determineBodyParts('reserver', cap, this.room);
+					if (body) {
+						this.spawnManager.submitRequest({
+							role: 'reserver',
+							priority: 55,
+							body,
+							memory: {
+								role: 'reserver',
+								RFQ: 'reserver',
+								home: roomName,
+								room: roomName,
+								targetRoom: rName,
+								working: false,
+								disable: false,
+								rally: 'none'
+							},
+							roomName: roomName,
+							urgent: false
+						});
+					}
+				}
+
+				// Request remote harvesters: simple policy — one harvester per remote source
+				if (totalRemoteSources > 0 && totalRemoteHarvestersAll < totalRemoteSources) {
+					const needed = Math.min(totalRemoteSources - totalRemoteHarvestersAll, remoteharvesterTarget || (totalRemoteSources - totalRemoteHarvestersAll));
+					for (let i = 0; i < needed; i++) {
+						const body = determineBodyParts('harvester', cap, this.room); // reuse harvester body; customize later if needed
+						if (!body) break;
+						this.spawnManager.submitRequest({
+							role: 'remoteharvester',
+							priority: 50,
+							body,
+							memory: {
+								role: 'remoteharvester',
+								RFQ: 'remoteharvester',
+								home: roomName,
+								room: roomName,
+								working: false,
+								disable: false,
+								rally: 'none'
+							},
+							roomName: roomName,
+							urgent: false
+						});
+					}
+				}
+			} catch (e) {
+				console.log(`${this.room.link()} Remote spawn logic error: ${e}`);
+			}
 		}
 	}
 
@@ -717,21 +782,31 @@ export default class RoomManager {
 	}
 
 	/** Create/update hauler route pairs. */
-	private manageContainers(): void {
+	public manageContainers(): void {
 
 		const pairArray: { start: string, end: string, length: number }[] = [];
-		if (this.room.memory.containers.sourceOne && this.room.memory.containers.prestorage) {
+		if (this.room.memory.containers.sourceOne && (this.room.memory.containers.prestorage || this.room.storage)) {
 			const sourceOneContainer: StructureContainer = Game.getObjectById(this.room.memory.containers.sourceOne)!;
-			const prestorageContainer: StructureContainer = Game.getObjectById(this.room.memory.containers.prestorage)!;
-			const pathLength = calcPathLength(sourceOneContainer.pos, prestorageContainer.pos);
-			const pair = { start: this.room.memory.containers.sourceOne, end: this.room.memory.containers.prestorage, length: pathLength };
+			let storageCont;
+			if (this.room.storage)
+				storageCont = this.room.storage;
+			else if (this.room.prestorage)
+				storageCont = this.room.prestorage;
+
+			const pathLength = calcPathLength(sourceOneContainer.pos, storageCont.pos);
+			const pair = { start: this.room.memory.containers.sourceOne, end: storageCont.id, length: pathLength };
 			pairArray.push(pair);
 		}
-		if (this.room.memory.containers.sourceTwo && this.room.memory.containers.prestorage) {
+		if (this.room.memory.containers.sourceTwo && (this.room.memory.containers.prestorage || this.room.storage)) {
 			const sourceTwoContainer: StructureContainer = Game.getObjectById(this.room.memory.containers.sourceTwo)!;
-			const prestorageContainer: StructureContainer = Game.getObjectById(this.room.memory.containers.prestorage)!;
-			const pathLength = calcPathLength(sourceTwoContainer.pos, prestorageContainer.pos);
-			const pair = { start: this.room.memory.containers.sourceTwo, end: this.room.memory.containers.prestorage, length: pathLength };
+			let storageCont;
+			if (this.room.storage)
+				storageCont = this.room.storage;
+			else if (this.room.prestorage)
+				storageCont = this.room.prestorage;
+
+			const pathLength = calcPathLength(sourceTwoContainer.pos, storageCont.pos);
+			const pair = { start: this.room.memory.containers.sourceTwo, end: storageCont.id, length: pathLength };
 			pairArray.push(pair);
 		}
 		if (this.room.storage && this.room.memory.containers.controller) {
@@ -748,9 +823,125 @@ export default class RoomManager {
 				pairArray.push(pair);
 		}
 
+		if (this.room.memory.remoteRooms && Object.keys(this.room.memory.remoteRooms).length && this.room.storage) {
+			const remoteRooms = this.room.memory.remoteRooms;
+			for (const room in remoteRooms) {
+				if (Game.rooms[room]) {
+					Game.rooms[room].cacheObjects();
+					if (Game.rooms[room].memory.containers) {
+						if (Game.rooms[room].memory.containers.sourceOne) {
+							const start = Game.rooms[room].containerOne.id;
+							const end = this.room.storage?.id;
+							const length = calcPathLength(Game.rooms[room].containerOne.pos, this.room.storage.pos);
+
+							const pair = { start, end, length };
+							pairArray.push(pair);
+						}
+						if (Game.rooms[room].memory.containers.sourceTwo) {
+							const start = Game.rooms[room].containerTwo.id;
+							const end = this.room.storage?.id;
+							const length = calcPathLength(Game.rooms[room].containerTwo.pos, this.room.storage.pos);
+
+							const pair = { start, end, length };
+							pairArray.push(pair);
+						}
+					}
+				}
+			}
+		}
+
 		this.room.memory.data.haulerPairs = pairArray;
 		this.haulerPairs = pairArray;
 		this.room.setQuota('hauler', pairArray.length);
+	}
+
+	/**
+ * Scan adjacent rooms (exits) for visible rooms, cache their objects
+ * and request scouts for non-visible rooms (throttled).
+ */
+	private scanAdjacentRooms(): void {
+		const roomName = this.room.name;
+		const exits = Game.map.describeExits(roomName);
+		if (!exits) return;
+
+		const remoteRooms = this.room.memory.remoteRooms as any || {};
+		const now = Game.time;
+
+		for (const dir in exits) {
+			const rName = (exits as any)[dir] as string;
+			// Initialize memory entry if needed
+			if (!remoteRooms[rName]) {
+				remoteRooms[rName] = {
+					lastScanned: 0,
+					sources: [],
+					controllerId: undefined,
+					controllerOwner: undefined,
+					reservation: null
+				};
+			}
+
+			// Throttle scanning of each remote room
+			if (now - (remoteRooms[rName].lastScanned || 0) < 50) continue;
+
+			// If we have visibility:
+			const remoteRoom = Game.rooms[rName];
+			if (remoteRoom) {
+				remoteRooms[rName].lastScanned = now;
+				const sources = remoteRoom.find(FIND_SOURCES);
+				remoteRooms[rName].sources = sources.map(s => s.id);
+				remoteRooms[rName].controllerId = remoteRoom.controller?.id;
+				remoteRooms[rName].controllerOwner = remoteRoom.controller?.owner?.username;
+				remoteRooms[rName].reservation = remoteRoom.controller?.reservation ? {
+					username: remoteRoom.controller!.reservation!.username,
+					ticksToEnd: remoteRoom.controller!.reservation!.ticksToEnd
+				} : null;
+			} else {
+				// No visibility - ensure we have a scout enqueued to get visibility
+				// Attempt to create a small scout body (most rooms support a tiny scout)
+				const body = determineBodyParts('scout', Math.min(200, this.stats.energyCapacityAvailable), this.room) || [MOVE];
+				if (this.room.memory.data.flags.advSpawnSystem) {
+					const alreadyPending = this.isScoutPendingFor(rName);
+					if (!alreadyPending) {
+						this.spawnManager.submitRequest({
+							role: 'scout',
+							priority: 110,
+							body,
+							memory: {
+								role: 'scout',
+								home: roomName,
+								room: roomName,
+								targetRoom: rName
+							},
+							roomName: roomName,
+							urgent: false
+						});
+					}
+				} else {
+					let scouts: Creep[] = _.filter(Game.creeps, (creep) => creep.memory.role == 'scout' && creep.memory.home === this.room.name);
+					if (scouts.length < remoteRooms.length) {
+						const spawn: StructureSpawn | null = Game.getObjectById(this.room.memory.objects.spawns[0]);
+						const result = spawn!.spawnScout('none', false, { targetRoom: rName } );
+						console.log(`${this.room.link()}: Attempted to spawn scout: ${getReturnCode(result)}`)
+
+						if (result === OK) {
+							const numCreeps: number = Object.keys(Game.creeps).length;
+							const name = Object.keys(Game.creeps)[Object.keys(Game.creeps).length - 1];
+							this.room.memory.remoteRooms[rName].scoutAssigned = name;
+						}
+					}
+				}
+			}
+		}
+		this.room.memory.remoteRooms = remoteRooms;
+	}
+
+	/** Returns true if there is a pending or scheduled scout spawn targeting `roomName` */
+	private isScoutPendingFor(targetRoom: string): boolean {
+		const queue = this.spawnManager.getQueue();
+		const scheduled = this.spawnManager.getScheduledSpawns();
+		const inQueue = queue.some((req: any) => req.role === 'scout' && req.memory?.targetRoom === targetRoom);
+		const inScheduled = scheduled.some((s: any) => s.role === 'scout' && s.memory?.targetRoom === targetRoom);
+		return inQueue || inScheduled;
 	}
 
 	/** Process construction tasks as created by BasePlanner */
