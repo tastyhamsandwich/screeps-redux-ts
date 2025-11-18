@@ -374,6 +374,8 @@ export default class BasePlanner {
 
 	/**
 	 * Step 4: Designate controller upgrade area
+	 * Finds a 3x3 area within range 3 of controller for upgrade container and workspace
+	 * Prioritizes positions between core and controller for better road connectivity
 	 * @author randomencounter
 	 */
 	private designateControllerArea(): void {
@@ -384,51 +386,79 @@ export default class BasePlanner {
 		let bestArea: RoomPosition | null = null;
 		let bestScore = -Infinity;
 
-		for (let x = this.startPos.x - 8; x <= this.startPos.x + 8; x++) {
-			for (let y = this.startPos.y - 8; y <= this.startPos.y + 8; y++) {
-				if (x < 2 || x > 47 || y < 2 || y > 47) continue;
+		// Search in an expanding area, prioritizing positions closer to core
+		const searchRanges = [6, 8, 10];
 
-				const center = new RoomPosition(x, y, this.room.name);
+		for (const searchRange of searchRanges) {
+			if (bestArea) break; // Found a good position, stop searching
 
-				// Check if all 9 positions are within range 3 of controller
-				let validArea = true;
-				const positions: RoomPosition[] = [];
+			for (let x = this.startPos.x - searchRange; x <= this.startPos.x + searchRange; x++) {
+				for (let y = this.startPos.y - searchRange; y <= this.startPos.y + searchRange; y++) {
+					if (x < 2 || x > 47 || y < 2 || y > 47) continue;
 
-				for (let dx = -1; dx <= 1; dx++) {
-					for (let dy = -1; dy <= 1; dy++) {
-						const px = x + dx;
-						const py = y + dy;
-						const pos = new RoomPosition(px, py, this.room.name);
+					const center = new RoomPosition(x, y, this.room.name);
 
-						if (pos.getRangeTo(controller) > 3) {
-							validArea = false;
-							break;
+					// Check if all 9 positions are valid and within range 3 of controller
+					let validArea = true;
+					const positions: RoomPosition[] = [];
+
+					for (let dx = -1; dx <= 1; dx++) {
+						for (let dy = -1; dy <= 1; dy++) {
+							const px = x + dx;
+							const py = y + dy;
+							const pos = new RoomPosition(px, py, this.room.name);
+
+							if (pos.getRangeTo(controller) > 3) {
+								validArea = false;
+								break;
+							}
+
+							if (this.terrain.get(px, py) === TERRAIN_MASK_WALL) {
+								validArea = false;
+								break;
+							}
+
+							positions.push(pos);
 						}
-
-						if (this.terrain.get(px, py) === TERRAIN_MASK_WALL) {
-							validArea = false;
-							break;
-						}
-
-						positions.push(pos);
+						if (!validArea) break;
 					}
-					if (!validArea) break;
-				}
 
-				if (validArea) {
-					// Score based on proximity to core
-					const score = -center.getRangeTo(this.startPos);
-					if (score > bestScore) {
-						bestScore = score;
-						bestArea = center;
-						this.controllerUpgradeArea = positions;
+					if (validArea) {
+						// Score based on multiple factors:
+						let score = 0;
+
+						// Primary: Proximity to core (closer is better for road efficiency)
+						const coreDistance = center.getRangeTo(this.startPos);
+						score += (20 - coreDistance) * 10;
+
+						// Secondary: Distance to controller (too close may block paths)
+						const controllerDistance = center.getRangeTo(controller);
+						if (controllerDistance <= 2) {
+							score += (3 - controllerDistance) * 5; // Slightly prefer closer but not adjacent
+						} else {
+							score -= 50; // Strong penalty if too far
+						}
+
+						// Tertiary: Prefer positions on the path from core toward controller
+						// Calculate if position is roughly between core and controller
+						const coreToCtrllr = controller.pos.x - this.startPos.x + (controller.pos.y - this.startPos.y);
+						const coreToArea = center.x - this.startPos.x + (center.y - this.startPos.y);
+						if (coreToArea > 0 && coreToArea < coreToCtrllr) {
+							score += 15; // Bonus for being on the path
+						}
+
+						if (score > bestScore) {
+							bestScore = score;
+							bestArea = center;
+							this.controllerUpgradeArea = positions;
+						}
 					}
 				}
 			}
 		}
 
 		if (bestArea) {
-			// Place container at center (will be upgraded to link later)
+			// Place container at center (will be upgraded to link later at RCL 5)
 			const key = `${bestArea.x},${bestArea.y}`;
 			this.structurePlacements.set(key + '_container', {
 				pos: { x: bestArea.x, y: bestArea.y },
@@ -437,7 +467,7 @@ export default class BasePlanner {
 				meta: { type: 'controller', upgradeTo: STRUCTURE_LINK }
 			});
 
-			console.log(`${this.room.link()} Controller area designated at ${bestArea}`);
+			console.log(`${this.room.link()} Controller area designated at ${bestArea} (range to controller: ${bestArea.getRangeTo(controller)}, to core: ${bestArea.getRangeTo(this.startPos)})`);
 		}
 	}
 
@@ -503,7 +533,10 @@ export default class BasePlanner {
 	}
 
 	/**
-	 * Allocate extension positions using grid pattern
+	 * Allocate extension positions using diagonal zigzag spine pattern
+	 * Creates a primary diagonal spine with alternating extensions on both sides
+	 * This allows creeps to navigate through extensions with 5-6 adjacent extensions per position
+	 * Pattern: Diagonal spine with E extensions on left/right, creating a weaving path
 	 * @param availableTiles - Available tiles sorted by distance
 	 * @returns Positions allocated for extensions
 	 * @author randomencounter
@@ -513,29 +546,81 @@ export default class BasePlanner {
 	): RoomPosition[] {
 		const extensionPositions: RoomPosition[] = [];
 		const extensionCount = 60; // RCL 8 max
-
-		// Try to create grid clusters of extensions
 		const used = new Set<string>();
 
-		for (const tile of availableTiles) {
-			if (extensionPositions.length >= extensionCount) break;
+		// Build the primary diagonal spine starting from storage location
+		const storage = this.getPlacementByType(STRUCTURE_STORAGE);
+		if (!storage || !this.startPos) return extensionPositions;
 
-			const key = `${tile.pos.x},${tile.pos.y}`;
-			if (used.has(key)) continue;
+		const storagePos = new RoomPosition(storage.pos.x, storage.pos.y, this.room.name);
 
-			// Try to create a 2x2 cluster
-			const cluster = this.tryCreateExtensionCluster(tile.pos, used);
-			if (cluster.length > 0) {
-				for (const pos of cluster) {
-					if (extensionPositions.length < extensionCount) {
-						extensionPositions.push(pos);
-						const k = `${pos.x},${pos.y}`;
-						this.structurePlacements.set(k, {
-							pos: { x: pos.x, y: pos.y },
-							structure: STRUCTURE_EXTENSION,
-							priority: 3
-						});
-					}
+		// Generate primary diagonal spine (expanding outward from storage)
+		// Use diagonal directions for an organic weaving pattern
+		const spine: RoomPosition[] = [];
+		this.generateDiagonalSpine(storagePos, spine, used);
+
+		// Place extensions along and perpendicular to the spine
+		for (let i = 0; i < spine.length && extensionPositions.length < extensionCount; i++) {
+			const spinePos = spine[i];
+			const key = `${spinePos.x},${spinePos.y}`;
+
+			// Alternate between left and right sides of the spine
+			const side = i % 2 === 0 ? 1 : -1; // Alternate +1, -1
+
+			// Get the direction of the spine segment for perpendicular placement
+			const prevPos = i > 0 ? spine[i - 1] : spinePos;
+			const nextPos = i < spine.length - 1 ? spine[i + 1] : spinePos;
+
+			// Place extensions perpendicular to the spine direction
+			const extensionsHere = this.placePerpendicularExtensions(
+				spinePos,
+				prevPos,
+				nextPos,
+				side,
+				extensionCount - extensionPositions.length,
+				used
+			);
+
+			for (const ext of extensionsHere) {
+				if (extensionPositions.length < extensionCount) {
+					extensionPositions.push(ext);
+					const k = `${ext.x},${ext.y}`;
+					this.structurePlacements.set(k, {
+						pos: { x: ext.x, y: ext.y },
+						structure: STRUCTURE_EXTENSION,
+						priority: 3
+					});
+					used.add(k);
+				}
+			}
+
+			// Place road on the spine for creep navigation
+			if (!this.structurePlacements.has(key)) {
+				this.structurePlacements.set(key + '_ext_spine', {
+					pos: { x: spinePos.x, y: spinePos.y },
+					structure: STRUCTURE_ROAD,
+					priority: 11
+				});
+			}
+		}
+
+		// Fill remaining extension slots with a secondary grid pattern
+		if (extensionPositions.length < extensionCount) {
+			const remaining = this.fillRemainingExtensions(
+				availableTiles,
+				extensionCount - extensionPositions.length,
+				used
+			);
+			for (const ext of remaining) {
+				if (extensionPositions.length < extensionCount) {
+					extensionPositions.push(ext);
+					const k = `${ext.x},${ext.y}`;
+					this.structurePlacements.set(k, {
+						pos: { x: ext.x, y: ext.y },
+						structure: STRUCTURE_EXTENSION,
+						priority: 3
+					});
+					used.add(k);
 				}
 			}
 		}
@@ -544,40 +629,159 @@ export default class BasePlanner {
 	}
 
 	/**
-	 * Try to create a cluster of extensions at the given position
-	 * @param center - Center position for cluster
-	 * @param used - Set of already used positions
-	 * @returns Array of positions in the cluster
+	 * Generate a primary diagonal spine expanding from storage location
+	 * The spine creates a weaving pattern that guides extension placement
+	 * @param start - Starting position (storage)
+	 * @param spine - Array to populate with spine positions
+	 * @param used - Set to track used positions
 	 * @author randomencounter
 	 */
-	private tryCreateExtensionCluster(center: RoomPosition, used: Set<string>): RoomPosition[] {
-		const cluster: RoomPosition[] = [];
-		const pattern = [
-			{ dx: 0, dy: 0 },
-			{ dx: 1, dy: 0 },
-			{ dx: 0, dy: 1 },
-			{ dx: 1, dy: 1 }
+	private generateDiagonalSpine(start: RoomPosition, spine: RoomPosition[], used: Set<string>): void {
+		const maxSpineLength = 40; // Limit spine length
+		const visited = new Set<string>();
+
+		// Diagonal directions: NE, SE, SW, NW creates a weaving pattern
+		const diagonals = [
+			{ dx: 1, dy: -1 },  // NE
+			{ dx: 1, dy: 1 },   // SE
+			{ dx: -1, dy: 1 },  // SW
+			{ dx: -1, dy: -1 }  // NW
 		];
 
-		for (const offset of pattern) {
-			const x = center.x + offset.dx;
-			const y = center.y + offset.dy;
+		let current = start;
+		let directionIndex = 0;
+
+		for (let i = 0; i < maxSpineLength; i++) {
+			const key = `${current.x},${current.y}`;
+			if (visited.has(key)) break;
+
+			// Check bounds
+			if (current.x < 2 || current.x > 47 || current.y < 2 || current.y > 47) break;
+			if (this.terrain.get(current.x, current.y) === TERRAIN_MASK_WALL) break;
+
+			spine.push(current);
+			visited.add(key);
+			used.add(key);
+
+			// Move in the current diagonal direction, switching every 3-4 steps for variety
+			const shouldSwitch = i % 4 === 3;
+			if (shouldSwitch && i < maxSpineLength - 1) {
+				directionIndex = (directionIndex + 1) % diagonals.length;
+			}
+
+			const dir = diagonals[directionIndex];
+			const nextX = current.x + dir.dx;
+			const nextY = current.y + dir.dy;
+
+			current = new RoomPosition(nextX, nextY, this.room.name);
+		}
+	}
+
+	/**
+	 * Place extensions perpendicular to the spine direction
+	 * Creates the weaving pattern with extensions on both sides of the spine
+	 * @param spinePos - Current spine position
+	 * @param prevPos - Previous spine position (for direction calculation)
+	 * @param nextPos - Next spine position (for direction calculation)
+	 * @param side - Which side to place (-1 or +1)
+	 * @param count - Maximum extensions to place
+	 * @param used - Set of already used positions
+	 * @returns Array of valid extension positions
+	 * @author randomencounter
+	 */
+	private placePerpendicularExtensions(
+		spinePos: RoomPosition,
+		prevPos: RoomPosition,
+		nextPos: RoomPosition,
+		side: number,
+		count: number,
+		used: Set<string>
+	): RoomPosition[] {
+		const extensions: RoomPosition[] = [];
+
+		// Calculate the spine direction vector
+		const dx = nextPos.x - prevPos.x;
+		const dy = nextPos.y - prevPos.y;
+
+		// Calculate perpendicular direction (rotate 90 degrees)
+		const perpDx = -dy * side;
+		const perpDy = dx * side;
+
+		// Normalize perpendicular direction
+		const perpLen = Math.sqrt(perpDx * perpDx + perpDy * perpDy);
+		const normPerpDx = perpLen > 0 ? perpDx / perpLen : 0;
+		const normPerpDy = perpLen > 0 ? perpDy / perpLen : 0;
+
+		// Place 2-3 extensions perpendicular to the spine
+		for (let dist = 1; dist <= 3 && extensions.length < count; dist++) {
+			const x = Math.round(spinePos.x + normPerpDx * dist);
+			const y = Math.round(spinePos.y + normPerpDy * dist);
+
+			if (x < 1 || x > 48 || y < 1 || y > 48) continue;
+			if (this.terrain.get(x, y) === TERRAIN_MASK_WALL) continue;
+
 			const key = `${x},${y}`;
-
-			if (used.has(key)) return [];
-			if (this.structurePlacements.has(key)) return [];
-			if (x < 1 || x > 48 || y < 1 || y > 48) return [];
-			if (this.terrain.get(x, y) === TERRAIN_MASK_WALL) return [];
-
-			cluster.push(new RoomPosition(x, y, this.room.name));
+			if (!used.has(key) && !this.structurePlacements.has(key)) {
+				extensions.push(new RoomPosition(x, y, this.room.name));
+				used.add(key);
+			}
 		}
 
-		// Mark positions as used
-		for (const pos of cluster) {
-			used.add(`${pos.x},${pos.y}`);
+		return extensions;
+	}
+
+	/**
+	 * Fill remaining extension slots using secondary placement patterns
+	 * Covers areas not reached by the primary diagonal spine
+	 * @param availableTiles - Available tiles sorted by distance
+	 * @param count - Number of extensions still needed
+	 * @param used - Set of already used positions
+	 * @returns Array of extension positions
+	 * @author randomencounter
+	 */
+	private fillRemainingExtensions(
+		availableTiles: { pos: RoomPosition; distance: number }[],
+		count: number,
+		used: Set<string>
+	): RoomPosition[] {
+		const extensions: RoomPosition[] = [];
+
+		// Use a simple grid pattern for remaining extensions
+		// Spacing of 2 creates a distributed layout
+		for (const tile of availableTiles) {
+			if (extensions.length >= count) break;
+
+			const key = `${tile.pos.x},${tile.pos.y}`;
+			if (used.has(key) || this.structurePlacements.has(key)) continue;
+
+			extensions.push(tile.pos);
+			used.add(key);
+
+			// Also add adjacent extensions at distance 2 for spacing
+			for (const offset of [
+				{ dx: 2, dy: 0 },
+				{ dx: 0, dy: 2 },
+				{ dx: 2, dy: 2 },
+				{ dx: -2, dy: 0 },
+				{ dx: 0, dy: -2 }
+			]) {
+				if (extensions.length >= count) break;
+
+				const x = tile.pos.x + offset.dx;
+				const y = tile.pos.y + offset.dy;
+
+				if (x < 1 || x > 48 || y < 1 || y > 48) continue;
+				if (this.terrain.get(x, y) === TERRAIN_MASK_WALL) continue;
+
+				const adjacentKey = `${x},${y}`;
+				if (!used.has(adjacentKey) && !this.structurePlacements.has(adjacentKey)) {
+					extensions.push(new RoomPosition(x, y, this.room.name));
+					used.add(adjacentKey);
+				}
+			}
 		}
 
-		return cluster;
+		return extensions;
 	}
 
 	/**
@@ -633,6 +837,11 @@ export default class BasePlanner {
 
 	/**
 	 * Step 8: Establish infrastructure (roads, containers, links)
+	 * Prioritizes roads in this order:
+	 * 1. Spawn/Storage to source containers (RCL 2-3)
+	 * 2. Spawn/Storage to controller container (RCL 3)
+	 * 3. Mineral container and extractor (RCL 6)
+	 * 4. Extension paths (RCL 4+)
 	 * @author randomencounter
 	 */
 	private establishInfrastructure(): void {
@@ -642,26 +851,39 @@ export default class BasePlanner {
 		const mineral = this.room.find(FIND_MINERALS)[0];
 		const storage = this.getPlacementByType(STRUCTURE_STORAGE);
 
-		// Create roads from storage to sources
+		// PRIORITY 1: Create roads from storage to sources (critical at RCL 2-3)
+		// These are essential for early game energy flow
 		for (const source of sources) {
 			// Find nearest position to source for road path
 			const nearPos = this.findNearestOpenPosition(source.pos, 1);
-			if (nearPos) {
-				// Create road path to source (container placement now handled by harvester logic)
-				if (storage) {
-					this.createRoadPath(
-						new RoomPosition(storage.pos.x, storage.pos.y, this.room.name),
-						nearPos
-					);
-				}
+			if (nearPos && storage) {
+				// Create road path to source, mark with RCL 2 priority
+				this.createRoadPathWithPriority(
+					new RoomPosition(storage.pos.x, storage.pos.y, this.room.name),
+					nearPos,
+					2 // RCL 2 priority
+				);
 			}
 		}
 
-		// Create roads to mineral
-		if (mineral) {
+		// PRIORITY 2: Create roads to controller (critical at RCL 3)
+		// Required for efficient controller upgrades
+		if (this.room.controller && storage && this.controllerUpgradeArea.length > 0) {
+			const controllerContainer = this.controllerUpgradeArea[4]; // Center of 3x3
+			if (controllerContainer) {
+				this.createRoadPathWithPriority(
+					new RoomPosition(storage.pos.x, storage.pos.y, this.room.name),
+					controllerContainer,
+					1 // RCL 3 priority
+				);
+			}
+		}
+
+		// PRIORITY 3: Create roads to mineral (lower priority, RCL 6)
+		if (mineral && storage) {
 			const nearPos = this.findNearestOpenPosition(mineral.pos, 1);
 			if (nearPos) {
-				// Place container and extractor (both available at RCL 6)
+				// Place container at mineral position
 				const key = `${nearPos.x},${nearPos.y}`;
 				this.structurePlacements.set(key + '_mineral_container', {
 					pos: { x: nearPos.x, y: nearPos.y },
@@ -678,24 +900,54 @@ export default class BasePlanner {
 					meta: { minRCL: 6 }
 				});
 
-				// Create road path
-				if (storage) {
-					this.createRoadPath(
-						new RoomPosition(storage.pos.x, storage.pos.y, this.room.name),
-						nearPos
-					);
-				}
+				// Create road path with RCL 6 priority
+				this.createRoadPathWithPriority(
+					new RoomPosition(storage.pos.x, storage.pos.y, this.room.name),
+					nearPos,
+					5 // RCL 6 priority
+				);
 			}
 		}
+	}
 
-		// Create roads to controller
-		if (this.room.controller && storage) {
-			const controllerContainer = this.controllerUpgradeArea[4]; // Center of 3x3
-			if (controllerContainer) {
-				this.createRoadPath(
-					new RoomPosition(storage.pos.x, storage.pos.y, this.room.name),
-					controllerContainer
-				);
+	/**
+	 * Helper: Create road path between two positions with RCL-based priority
+	 * Lower RCL number = higher build priority
+	 * @param from - Starting position
+	 * @param to - Ending position
+	 * @param rclPriority - RCL level at which these roads should be built (1-8)
+	 * @author randomencounter
+	 */
+	private createRoadPathWithPriority(
+		from: RoomPosition,
+		to: RoomPosition,
+		rclPriority: number
+	): void {
+		const path = from.findPathTo(to, {
+			ignoreCreeps: true,
+			ignoreRoads: true,
+			swampCost: 2,
+			plainCost: 2
+		});
+
+		for (const step of path) {
+			const key = `${step.x},${step.y}`;
+			if (!this.structurePlacements.has(key)) {
+				// Map RCL to priority (lower RCL = higher priority in building)
+				// RCL 1-3 get priority 9-10
+				// RCL 4-6 get priority 11-12
+				// RCL 7-8 get priority 13
+				let roadPriority = 10;
+				if (rclPriority <= 2) roadPriority = 9;
+				else if (rclPriority <= 4) roadPriority = 11;
+				else roadPriority = 12;
+
+				this.structurePlacements.set(key + '_road', {
+					pos: { x: step.x, y: step.y },
+					structure: STRUCTURE_ROAD,
+					priority: roadPriority,
+					meta: { minRCL: rclPriority }
+				});
 			}
 		}
 	}
@@ -766,6 +1018,7 @@ export default class BasePlanner {
 
 	/**
 	 * Step 10: Place towers for optimal coverage
+	 * Towers are positioned to maximize rampart coverage while avoiding core area
 	 * @author randomencounter
 	 */
 	private placeTowers(): void {
@@ -777,6 +1030,9 @@ export default class BasePlanner {
 		// Calculate coverage scores for available positions
 		const candidates: { pos: RoomPosition; score: number }[] = [];
 
+		// Minimum distance from core center to prevent tower placement in core
+		const CORE_EXCLUSION_RADIUS = 5;
+
 		for (let x = 2; x < 48; x++) {
 			for (let y = 2; y < 48; y++) {
 				const key = `${x},${y}`;
@@ -785,10 +1041,16 @@ export default class BasePlanner {
 
 				const pos = new RoomPosition(x, y, this.room.name);
 
+				// Exclude core area - towers should not be placed near center
+				const coreDistance = pos.getRangeTo(this.startPos);
+				if (coreDistance < CORE_EXCLUSION_RADIUS) {
+					continue;
+				}
+
 				// Calculate coverage score
 				let score = 0;
 
-				// Coverage of ramparts (high priority)
+				// Coverage of ramparts (highest priority)
 				for (const rampart of this.ramparts) {
 					const range = pos.getRangeTo(rampart);
 					if (range <= 20) {
@@ -796,19 +1058,24 @@ export default class BasePlanner {
 					}
 				}
 
-				// Coverage of core structures
-				if (this.startPos) {
-					const coreRange = pos.getRangeTo(this.startPos);
-					score += Math.max(0, 25 - coreRange);
-				}
+				// Coverage of core structures (secondary priority)
+				score += Math.max(0, 25 - coreDistance);
 
-				// Proximity to storage for refilling
+				// Proximity to storage for refilling (tertiary priority)
 				const storage = this.getPlacementByType(STRUCTURE_STORAGE);
 				if (storage) {
 					const storageRange = pos.getRangeTo(
 						new RoomPosition(storage.pos.x, storage.pos.y, this.room.name)
 					);
 					score += Math.max(0, 10 - storageRange);
+				}
+
+				// Prefer positions that are not directly blocking movement paths
+				// Penalty for being exactly on cardinal directions from core
+				const dx = Math.abs(pos.x - this.startPos.x);
+				const dy = Math.abs(pos.y - this.startPos.y);
+				if (dx === 0 || dy === 0) {
+					score -= 5; // Small penalty for being on main axes
 				}
 
 				candidates.push({ pos, score });
@@ -831,7 +1098,7 @@ export default class BasePlanner {
 			towers.push(tower.pos);
 		}
 
-		console.log(`${this.room.link()} Placed ${towers.length} towers`);
+		console.log(`${this.room.link()} Placed ${towers.length} towers at distance > ${CORE_EXCLUSION_RADIUS} from core`);
 	}
 
 	/**
@@ -1063,31 +1330,6 @@ export default class BasePlanner {
 		return positions[0] || null;
 	}
 
-	/**
-	 * Helper: Create road path between two positions
-	 * @param from - Starting position
-	 * @param to - Ending position
-	 * @author randomencounter
-	 */
-	private createRoadPath(from: RoomPosition, to: RoomPosition): void {
-		const path = from.findPathTo(to, {
-			ignoreCreeps: true,
-			ignoreRoads: true,
-			swampCost: 2,
-			plainCost: 2
-		});
-
-		for (const step of path) {
-			const key = `${step.x},${step.y}`;
-			if (!this.structurePlacements.has(key)) {
-				this.structurePlacements.set(key + '_road', {
-					pos: { x: step.x, y: step.y },
-					structure: STRUCTURE_ROAD,
-					priority: 10
-				});
-			}
-		}
-	}
 
 	/**
 	 * Helper: Place a structure near the core
