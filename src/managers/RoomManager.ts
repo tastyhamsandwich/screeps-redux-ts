@@ -30,6 +30,8 @@ export default class RoomManager {
 
 		// Initialize all required room memory structures
 		if (!this.room.memory.data) this.room.memory.data = {};
+		if (!this.room.memory.data.flags) this.room.memory.data.flags = {};
+		if (!this.room.memory.data.indices) this.room.memory.data.indices = {};
 		if (!this.room.memory.flags) this.room.memory.flags = {};
 		if (!this.room.memory.visuals) this.room.memory.visuals = {};
 		if (!this.room.memory.quotas) this.room.memory.quotas = {};
@@ -46,7 +48,7 @@ export default class RoomManager {
 	run(): void {
 
 		const roomMem = this.room.memory;
-		const rmData = roomMem.data;
+		let rmData = roomMem.data;
 
 		// Update resources and stats (throttled to every 10 ticks for performance)
 		if (!rmData.lastResourceScan || Game.time - rmData.lastResourceScan >= 10) {
@@ -55,15 +57,15 @@ export default class RoomManager {
 			rmData.lastResourceScan = Game.time;
 		}
 
-		if (!rmData.flags.firstTimeInit) {
+		if (rmData.flags.firstTimeInit === undefined || rmData.flags.firstTimeInit === false) {
 			rmData.flags.advSpawnSystem = false;
 			Memory.globalData.numColonies++;
 			this.room.initRoom();
+			// Re-assign rmData after initRoom() replaces memory.data
+			rmData = this.room.memory.data;
 			rmData.flags.firstTimeInit = true;
 			console.log(`${this.room.link()} First Time Room Initialization Complete!`);
 		}
-
-		rmData.firstTimeInit ??= true;
 
 		// Assess need for bootstrapping mode
 		this.updateBootstrapState();
@@ -107,10 +109,8 @@ export default class RoomManager {
 		// Process the plan if available
 		if (this.basePlan) this.handleBasePlan(this.basePlan);
 
-		if (this.room.controller!.level >= 4 && this.room.storage && this.room.energyCapacityAvailable >= 1200) {
+		if (this.room.controller!.level >= 4 && this.room.storage && this.room.energyCapacityAvailable >= 1200)
 			this.scanAdjacentRooms();
-
-		}
 
 		// Assess creep needs and submit spawn requests if using advanced spawn manager
 		if (rmData.flags.advSpawnSystem === false && rmData.pendingSpawn && this.room.energyAvailable === this.room.energyCapacityAvailable) {
@@ -153,7 +153,7 @@ export default class RoomManager {
 		const hasContainer = this.resources.containers.length > 0;
 		const creepCount = this.room.find(FIND_MY_CREEPS).length;
 
-		if (!this.room.memory.flags) this.room.initRoom();
+		if (!this.room.memory.flags) this.room.memory.flags = {};
 		this.room.memory.flags.bootstrap = (level === 1 && creepCount < 5 && !hasContainer);
 	}
 

@@ -386,7 +386,7 @@ export const legacySpawnManager = {
 								const nextAssigned = (room.memory.data.indices.nextHarvesterAssigned % 2) + 1;
 								const sourceID = (nextAssigned === 1) ? room.sourceOne.id : room.sourceTwo.id;
 								let containerID = 'none';
-								if (!room.memory.data.flags.dropHarvestingEnabled)
+								if (!room.memory.data.flags.dropHarvestingEnabled && (room.containerOne || room.containerTwo))
 									containerID = (nextAssigned === 1) ? room.containerOne.id : room.containerTwo.id;
 								const sourceNum = (nextAssigned === 1) ? 1 : 2;
 								room.memory.data.indices.nextHarvesterAssigned++;

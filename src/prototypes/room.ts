@@ -399,7 +399,7 @@ Room.prototype.initRoom = function () {
 	this.memory.stats = { energyHarvested: 0, controlPoints: 0, constructionPoints: 0, creepsSpawned: 0, creepPartsSpawned: 0,
 				mineralsHarvested: mineralsHarvested, controllerLevelReached: 0, npcInvadersKilled: 0, hostilePlayerCreepsKilled: 0, labStats: labStats };
 	this.memory.visuals = { settings: { spawnInfo: spawnInfo, roomFlags: roomFlags, progressInfo: progressInfo, displayTowerRanges: false, displayControllerUpgradeRange: false }, visDistTrans: false, visBasePlan: false, visFloodFill: false, visBuildProgress: false, visPlanInfo: false, enableVisuals: false };
-
+	this.memory.remoteRooms = {};
 	this.cacheObjects();
 }
 
