@@ -88,6 +88,11 @@ export const pathing: { [key: string]: MoveToOpts } = {
 		reusePath: cSet.upgrader.reusePathValue || 3,
 		ignoreCreeps: false //cSet.upgrader.ignoreCreeps
 	},
+	workerPathing: {
+		visualizePathStyle: { stroke: '#dddddd', opacity: 0.6, lineStyle: 'solid' },
+		reusePath: cSet.reusePathValue || 3,
+		ignoreCreeps: false
+	},
 	rallyPointPathing: {
 		visualizePathStyle: { stroke: "#ffffff", opacity: 1.0, lineStyle: "solid" },
 		reusePath: Memory.globalSettings!.reusePathValue || 3,
