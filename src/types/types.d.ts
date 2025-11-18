@@ -1,43 +1,42 @@
 import RoomManager from '@managers/RoomManager';
 
 declare global {
+namespace NodeJS {
 
-	// MAIN.TS INTERFACES
-	namespace NodeJS {
-		interface Global {
-			adjustPathingValues(role: string, reuseValue: number, ignoreCreeps: boolean): void;
-			splitRoomName(roomName: string): [string, number, string, number];
-			roomExitsTo(roomName: string, direction: DirectionConstant | number | string): string;
-			calcPath(startPos: RoomPosition, endPos: RoomPosition): { path: RoomPosition[], length: number, ops: number, cost: number, incomplete: boolean };
-			calcPathLength(startPos: RoomPosition, endPos: RoomPosition): number;
-			asRoomPosition(value: RoomPosition | { pos?: RoomPosition } | undefined | null): RoomPosition | null;
-			log(logMsg: string | string[], room: Room | false): void;
-			createRoomFlag(room: string): string | null;
-			validateRoomName(roomName: string): RoomName;
-			randomInt(min: number, max: number): number;
-			randomColor(): ColorConstant;
-			randomColorAsInt(): number;
-			determineBodyParts(role: string, maxEnergy: number, extras?: { [key: string]: any }): BodyPartConstant[] | undefined;
-			initGlobal(override?: boolean): boolean;
-			calcBodyCost(body: BodyPartConstant[] | undefined | null): number;
-			capitalize(string: string): string;
-			log(): void;
-			PART_COST: Record<BodyPartConstant, number>;
-			pathing: { [key: string]: any };
-			roomManagers: { [roomName: string]: RoomManager };
-			tickTime: number;
-			tickCount: number;
-			RoomVis: {
-				toggle(roomName: string, layer: string): void;
-				enableAll(roomName: string): void;
-				disableAll(roomName: string): void;
-				status(roomName: string): void;
-			}
+	//# GLOBAL CONTEXT INTERFACE
+	interface Global {
+		adjustPathingValues(role: string, reuseValue: number, ignoreCreeps: boolean): void;
+		splitRoomName(roomName: string): [string, number, string, number];
+		roomExitsTo(roomName: string, direction: DirectionConstant | number | string): string;
+		calcPath(startPos: RoomPosition, endPos: RoomPosition): { path: RoomPosition[], length: number, ops: number, cost: number, incomplete: boolean };
+		calcPathLength(startPos: RoomPosition, endPos: RoomPosition): number;
+		asRoomPosition(value: RoomPosition | { pos?: RoomPosition } | undefined | null): RoomPosition | null;
+		log(logMsg: string | string[], room: Room | false): void;
+		createRoomFlag(room: string): string | null;
+		validateRoomName(roomName: string): RoomName;
+		randomInt(min: number, max: number): number;
+		randomColor(): ColorConstant;
+		randomColorAsInt(): number;
+		determineBodyParts(role: string, maxEnergy: number, extras?: { [key: string]: any }): BodyPartConstant[] | undefined;
+		initGlobal(override?: boolean): boolean;
+		calcBodyCost(body: BodyPartConstant[] | undefined | null): number;
+		capitalize(string: string): string;
+		log(): void;
+		PART_COST: Record<BodyPartConstant, number>;
+		pathing: { [key: string]: any };
+		roomManagers: { [roomName: string]: RoomManager };
+		tickTime: number;
+		tickCount: number;
+		RoomVis: {
+			toggle(roomName: string, layer: string): void;
+			enableAll(roomName: string): void;
+			disableAll(roomName: string): void;
+			status(roomName: string): void;
 		}
 	}
+}
 
-
-	// INTERFACE: Base Memory Extension
+	//# MEMORY INTERFACES
 	interface Memory {
 		uuid: number;
 		log: any;
@@ -53,7 +52,6 @@ declare global {
 		}
 	}
 
-	// INTERFACE: Room Memory Extension
 	interface RoomMemory {
 		objects: { [key: string]: Id<AnyStructure>[] | Id<AnyStructure> };
 		sources: { [key: string]: string[] };
@@ -113,7 +111,6 @@ declare global {
 		};
 	}
 
-	// INTERFACE: Creep Memory Extension
 	interface CreepMemory {
 		role: string;
 		home: string;
@@ -123,11 +120,11 @@ declare global {
 		[key: string]: any;
 	}
 
-	// INTERFACE: Spawn Memory extension
 	interface SpawnMemory {
 		spawnList: CreepRole[];
 	}
 
+	//# PROTOTYPE EXTENSION INTERFACES
 	interface Room {
 		log(message: string, critical?: boolean): void;
 		getSourcePositions(sourceID: string): RoomPosition[];
@@ -178,6 +175,8 @@ declare global {
 		cloneCreep(creepName: string): ScreepsReturnCode;
 		spawnFiller(maxEnergy: number): ScreepsReturnCode;
 	}
+
+	//# PATHING INTERFACES
 	type RoomRoute = RoomPathStep[];
 
 	interface RoomPathStep {
@@ -185,7 +184,7 @@ declare global {
 		exit: ExitConstant;
 	}
 
-	//! STANDARD INTERFACE DEFINITIONS
+	//# SPAWN MANAGEMENT INTERFACES
 	interface SpawnRequest {
 		id: string;
 		role: string;
@@ -207,27 +206,7 @@ declare global {
 		priority: number;
 	}
 
-	interface GlobalSettings {
-		consoleSpawnInterval: number;
-		alertDisabled: boolean;
-		reusePathValue: number;
-		ignoreCreeps: boolean,
-		creepSettings: {
-			[key: string]: {
-				reusePathValue: number;
-				ignoreCreeps: boolean;
-			}
-		};
-	}
-
-	interface RoomFlags {
-		[key: string]: any;
-	}
-
-	interface RoomSettings {
-		[key: string]: any;
-	}
-
+	//# REMOTES INTERFACES
 	interface OutpostData {
 		name: string;
 		controllerFlag: string;
@@ -244,6 +223,7 @@ declare global {
 		lastChecked: number;
 	}
 
+	//# STATISTICS INTERFACES
 	interface ColonyStats {
 		energyHarvested: number,
 		controlPoints: number,
@@ -320,6 +300,7 @@ declare global {
 		creepDeathTick: number | false
 	}
 
+	//# LOGISTICS INTERACES
 	type LogisticsPair = {
 		source: string | Id<StructureContainer | StructureStorage>;
 		destination: Id<StructureContainer | StructureStorage | StructureLink>;
@@ -330,6 +311,28 @@ declare global {
 	}
 
 	type Locality = 'local' | 'remote';
+
+	//# SETTINGS INTERACES
+	interface GlobalSettings {
+		consoleSpawnInterval: number;
+		alertDisabled: boolean;
+		reusePathValue: number;
+		ignoreCreeps: boolean,
+		creepSettings: {
+			[key: string]: {
+				reusePathValue: number;
+				ignoreCreeps: boolean;
+			}
+		};
+	}
+
+	interface RoomFlags {
+		[key: string]: any;
+	}
+
+	interface RoomSettings {
+		[key: string]: any;
+	}
 	interface RepairSettings {
 		walls: boolean;
 		ramparts: boolean;
@@ -376,12 +379,12 @@ declare global {
 		color: string;
 	}
 
-	//! TYPE DEFINITIONS
+	//# OTHER/GENERAL TYPEDEFS
 	type alignment = 'left' | 'right' | 'center';
-	type CreepRole = "harvester" | "upgrader" | "builder" | "repairer" | "defender" | "filler" | "hauler"
-	type RoomName = `${'W' | 'E'}${number}${'N' | 'S'}${number}`
+	type CreepRole = "harvester" | "upgrader" | "builder" | "repairer" | "defender" | "filler" | "hauler" | "remoteharvester" | "reserver" | "scout"
+	type RoomName = `${'W' | 'E'}${number}${'N' | 'S'}${number}`;
 
-	// ROOM MANAGER INTERFACES
+	//# ROOM MANAGER INTERFACES
 	interface RoomData {
 		sourceOne?: { source: Id<Source>; container: Id<StructureContainer | ConstructionSite> };
 		sourceTwo?: { source: Id<Source>; container: Id<StructureContainer | ConstructionSite> };
@@ -428,7 +431,7 @@ declare global {
 		damagedStructures: Structure[];
 	}
 
-	// BASE PLANNER INTERFACES
+	//# BASE PLANNER INTERFACES
 	type Pos = { x: number; y: number };
 	type TileUsage =
 		| 'spawn'
@@ -455,15 +458,6 @@ declare global {
 		structure: StructureConstant | 'container' | 'road';
 		pos: Pos;
 	}
-
-	/* interface PlanResult {
-		roomName: string;
-		baseCenter: Pos; // the chosen starting position
-		placements: StructurePlacement[]; // final placements for RCL8
-		tileUsageGrid: TileUsage[][]; // 50x50 grid of usage (y then x)
-		rclSchedule: Record<number, StructurePlacement[]>; // map RCL -> placements to enable at that RCL
-		notes?: string[];
-	} */
 
 	interface PlanResult {
 		startPos: RoomPosition;
@@ -498,14 +492,11 @@ declare global {
 		[key: string]: any;
 	}
 
-
-
 	interface RCLSchedule {
 		[rcl: number]: StructurePlacement[];
 	}
 
 	type RCLLevel = 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8;
-
 
 	type InnerPositions = Array<RoomPosition | { x: number; y: number }>;
 
@@ -519,6 +510,61 @@ declare global {
 		costThreshold?: number;
 		visual?: boolean;
 	}
+
+	//# WORK ASSIGNMENT INTERFACES
+
+	type ManifestEntry = [ResourceConstant, number];
+	type ManifestEntries = ManifestEntry[];
+	type CargoManifest = Partial<Record<ResourceConstant, number>>;
+	type TaskAssignment = HaulTask | BuildTask | RepairTask | FillTask | UpgradeTask | HarvestTask | GatherTask;
+
+	interface HaulTask {
+		type: 'haul';
+		haulFrom: Id<AnyStoreStructure | Tombstone | Ruin>;
+		haulTo: Id<AnyStoreStructure>;
+		cargoManifest: CargoManifest;
+	}
+
+	interface BuildTask {
+		type: 'build';
+		buildTarget: Id<ConstructionSite>;
+		buildingType: AnyStructure;
+	}
+
+	interface RepairTask {
+		type: 'repair';
+		repairTarget: Id<AnyStructure>;
+		repairAmount: number;
+	}
+
+	interface FillTask {
+		type: 'fill';
+		fillableStructures: Id<StructureExtension | StructureSpawn>[];
+		fillingEnergySource: Id<AnyStoreStructure>;
+	}
+
+	interface UpgradeTask {
+		type: 'upgrade';
+		targetController: Id<StructureController>;
+		targetRoom: string;
+		energyBudget: number
+	}
+
+	interface HarvestTask {
+		type: 'harvest';
+		targetSource: Id<Source | StructureExtractor>;
+		targetRoom: string;
+		harvestQuota: number;
+	}
+
+	interface GatherTask {
+		type: 'gather';
+		gatherTargets: Id<Resource | Tombstone | Ruin> |
+									 Id<Resource | Tombstone | Ruin>[];
+		dropoffTarget: Id<AnyStoreStructure>;
+		cargoManifest: CargoManifest;
+	}
+
 }
 
 export {}
