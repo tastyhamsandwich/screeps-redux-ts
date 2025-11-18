@@ -33,34 +33,41 @@ const Worker = {
 
 					case 'haul': { //: LOGISTICS TASK
 						// get objects from the task object passed to creep
-						const haulFrom:  AnyStoreStructure = Game.getObjectById(assignedTask.haulFrom as Id<AnyStoreStructure>)!;
-						const haulTo: 	 AnyStoreStructure = Game.getObjectById(assignedTask.haulTo 	as Id<AnyStoreStructure>)!;
+						const haulFrom: AnyStoreStructure = Game.getObjectById(assignedTask.haulFrom as Id<AnyStoreStructure>)!;
+						const haulTo: AnyStoreStructure = Game.getObjectById(assignedTask.haulTo as Id<AnyStoreStructure>)!;
 						const cargoManifest: CargoManifest = assignedTask.cargoManifest;
-						const entries: 		 ManifestEntries = Object.entries(cargoManifest) as ManifestEntry[];
-						const [cargoType, cargoAmount] 		 = entries[0];
+
+						// Normalise manifest to entries [resource, amount]
+						const entries = Object.entries(cargoManifest) as [ResourceConstant, number][];
+						const totalNeeded = entries.reduce((s, [, amt]) => s + (amt || 0), 0);
 
 						// initialize flags for task state machine logic
-						cMem.emptyingInventory 	= false;
-						cMem.enrouteToPickup 		= false;
-						cMem.enrouteToDropoff 	= false;
+						cMem.emptyingInventory = false;
+						cMem.enrouteToPickup = false;
+						cMem.enrouteToDropoff = false;
+						cMem.cargoRemaining ??= totalNeeded;
 
-						// check if creep already has something in inventory
-						if (creep.store.getUsedCapacity() > 0 &&
-								creep.store.getFreeCapacity() < cargoAmount)
+						// If creep is carrying something and lacks room for at least one item,
+						// send it to deposit first (preserve previous behavior but simpler)
+						if (creep.store.getUsedCapacity() > 0 && creep.store.getFreeCapacity() === 0) {
 							cMem.emptyingInventory = true;
-						else cMem.enrouteToPickup = true;
+						} else {
+							cMem.enrouteToPickup = true;
+						}
 
-						// if items carried already take up too much room for the
-						// cargo requirements, drop them off at storage first
+						// EMPTY INVENTORY FIRST (send to room.storage if available)
 						if (cMem.emptyingInventory) {
 							if (creep.store.getUsedCapacity() !== 0) {
 								if (room.storage) {
-									if (!pos.isNearTo(room.storage))
+									if (!pos.isNearTo(room.storage)) {
 										creep.advMoveTo(room.storage, pathing.workerPathing);
-									else {
-										const resources = Object.keys(creep.store);
+										return;
+									} else {
+										const resources = Object.keys(creep.store) as ResourceConstant[];
 										for (const resource of resources) {
-											const result = creep.transfer(room.storage, resource as ResourceConstant);
+											const amount = creep.store[resource] ?? 0;
+											if (amount <= 0) continue;
+											const result = creep.transfer(room.storage, resource, amount);
 											if (result === OK) continue;
 											else {
 												creep.log(`Error unloading original inventory: ${getReturnCode(result)}`);
@@ -68,56 +75,100 @@ const Worker = {
 											}
 										}
 									}
-								} // TODO : else find another place to drop the resources
+								} // TODO: else find another place to drop the resources
 							} else {
 								// once store is emptied, set state machine flags to next phase
-							 	cMem.enrouteToPickup = true;
+								cMem.enrouteToPickup = true;
 								cMem.emptyingInventory = false;
 							}
 						}
 
-						// if we are set to navigate to pickup location
+						// PICKUP PHASE: collect manifest items in order until creep is full or manifest satisfied
 						if (cMem.enrouteToPickup) {
-							if (!haulFrom) return; // check if we are next to pickup structure, move to it if not
-							if (!pos.isNearTo(haulFrom.pos)) creep.advMoveTo(haulFrom.pos, pathing.workerPathing);
-							else { // amount to withdraw = amount on manifest, if less than whats in storage.
-								const amount = (cargoAmount < haulFrom.store[cargoType]) ? // get max worker can carry, if less than required
-									cargoAmount : (creep.store.getCapacity() < haulFrom.store[cargoType]) ?
-										creep.store.getCapacity() : haulFrom.store[cargoType];
-								const result = creep.withdraw(haulFrom, cargoType, amount);
-								if (result === OK) { // once resources are picked up, set state machine flags to next phase
+							if (!haulFrom) return;
+							if (!pos.isNearTo(haulFrom.pos)) {
+								creep.advMoveTo(haulFrom.pos, pathing.workerPathing);
+								return;
+							} else {
+								// At the source - attempt to withdraw items for each manifest entry sequentially
+								let collectedThisRun = 0;
+								for (const [resource, manifestAmount] of entries) {
+									if (creep.store.getFreeCapacity() <= 0) break; // no room left
+									if (!manifestAmount || manifestAmount <= 0) continue;
+
+									const availableAtSource = (haulFrom.store as Partial<Record<string, number>>)[resource] ?? 0;
+									if (availableAtSource <= 0) continue;
+
+									// withdraw up to manifestAmount, availableAtSource, and remaining free capacity
+									const toTake = Math.min(manifestAmount, availableAtSource, creep.store.getFreeCapacity());
+									if (toTake <= 0) continue;
+
+									const res = creep.withdraw(haulFrom, resource, toTake);
+									if (res === ERR_NOT_IN_RANGE) {
+										// shouldn't happen because we checked nearTo, but handle defensively
+										creep.advMoveTo(haulFrom.pos, pathing.workerPathing);
+										return;
+									} else if (res === OK) {
+										collectedThisRun += toTake;
+										// reduce remaining manifest counter stored in memory so further logic can observe
+										cMem.cargoRemaining = (cMem.cargoRemaining || totalNeeded) - collectedThisRun;
+										// continue to next manifest entry if free capacity remains
+									} else {
+										// handle unexpected error conservatively: log and abort this tick
+										creep.log(`Error withdrawing ${resource}: ${getReturnCode(res)}`);
+										return;
+									}
+								} // end for entries
+
+								// After attempting to pick items, go to dropoff if we collected anything or manifest is satisfied
+								if (creep.store.getUsedCapacity() > 0) {
 									cMem.enrouteToDropoff = true;
 									cMem.enrouteToPickup = false;
 								} else {
-									creep.log(`Error picking up cargo from initial haul point: ${getReturnCode(result)}`);
-									return;
-								}
-							}
-						}
-
-						// if we are set to navigate to dropoff location
-						if (cMem.enrouteToDropoff) {
-							if (!haulTo) return; // check if we are next to dropoff structure, move to it if not
-							if (!pos.isNearTo(haulTo.pos)) creep.advMoveTo(haulTo.pos, pathing.workerPathing);
-							else { // amount to deposit = amount carried,
-								const amount = creep.store[cargoType];
-								const result = creep.transfer(haulTo, cargoType, amount);
-								if (result === OK) {
-									if (cargoAmount - amount > 0) cMem.cargoRemaining -= amount;
-									else cMem.cargoRemaining = 0;
-								}
-								if (cMem.cargoRemaining > 0) {
-									cMem.enrouteToDropoff = false;
-									cMem.enrouteToPickup = true;
-								} else {
-									delete cMem.enrouteToDropoff;
-									delete cMem.enrouteToPickup;
-									delete cMem.emptyingInventory;
+									// Nothing picked up this tick (no available resources). Leave creep available for re-assignment.
 									cMem.hasTask = false;
 									cMem.availableForTasking = true;
 								}
 							}
 						}
+
+						// DROPOFF PHASE: transfer entire inventory to haulTo (deposit all carried resources)
+						if (cMem.enrouteToDropoff) {
+							if (!haulTo) return;
+							if (!pos.isNearTo(haulTo.pos)) {
+								creep.advMoveTo(haulTo.pos, pathing.workerPathing);
+								return;
+							} else {
+								// Transfer everything the creep carries (all resource types)
+								const carriedResources = Object.keys(creep.store) as ResourceConstant[];
+								for (const resource of carriedResources) {
+									const amount = creep.store[resource] ?? 0;
+									if (amount <= 0) continue;
+									const result = creep.transfer(haulTo, resource, amount);
+									if (result === ERR_NOT_IN_RANGE) {
+										creep.advMoveTo(haulTo.pos, pathing.workerPathing);
+										return;
+									} else if (result === OK) {
+										// reduce cargoRemaining by amount if we are tracking it
+										if (typeof cMem.cargoRemaining === 'number') {
+											cMem.cargoRemaining = Math.max(0, cMem.cargoRemaining - amount);
+										}
+										continue;
+									} else {
+										creep.log(`Error transferring ${resource} to dropoff: ${getReturnCode(result)}`);
+										return;
+									}
+								} // end transfer loop
+
+								// After depositing all carried inventory, clear task flags and make creep available again
+								delete cMem.enrouteToDropoff;
+								delete cMem.enrouteToPickup;
+								delete cMem.emptyingInventory;
+								cMem.hasTask = false;
+								cMem.availableForTasking = true;
+							}
+						}
+
 						break;
 					}
 					case 'build':
