@@ -133,20 +133,8 @@ function trySpawnCreep(spawn: StructureSpawn,	role: string,	memory: CreepMemory,
 function getNextRoleToSpawn(
 	room: Room,
 	spawn: StructureSpawn,
-	harvesters: Creep[],
-	fillers: Creep[],
-	haulers: Creep[],
-	upgraders: Creep[],
-	builders: Creep[],
-	repairers: Creep[],
-	reservers: Creep[],
-	harvesterTarget: number,
-	fillerTarget: number,
-	haulerTarget: number,
-	upgraderTarget: number,
-	builderTarget: number,
-	repairerTarget: number,
-	reserverTarget: number,
+	creepCount: { [key: string]: Creep[] },
+	creepTargets: { [key: string]: number },
 	harvesters_and_fillers_satisfied: boolean
 ): string | null {
 
@@ -158,15 +146,15 @@ function getNextRoleToSpawn(
 		roleConfigs = [
 			{
 				name: 'harvester',
-				count: harvesters.length,
-				target: harvesterTarget,
-				check: () => needMoreHarvesters(room, harvesters)
+				count: creepCount.harvesters.length,
+				target: creepTargets.harvesterTarget,
+				check: () => needMoreHarvesters(room, creepCount.harvesters)
 			},
 			{
 				name: 'filler',
-				count: fillers.length,
-				target: fillerTarget,
-				check: () => spawn.room.controller!.level >= 2 || harvesters.length >= harvesterTarget
+				count: creepCount.fillers.length,
+				target: creepTargets.fillerTarget,
+				check: () => spawn.room.controller!.level >= 2 || creepCount.harvesters.length >= creepTargets.harvesterTarget
 			}
 		];
 		currentIndex = (room.memory.data as any).indices.lastBootstrapRoleIndex ?? -1;
@@ -175,33 +163,48 @@ function getNextRoleToSpawn(
 		roleConfigs = [
 			{
 				name: 'hauler',
-				count: haulers.length,
-				target: haulerTarget,
+				count: creepCount.haulers.length,
+				target: creepTargets.haulerTarget,
 				check: () => spawn.room.storage || room.memory.data.haulerPairs
 			},
 			{
 				name: 'upgrader',
-				count: upgraders.length,
-				target: upgraderTarget,
+				count: creepCount.upgraders.length,
+				target: creepTargets.upgraderTarget,
 				check: () => true
 			},
 			{
 				name: 'builder',
-				count: builders.length,
-				target: builderTarget,
+				count: creepCount.builders.length,
+				target: creepTargets.builderTarget,
 				check: () => room.memory.data.numCSites > 0
 			},
 			{
 				name: 'repairer',
-				count: repairers.length,
-				target: repairerTarget,
-				check: () => true
+				count: creepCount.repairers.length,
+				target: creepTargets.repairerTarget,
+				check: () => room.find(FIND_STRUCTURES, { filter: (s) => { // Check if there are any roads or containers
+					return ((s.structureType === STRUCTURE_CONTAINER ||			 // that have less than 80% of their full health
+						s.structureType === STRUCTURE_ROAD) &&
+						s.hits / s.hitsMax > 0.80 ) }}).length > 0
 			},
 			{
 				name: 'reserver',
-				count: reservers.length,
-				target: reserverTarget,
+				count: creepCount.reservers.length,
+				target: creepTargets.reserverTarget,
 				check: () => spawn.room.energyCapacityAvailable >= 800
+			},
+			{
+				name: 'conveyor',
+				count: creepCount.conveyors.length,
+				target: creepTargets.conveyorTarget,
+				check: () => room.storage && room.linkStorage && (room.linkOne || room.linkTwo || room.linkController)
+			},
+			{
+				name: 'worker',
+				count: creepCount.workers.length,
+				target: creepTargets.workerTarget,
+				check: () => true
 			}
 		];
 		currentIndex = (room.memory.data as any).indices.lastNormalRoleIndex ?? -1;
@@ -252,6 +255,8 @@ export const legacySpawnManager = {
 		let repairerTarget: 	number = _.get(room.memory, ['quotas', 'repairers'	], 0);
 		let defenderTarget: 	number = _.get(room.memory, ['quotas', 'defenders'	], 2);
 		let reserverTarget: 	number = _.get(room.memory, ['quotas', 'reservers'	], 1);
+		let conveyorTarget:		number = _.get(room.memory, ['quotas', 'conveyors'	], 0);
+		let workerTarget: 		number = _.get(room.memory, ['quotas', 'workers'		], 0);
 
 		let remoteharvesterTarget: number = _.get(room.memory, ['quotas', 'remoteharvesters'], 2);
 
@@ -271,6 +276,8 @@ export const legacySpawnManager = {
 		let defenders: 				Creep[] = creepsByRole['defender'				] || [];
 		let reservers: 				Creep[] = creepsByRole['reserver'				] || [];
 		let remoteharvesters: Creep[] = creepsByRole['remoteharvester'] || [];
+		let conveyors:				Creep[] = creepsByRole['conveyor'				] || [];
+		let workers:					Creep[] = creepsByRole['worker'					] || [];
 
 		const totalWorkParts = _.sum(harvesters, creep =>
 			_.filter(creep.body, part => part.type === WORK).length
@@ -356,10 +363,7 @@ export const legacySpawnManager = {
 						}
 					}
 
-					// Get the next role to spawn using round-robin scheduling
-					const nextRole = getNextRoleToSpawn(
-						room,
-						spawn,
+					const creepCounts = {
 						harvesters,
 						fillers,
 						haulers,
@@ -367,6 +371,13 @@ export const legacySpawnManager = {
 						builders,
 						repairers,
 						reservers,
+						conveyors,
+						workers,
+						defenders,
+						remoteharvesters
+					}
+
+					const creepTargets = {
 						harvesterTarget,
 						fillerTarget,
 						haulerTarget,
@@ -374,6 +385,18 @@ export const legacySpawnManager = {
 						builderTarget,
 						repairerTarget,
 						reserverTarget,
+						conveyorTarget,
+						workerTarget,
+						defenderTarget,
+						remoteharvesterTarget
+					}
+
+					// Get the next role to spawn using round-robin scheduling
+					const nextRole = getNextRoleToSpawn(
+						room,
+						spawn,
+						creepCounts,
+						creepTargets,
 						harvesters_and_fillers_satisfied
 					);
 
@@ -410,6 +433,12 @@ export const legacySpawnManager = {
 								return;
 							case 'reserver':
 								trySpawnCreep(spawn, 'reserver', { role: 'reserver', RFQ: 'reserver', home: room.name, room: room.name, working: false, disable: false, rally: 'none' }, room, colName);
+								return;
+							case 'conveyor':
+								trySpawnCreep(spawn, 'conveyor', { role: 'conveyor', RFQ: 'conveyor', home: room.name, room: room.name, disable: false, rally: 'none'}, room, colName);
+								return;
+							case 'worker':
+								trySpawnCreep(spawn, 'worker', { role: 'worker', RFQ: 'worker', home: room.name, room: room.name, disable: false, rally: 'none'}, room, colName);
 								return;
 						}
 					}
