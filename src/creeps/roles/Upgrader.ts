@@ -84,17 +84,29 @@ const Upgrader = {
  * Finds the best energy source for the upgrader creep.
  * Priority: Controller container > Other containers > Dropped energy > Sources (RCL ≤ 2 only)
  */
-function findEnergySource(creep: Creep): StructureContainer | Resource | Source | null {
+function findEnergySource(creep: Creep): StructureStorage | StructureLink | StructureContainer | Resource | Source | null {
 	const room = creep.room;
 	const pos = creep.pos;
 	const rMem = room.memory;
 
+	// Priority 0: Controller link
+	if (rMem?.links?.controller) {
+		const controllerLink = room.linkController;
+		if (controllerLink)
+			return controllerLink;
+	}
 	// Priority 1: Controller container (preferred for upgraders)
 	if (rMem?.containers?.controller) {
 		const controllerContainer = Game.getObjectById(rMem.containers.controller) as StructureContainer;
 		if (controllerContainer && controllerContainer.store.getUsedCapacity(RESOURCE_ENERGY) > 0) {
 			return controllerContainer;
 		}
+	}
+
+	// Room Storage
+	if (room.storage) {
+		const storage = room.storage;
+		return storage;
 	}
 
 	// Priority 2: Other containers with energy
