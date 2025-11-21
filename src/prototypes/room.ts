@@ -1,5 +1,14 @@
 import { log, roomExitsTo, calcPath } from '@functions/utils/globals';
-import { spawn } from 'child_process';
+
+/** Gets the RoomManager instance for this room (if it exists) */
+Object.defineProperty(Room.prototype, 'manager', {
+	get: function (this: Room) {
+		if (!global.roomManagers) return undefined;
+		return global.roomManagers[this.name];
+	},
+	enumerable: false,
+	configurable: true
+});
 
 Object.defineProperty(Room.prototype, 'sources', {
 	get: function () {
@@ -15,7 +24,8 @@ Object.defineProperty(Room.prototype, 'sources', {
 		this._sources = newV;
 	},
 	enumerable: false,
-	configurable: true });
+	configurable: true
+});
 
 Object.defineProperty(Room.prototype, 'sourceOne', {
 	get: function () {
@@ -28,7 +38,8 @@ Object.defineProperty(Room.prototype, 'sourceOne', {
 		return Game.getObjectById(this._sourceOne);
 	},
 	enumerable: false,
-	configurable: true });
+	configurable: true
+});
 
 Object.defineProperty(Room.prototype, 'sourceTwo', {
 	get: function () {
@@ -44,7 +55,8 @@ Object.defineProperty(Room.prototype, 'sourceTwo', {
 		return Game.getObjectById(this._sourceTwo);
 	},
 	enumerable: false,
-	configurable: true });
+	configurable: true
+});
 
 Object.defineProperty(Room.prototype, 'containers', {
 	get: function () {
@@ -115,6 +127,75 @@ Object.defineProperty(Room.prototype, 'prestorage', {
 	configurable: true
 });
 
+Object.defineProperty(Room.prototype, 'links', {
+	get: function () {
+		if (!this._links) {
+			if (!this.memory.objects.links)
+				this.cacheObjects();
+			this._links = this.memory.objects.links.map((id: Id<StructureLink>) => Game.getObjectById(id));
+		}
+		return this._links;
+	},
+	set: function (newV) {
+		this.memory.objects.links = newV.map((link: StructureLink) => link.id);
+		this._links = newV;
+	},
+	enumerable: false,
+	configurable: true
+});
+
+Object.defineProperty(Room.prototype, 'linkOne', {
+	get: function() {
+		if (!this._linkOne) {
+			if (!this.memory.links.sourceOne)
+				return this._linkOne = null;
+			else this._linkOne = this.memory.links.sourceOne;
+		}
+		return Game.getObjectById(this._linkOne);
+	},
+	enumerable: false,
+	configurable: true
+});
+
+Object.defineProperty(Room.prototype, 'linkTwo', {
+	get: function () {
+		if (!this._linkTwo) {
+			if (!this.memory.links.sourceTwo)
+				return this._linkTwo = null;
+			else this._linkTwo = this.memory.links.sourceTwo;
+		}
+		return Game.getObjectById(this._linkTwo);
+	},
+	enumerable: false,
+	configurable: true
+});
+
+Object.defineProperty(Room.prototype, 'linkController', {
+	get: function () {
+		if (!this._linkController) {
+			if (!this.memory.links.controller)
+				return this._linkController = null;
+			else this._linkController = this.memory.links.controller;
+		}
+		return Game.getObjectById(this._linkController);
+	},
+	enumerable: false,
+	configurable: true
+});
+
+Object.defineProperty(Room.prototype, 'linkStorage', {
+	get: function () {
+		if (!this._linkStorage) {
+			if (!this.memory.links.storage)
+				return this._linkStorage = null;
+			else this._linkStorage = this.memory.links.storage;
+		}
+		return Game.getObjectById(this._linkStorage);
+	},
+	enumerable: false,
+	configurable: true
+});
+
 Room.prototype.log = function(message: string, critical: boolean = false): void {
 	if (!critical) return console.log(`${this.link()}${message}`);
 	else return console.log(`${this.link()}<span style="color: red;">${message}</span>`);
@@ -166,18 +247,28 @@ Room.prototype.cacheObjects = function () {
 	// Initialize memory structures
 	if (!this.memory.objects) this.memory.objects = {};
 	if (!this.memory.containers) this.memory.containers = { sourceOne: '', sourceTwo: '', controller: '', mineral: '', prestorage: '' };
+	if (!this.memory.links) this.memory.links = { sourceOne: '', sourceTwo: '', controller: '', storage: '' };
 
 	log('Caching room objects...', this);
 
-	// Helper function to cache objects
-	const cacheObjectArray = (objects: (RoomObject & { id: Id<any> })[], key: string, logName: string, isSingular = false) => {
+	/** Helper function to cache objects */
+	const cacheObjectArray = (objects: (RoomObject & { id: Id<any> })[], key: string, isSingular = false) => {
 		if (objects.length === 0) return;
+
+		/** Helper function's helper function to format key name for logging
+		 * @returns Potentially singularized, spaced and lowercase version of input key
+		 * @example formatLogName('powerBanks') = "power banks"
+		 */
+		const formatLogName = (key) => {
+			const slicedKey = (!isSingular) ? key.slice(0, -1) : key;
+			return slicedKey.replace(/([A-Z])/g, ' $1').toLowerCase();
+		}
 
 		const ids = objects.map(obj => obj.id);
 		this.memory.objects[key] = isSingular ? [ids[0]] : ids;
 
 		const count = isSingular ? 1 : objects.length;
-		log(`Cached ${count} ${logName}${count > 1 ? 's' : ''}.`, this);
+		log(`Cached ${count} ${formatLogName(key)}${count > 1 ? 's' : ''}.`, this);
 		return ids;
 	};
 
@@ -189,7 +280,7 @@ Room.prototype.cacheObjects = function () {
 		return a.pos.y - b.pos.y;
 	});
 	if (sources.length > 0) {
-		const sourceIDs = cacheObjectArray(sources, 'sources', 'source');
+		const sourceIDs = cacheObjectArray(sources, 'sources');
 		if (this.memory.hostColony && sourceIDs) {
 			Game.rooms[this.memory.hostColony].memory.outposts.list[this.name].sourceIDs = sourceIDs;
 		}
@@ -197,11 +288,11 @@ Room.prototype.cacheObjects = function () {
 
 	// Find and cache minerals
 	const minerals = this.find(FIND_MINERALS);
-	cacheObjectArray(minerals, 'mineral', 'mineral', true);
+	cacheObjectArray(minerals, 'mineral', true);
 
 	// Find and cache deposits
 	const deposits = this.find(FIND_DEPOSITS);
-	cacheObjectArray(deposits, 'deposit', 'deposit', true);
+	cacheObjectArray(deposits, 'deposit', true);
 
 	// Find and cache controller
 	if (this.controller) {
@@ -214,13 +305,13 @@ Room.prototype.cacheObjects = function () {
 
 	// Find structures more efficiently by type
 	const spawns = this.find(FIND_MY_SPAWNS);
-	cacheObjectArray(spawns, 'spawns', 'spawn');
+	cacheObjectArray(spawns, 'spawns');
 
 	const extensions = this.find(FIND_MY_STRUCTURES, { filter: { structureType: STRUCTURE_EXTENSION }});
-	cacheObjectArray(extensions, 'extensions', 'extension');
+	cacheObjectArray(extensions, 'extensions');
 
 	const towers = this.find(FIND_MY_STRUCTURES, { filter: { structureType: STRUCTURE_TOWER }});
-	cacheObjectArray(towers, 'towers', 'tower');
+	cacheObjectArray(towers, 'towers');
 
 	// Cache containers with position-based assignment
 	const containers = this.find(FIND_STRUCTURES, { filter: { structureType: STRUCTURE_CONTAINER }}) as StructureContainer[];
@@ -301,50 +392,104 @@ Room.prototype.cacheObjects = function () {
 
 	// Cache remaining structures
 	const storage = this.storage ? [this.storage] : [];
-	cacheObjectArray(storage, 'storage', 'storage', true);
+	cacheObjectArray(storage, 'storage', true);
 
 	const ramparts = this.find(FIND_MY_STRUCTURES, { filter: { structureType: STRUCTURE_RAMPART }});
-	cacheObjectArray(ramparts, 'ramparts', 'rampart');
+	cacheObjectArray(ramparts, 'ramparts');
 
-	const links = this.find(FIND_MY_STRUCTURES, { filter: { structureType: STRUCTURE_LINK }});
-	cacheObjectArray(links, 'links', 'link');
+	// Cache links with position-based assignment
+	const links = this.find(FIND_MY_STRUCTURES, { filter: { structureType: STRUCTURE_LINK }}) as StructureLink[];
+	if (links.length > 0) {
+		// Reset link memory
+		this.memory.links = { sourceOne: '', sourceTwo: '', controller: '', storage: '' };
+
+		// Pre-cache positions for efficient lookup
+		const sourcePositions = sources.length > 0 ? sources.map(s => ({ id: s.id, pos: s.pos })) : [];
+		const controllerPos = this.controller?.pos;
+		const storagePos = this.storage?.pos;
+
+		// Assign links based on proximity
+		for (const link of links) {
+			const pos = link.pos;
+
+			// Check if near sources (within range 3)
+			let assigned = false;
+			for (let i = 0; i < sourcePositions.length; i++) {
+				if (pos.inRangeTo(sourcePositions[i].pos, 3)) {
+					if (sourcePositions[i].id === this.memory.objects.sources?.[0])
+						this.memory.links.sourceOne = link.id;
+					else if (sourcePositions[i].id === this.memory.objects.sources?.[1])
+						this.memory.links.sourceTwo = link.id;
+					assigned = true;
+					break;
+				}
+			}
+
+			// Check if near controller (within range 3)
+			if (!assigned && controllerPos && pos.inRangeTo(controllerPos, 3)) {
+				this.memory.links.controller = link.id;
+				assigned = true;
+			}
+
+			// Check if near storage (within range 2)
+			if (!assigned && storagePos && pos.inRangeTo(storagePos, 2))
+				this.memory.links.storage = link.id;
+		}
+
+		// Build ordered link array (sourceOne, sourceTwo, controller, storage)
+		const linkIDs = links.map(l => l.id);
+		const orderedLinks: Id<StructureLink>[] = [];
+
+		if (this.memory.links.sourceOne) 	orderedLinks.push(this.memory.links.sourceOne 	as Id<StructureLink>);
+		if (this.memory.links.sourceTwo) 	orderedLinks.push(this.memory.links.sourceTwo 	as Id<StructureLink>);
+		if (this.memory.links.controller) orderedLinks.push(this.memory.links.controller 	as Id<StructureLink>);
+		if (this.memory.links.storage) 		orderedLinks.push(this.memory.links.storage 		as Id<StructureLink>);
+		// Add any remaining links not assigned to specific positions
+		for (const id of linkIDs) {
+			if (!orderedLinks.includes(id))
+				orderedLinks.push(id);
+		}
+
+		this.memory.objects.links = orderedLinks;
+		log(`Cached ${links.length} link${links.length > 1 ? 's' : ''}.`, this);
+	}
 
 	const extractor = this.find(FIND_MY_STRUCTURES, { filter: { structureType: STRUCTURE_EXTRACTOR }});
-	cacheObjectArray(extractor, 'extractor', 'extractor', true);
+	cacheObjectArray(extractor, 'extractor', true);
 
 	const labs = this.find(FIND_MY_STRUCTURES, { filter: { structureType: STRUCTURE_LAB }});
-	cacheObjectArray(labs, 'labs', 'lab');
+	cacheObjectArray(labs, 'labs');
 
 	const terminal = this.terminal ? [this.terminal] : [];
-	cacheObjectArray(terminal, 'terminal', 'terminal', true);
+	cacheObjectArray(terminal, 'terminal', true);
 
 	const factory = this.find(FIND_MY_STRUCTURES, { filter: { structureType: STRUCTURE_FACTORY }});
-	cacheObjectArray(factory, 'factory', 'factory', true);
+	cacheObjectArray(factory, 'factory', true);
 
 	const observer = this.find(FIND_MY_STRUCTURES, { filter: { structureType: STRUCTURE_OBSERVER }});
-	cacheObjectArray(observer, 'observer', 'observer', true);
+	cacheObjectArray(observer, 'observer', true);
 
 	const powerspawn = this.find(FIND_MY_STRUCTURES, { filter: { structureType: STRUCTURE_POWER_SPAWN }});
-	cacheObjectArray(powerspawn, 'powerSpawn', 'power spawn', true);
+	cacheObjectArray(powerspawn, 'powerSpawn', true);
 
 	const nuker = this.find(FIND_MY_STRUCTURES, { filter: { structureType: STRUCTURE_NUKER }});
-	cacheObjectArray(nuker, 'nuker', 'nuker', true);
+	cacheObjectArray(nuker, 'nuker', true);
 
 	// Cache hostile/neutral structures
 	const keeperlairs = this.find(FIND_STRUCTURES, { filter: { structureType: STRUCTURE_KEEPER_LAIR }});
-	cacheObjectArray(keeperlairs, 'keeperLairs', 'keeper lair');
+	cacheObjectArray(keeperlairs, 'keeperLairs');
 
 	const invadercores = this.find(FIND_HOSTILE_STRUCTURES, { filter: { structureType: STRUCTURE_INVADER_CORE }});
-	cacheObjectArray(invadercores, 'invaderCores', 'invader core');
+	cacheObjectArray(invadercores, 'invaderCores');
 
 	const powerbanks = this.find(FIND_STRUCTURES, { filter: { structureType: STRUCTURE_POWER_BANK }});
-	cacheObjectArray(powerbanks, 'powerBanks', 'power bank');
+	cacheObjectArray(powerbanks, 'powerBanks');
 
 	const portals = this.find(FIND_STRUCTURES, { filter: { structureType: STRUCTURE_PORTAL }});
-	cacheObjectArray(portals, 'portals', 'portal');
+	cacheObjectArray(portals, 'portals');
 
 	const walls = this.find(FIND_STRUCTURES, { filter: { structureType: STRUCTURE_WALL }});
-	cacheObjectArray(walls, 'walls', 'wall');
+	cacheObjectArray(walls, 'walls');
 
 	log('Caching objects for room \'' + this.name + '\' completed.', this);
 	return true;
@@ -392,13 +537,79 @@ Room.prototype.initRoom = function () {
 		catalyzedZynthiumAlkalide: 0, catalyzedGhodiumAcid: 0, catalyzedGhodiumAlkalide: 0 };
 	const labStats: LabStats = { compoundsMade: compoundStats, creepsBoosted: 0, boostsUsed: compoundStats, energySpentBoosting: 0 };
 
-	this.memory.containers = { sourceOne: '', sourceTwo: '', controller: '', mineral: '', prestorage: '' };
-	this.memory.data = { flags: { dropHarvestingEnabled: false }, indices: { lastBootstrapRoleIndex: 0, lastNormalRoleIndex: 0, haulerIndex: 0, nextHarvesterAssigned: 0 }, controllerLevel: 0, numCSites: 0, spawnEnergyLimit: 0 };
-	this.memory.settings = { visualSettings: visualSettings, repairSettings: repairSettings,	flags: {}, basePlanner: { debug: false } };
-	this.memory.outposts = { list: {}, array: [], reserverLastAssigned: 0, numSources: 0, numHarvesters: 0, counter: 0, guardCounter: 0 };
-	this.memory.stats = { energyHarvested: 0, controlPoints: 0, constructionPoints: 0, creepsSpawned: 0, creepPartsSpawned: 0,
-				mineralsHarvested: mineralsHarvested, controllerLevelReached: 0, npcInvadersKilled: 0, hostilePlayerCreepsKilled: 0, labStats: labStats };
-	this.memory.visuals = { settings: { spawnInfo: spawnInfo, roomFlags: roomFlags, progressInfo: progressInfo, displayTowerRanges: false, displayControllerUpgradeRange: false }, visDistTrans: false, visBasePlan: false, visFloodFill: false, visBuildProgress: false, visPlanInfo: false, enableVisuals: false };
+	this.memory.containers = {
+		sourceOne: '',
+		sourceTwo: '',
+		controller: '',
+		mineral: '',
+		prestorage: ''
+	};
+	this.memory.links = {
+		sourceOne: '',
+		sourceTwo: '',
+		controller: '',
+		storage: ''
+	};
+	this.memory.data = {
+		flags: {
+			dropHarvestingEnabled: false
+		},
+		indices: {
+			lastBootstrapRoleIndex: 0,
+			lastNormalRoleIndex: 0,
+			haulerIndex: 0,
+			nextHarvesterAssigned: 0
+		},
+		controllerLevel: 0,
+		numCSites: 0,
+		spawnEnergyLimit: 0
+	};
+	this.memory.settings = {
+		visualSettings: visualSettings,
+		repairSettings: repairSettings,
+		flags: {},
+		basePlanner: {
+			debug: false
+		}
+	};
+	this.memory.outposts = {
+		list: {},
+		array: [],
+		reserverLastAssigned: 0,
+		numSources: 0,
+		numHarvesters: 0,
+		counter: 0,
+		guardCounter: 0
+	};
+	this.memory.stats = {
+		energyHarvested: 0,
+		controlPoints: 0,
+		constructionPoints: 0,
+		creepsSpawned: 0,
+		creepPartsSpawned: 0,
+		controllerLevelReached: 0,
+		npcInvadersKilled: 0,
+		hostilePlayerCreepsKilled: 0,
+		mineralsHarvested: mineralsHarvested,
+		labStats: labStats };
+	this.memory.visuals = {
+		settings: {
+			spawnInfo: spawnInfo,
+			roomFlags: roomFlags,
+			progressInfo: progressInfo,
+			displayTowerRanges: false,
+			displayControllerUpgradeRange: false
+		},
+		basePlan: {
+			visDistTrans: false,
+			visBasePlan: false,
+			visFloodFill: false,
+			visPlanInfo: false,
+			buildProgress: false,
+		},
+		enableVisuals: false,
+		redAlertOverlay: true,
+	};
 	this.memory.remoteRooms = {};
 	this.cacheObjects();
 }
@@ -406,23 +617,12 @@ Room.prototype.initRoom = function () {
 
 /** Disables all BasePlanner room visuals */
 Room.prototype.toggleBasePlannerVisuals = function (): void {
-	this.memory.visuals.visDistTrans = !this.memory.visuals.visDistTrans;
-	this.memory.visuals.visFloodFill = !this.memory.visuals.visFloodFill;
-	this.memory.visuals.visBasePlan  = !this.memory.visuals.visBasePlan;
-	this.memory.visuals.visBuildProgress = !this.memory.visuals.visBuildProgress;
-	this.memory.visuals.visPlanInfo = !this.memory.visuals.visBuildProgress;
-	log(`Base Planner visuals are now set to '${this.memory.visuals.visDistTrans}'`);
+	this.memory.visuals.basePlan.visDistTrans = !this.memory.visuals.basePlan.visDistTrans;
+	this.memory.visuals.basePlan.visFloodFill = !this.memory.visuals.basePlan.visFloodFill;
+	this.memory.visuals.basePlan.visBasePlan  = !this.memory.visuals.basePlan.visBasePlan;
+	this.memory.visuals.basePlan.visPlanInfo  = !this.memory.visuals.basePlan.visPlanInfo;
+	log(`Base Planner visuals are now set to '${this.memory.visuals.basePlan.visDistTrans}'`);
 }
-
-/** Gets the RoomManager instance for this room (if it exists) */
-Object.defineProperty(Room.prototype, 'manager', {
-	get: function(this: Room) {
-		if (!global.roomManagers) return undefined;
-		return global.roomManagers[this.name];
-	},
-	enumerable: false,
-	configurable: true
-});
 
 /** Initializes room flags with default settings. Sets up various behavior flags for creeps and structures. */
 Room.prototype.initFlags = function () {
@@ -660,3 +860,4 @@ Room.prototype.setQuota = function (roleTarget: CreepRole, newTarget: number) {
 	log('Set role \'' + pluralRoleTarget + '\' quota to ' + newTarget + ' (was ' + oldTarget + ').', this);
 	return;
 }
+
