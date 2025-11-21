@@ -34,10 +34,11 @@ const Harvester = {
 
 				const sourceID: Id<Source> = cMem.source;
 
-				const isBootstrap = creep.room.memory.flags.bootstrap;
+				const isBootstrap = creep.room.memory.data.flags.bootstrappingMode;
 
+				//: DROP HARVESTING LOGIC
 				if (creep.getActiveBodyparts(CARRY) === 0) {
-						const source: Source = Game.getObjectById(sourceID)!;
+					const source: Source = Game.getObjectById(sourceID)!;
 					if (!pos.isNearTo(source)) creep.advMoveTo(source, pathing.harvesterPathing);
 					else {
 						const containers: StructureContainer[] = source.pos.findInRange(FIND_STRUCTURES, 2, { filter: { structureType: STRUCTURE_CONTAINER } });
@@ -50,8 +51,17 @@ const Harvester = {
 							}
 						} else creep.harvestEnergy();
 					}
+				//: STATIC HARVESTING LOGIC
 				} else {
-					if (creep.store.getFreeCapacity() == 0 || creep.store.getFreeCapacity() < (creep.getActiveBodyparts(WORK) * 2)) {
+					// If currently building a container, prioritize finishing it
+					if (cMem.buildingContainer) {
+						buildContainer(creep);
+						return;
+					}
+
+					//: INVENTORY IS FULL LOGIC
+					if (creep.store.getFreeCapacity() < (creep.getActiveBodyparts(WORK) * 2)) {
+						//: RETURN ENERGY LOGIC
 						if (cMem.returnEnergy === true) {
 							const spawns = creep.room.find(FIND_MY_SPAWNS);
 							if (spawns.length > 0) {
@@ -60,39 +70,53 @@ const Harvester = {
 									return;
 								}
 							}
-						} else {
-							if (isBootstrap) {
-								// Count harvesters in the room
-								const harvesterCount = creep.room.find(FIND_MY_CREEPS, {
-									filter: (c) => c.memory.role === 'harvester' && c.memory.home === creep.room.name
-								}).length;
-
-								// Once we have 4+ harvesters, focus on building containers
-								if (harvesterCount >= 4) {
-									buildContainer(creep);
-									return;
-								}
-
-								// Otherwise, haul energy to spawn/extensions
-								const spawn: StructureSpawn | StructureExtension | null = creep.pos.findClosestByRange(FIND_MY_STRUCTURES, {
-									filter: (s) =>
-										(s.structureType === STRUCTURE_SPAWN || s.structureType === STRUCTURE_EXTENSION) &&
-										s.store.getFreeCapacity(RESOURCE_ENERGY) > 0
-								});
-								if (spawn) {
-									if (creep.transfer(spawn, RESOURCE_ENERGY) === ERR_NOT_IN_RANGE) {
-										creep.advMoveTo(spawn, pathing.harvesterPathing);
+						//: BOOTSTRAP-SPECIFIC UNLOADING LOGIC
+						} else if (isBootstrap) {
+							// During bootstrap, check if fillers exist
+							const fillers = creep.room.find(FIND_MY_CREEPS, {
+								filter: (c) => c.memory.role === 'filler' && c.memory.home === creep.room.name
+							}).length >= 1;
+							console.log(`Fillers: ${fillers}`);
+							// If no fillers, return energy to spawn for early growth
+							if (!fillers) {
+								const spawns = creep.room.find(FIND_MY_SPAWNS);
+								if (spawns.length > 0) {
+									if (creep.transfer(spawns[0], RESOURCE_ENERGY) === ERR_NOT_IN_RANGE) {
+										creep.advMoveTo(spawns[0], pathing.harvesterPathing);
+										return;
 									}
-								} else buildContainer(creep);
-								return;
+								}
+							} else {
+								// Fillers exist, prioritize building containers and unloading to them
+								if (cMem.bucket && cMem.bucket !== 'none') {
+									creep.unloadEnergy(cMem.bucket);
+									creep.harvestEnergy();
+								} else {
+									const containers: StructureContainer[] = pos.findInRange(FIND_STRUCTURES, 1, { filter: (i) => i.structureType === STRUCTURE_CONTAINER }) as StructureContainer[];
+									if (containers.length) {
+										const target: StructureContainer = pos.findClosestByRange(containers)!;
+										if (target) {
+											cMem.bucket = target.id;
+											if (!pos.isEqualTo(target)) creep.advMoveTo(target, pathing.harvesterPathing);
+											else if (target.hits < target.hitsMax) creep.repair(target);
+											else {
+												creep.unloadEnergy();
+												creep.harvestEnergy();
+											}
+										}
+									} else buildContainer(creep);
+								}
 							}
-							if (cMem.bucket) {
+						//: NORMAL UNLOADING LOGIC
+						} else {
+							//: PRE-DEFINED CONTAINER FOR DUMPING
+							if (cMem.bucket && cMem.bucket !== 'none') {
 								creep.unloadEnergy(cMem.bucket);
 								creep.harvestEnergy();
+							//: LOCATE A CONTAINER FOR DUMPING
 							}	else {
 								const containers: StructureContainer[] = pos.findInRange(FIND_STRUCTURES, 1, { filter: (i) => i.structureType === STRUCTURE_CONTAINER }) as StructureContainer[];
 								if (containers.length) {
-									console.log(`Found container`);
 									const target: StructureContainer = pos.findClosestByRange(containers)!;
 									if (target) {
 										cMem.bucket = target.id;
@@ -106,6 +130,7 @@ const Harvester = {
 								} else buildContainer(creep);
 							}
 						}
+					//: EMPTY INVENTORY (HARVESTING) LOGIC
 					} else {
 						// Move to source before harvesting
 						const source = Game.getObjectById(cMem.source) as Source;
@@ -222,7 +247,8 @@ const Harvester = {
 function buildContainer(creep: Creep): void {
 	const room = creep.room;
 	const pos = creep.pos;
-	const source = Game.getObjectById(creep.memory.source) as Source;
+	const cMem = creep.memory;
+	const source = Game.getObjectById(cMem.source) as Source;
 
 	// Find best position next to source for container
 	if (source) {
@@ -241,15 +267,28 @@ function buildContainer(creep: Creep): void {
 			// Find the best position next to the source (where the harvester should stand)
 			const walkablePositions = source.pos.getWalkablePositions();
 			if (walkablePositions.length > 0) {
+
+				const pathBack = PathFinder.search(source.pos, (Game.getObjectById(room.memory.objects.spawns[0]) as StructureSpawn).pos);
+				if (walkablePositions.includes(pathBack[0])) {
+					const containerPos = pathBack[0].pos.isNearTo(source) ? pathBack[1].pos : pathBack[0].pos;
+					room.createConstructionSite(containerPos.x, containerPos.y, STRUCTURE_CONTAINER);
+					cMem.buildingContainer = true;
+					return;
+				}
 				// Place container at current position if we're next to source, otherwise pick first walkable spot
 				const containerPos = pos.isNearTo(source) ? pos : walkablePositions[0];
 				room.createConstructionSite(containerPos.x, containerPos.y, STRUCTURE_CONTAINER);
+				// Mark that we're building a container to prevent task abandonment
+				cMem.buildingContainer = true;
 			}
 		} else {
 			// Build the container site
 			const site = nearbySites[0];
 			if (creep.build(site) === ERR_NOT_IN_RANGE) {
 				creep.advMoveTo(site, pathing.harvesterPathing);
+			} else if (site.progress >= site.progressTotal) {
+				// Container is complete, clear the flag
+				cMem.buildingContainer = false;
 			}
 		}
 	}
