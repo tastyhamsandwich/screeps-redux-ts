@@ -1,4 +1,4 @@
-import { calcBodyCost, log } from "functions/utils/globals";
+import { calcBodyCost, getReturnCode, log } from "functions/utils/globals";
 import { PART_COST } from 'functions/utils/constants';
 
 const PART = {
@@ -401,6 +401,27 @@ StructureSpawn.prototype.cloneCreep = function(creepName: string): ScreepsReturn
 	return result;
 }
 
+Spawn.prototype.spawnEmergencyHarvester = function(): ScreepsReturnCode {
+	let name = 'EmergencyHarvester';
+	let counter = 1;
+	let result = this.spawnCreep([WORK,WORK,MOVE,CARRY], `${name}${counter}`, {
+		memory: { role: 'harvester', RFQ: 'eharvester', home: this.room.name,
+			room: this.room.name, disable: false, rally: 'none' }});
+
+	while (result === ERR_NAME_EXISTS) {
+		counter++;
+		result = this.spawnCreep([WORK, WORK, MOVE, CARRY], `${name}${counter}`, {
+			memory: {
+				role: 'harvester', RFQ: 'eharvester', home: this.room.name,
+				room: this.room.name, disable: false, rally: 'none'
+			}
+		});
+	}
+
+	if (result === OK) console.log(`Spawning Emergency Harvester '${name}`);
+	else console.log(`Error spawning Emergency Harvester: ${getReturnCode(result)}`);
+	return result;
+}
 Spawn.prototype.spawnFiller = function(maxEnergy: number): ScreepsReturnCode {
 
 		// Limit fillers to max cost of 300, effectively 4 CARRY and 2 MOVE parts
