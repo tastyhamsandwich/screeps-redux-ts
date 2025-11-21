@@ -101,6 +101,12 @@ module.exports.loop = function() {
 					if (!creepSuspend.all || !creepSuspend.scout)
 						CreepAI.Scout.run(creep);
 					break;
+				case 'conveyor':
+					if (!creepSuspend.all || !creepSuspend.conveyor)
+						CreepAI.Conveyor.run(creep);
+				case 'worker':
+					if (!creepSuspend.all || !creepSuspend.worker)
+						CreepAI.Worker.run(creep);
 				default:
 					break;
 			}
@@ -132,6 +138,52 @@ module.exports.loop = function() {
 			if (cSite.progress > 0) FUNC.buildProgress(cSite, room);
 		});
 
+		const hostiles: Array<Creep> = room.find(FIND_HOSTILE_CREEPS);
+		let hostileNameString = '';
+
+		// Initialize tracking in room memory if not present
+		rMem.data.hostileTracking ??= { invaderCount: 0, playerCreepCount: 0 };
+
+		// Count current hostile creeps by type
+		let currentInvaderCount = 0;
+		let currentPlayerCreepCount = 0;
+		const hostileOwners: string[] = [];
+
+		for (let i = 0; i < hostiles.length; i++) {
+			const hostileOwner: string = hostiles[i].owner.username;
+			if (!hostileOwners.includes(hostileOwner)) {
+				hostileOwners.push(hostileOwner);
+				if (!hostileNameString.length) hostileNameString = `${hostileOwner}`;
+				else hostileNameString += `, ${hostileOwner}`;
+			}
+			if (hostileOwner === 'Invader')
+				currentInvaderCount++;
+			else
+				currentPlayerCreepCount++;
+		}
+
+		// Compare current counts to previous counts to detect kills
+		if (currentInvaderCount < rMem.data.hostileTracking.invaderCount) {
+			const killed = rMem.data.hostileTracking.invaderCount - currentInvaderCount;
+			room.memory.stats.npcInvadersKilled += killed;
+		}
+
+		if (currentPlayerCreepCount < rMem.data.hostileTracking.playerCreepCount) {
+			const killed = rMem.data.hostileTracking.playerCreepCount - currentPlayerCreepCount;
+			room.memory.stats.hostilePlayerCreepsKilled += killed;
+		}
+
+		// Update tracking for next tick
+		rMem.data.hostileTracking.invaderCount = currentInvaderCount;
+		rMem.data.hostileTracking.playerCreepCount = currentPlayerCreepCount;
+
+		if (hostileOwners.length > 0) {
+			FUNC.log(`: -----------------HOSTILE CREEPS PRESENT----------------- `, room);
+			FUNC.log(`OWNED BY: ${hostileNameString}`);
+			if (room.memory.visuals.redAlertOverlay)
+				room.visual.rect(-1, -1, 51, 51, { fill: '#440000', stroke: '#ff0000', opacity: 0.2, strokeWidth: 0.2 });
+		}
+
 		//* From here, only rooms where we own the controller have this code ran
 		if (room.controller && room.controller.my) {
 			// Initialize Room Manager instances for controlled rooms
@@ -141,50 +193,9 @@ module.exports.loop = function() {
 			const RoomManagerInstance = global.roomManagers[roomName];
 			RoomManagerInstance.run();
 
-			if (room.controller.level !== room.memory.data.controllerLevel) {
-				const newLevel = room.controller.level;
-				room.memory.data.controllerLevel = newLevel;
-				if (newLevel > room.memory.stats.controllerLevelReached)
-					room.memory.stats.controllerLevelReached = newLevel;
+			if (room.controller && room.controller.level >= 1)
+				FUNC.visualRCProgress(room.controller);
 
-/* 				switch (newLevel) {
-					case 1:
-						// TODO RCL1: Handle creation of initial containers and roads
-						break;
-					case 2:
-						// TODO RCL2: Handle creation of first 5 extensions
-						break;
-					case 3:
-						// TODO RCL3: Handle creation of next 5 extensions, first tower, and potential transition to remote mining
-						rMem.quotas.reserver = 1;
-						rMem.quotas.remoteharvester = 2;
-						rMem.quotas.remotebodyguard = 1;
-						rMem.quotas.remotehauler = 2;
-						break;
-					case 4:
-						// TODO RCL4: Handle creation of storage and next 10 extensions,
-						break;
-					case 5:
-						// TODO RCL5: Handle creation of next 10 extensions, 2 links, and 2nd tower
-						break;
-					case 6:
-						// TODO RCL6: Handle creation of terminal, first 3 labs, mineral extarctor, third link, and next 10 extensions
-						break;
-					case 7:
-						// TODO RCL7: Handle creation of factory, next 3 labs, third tower, fourth link, next 10 extensions (which now hold 100 each), and second spawn
-						break;
-					case 8:
-						// TODO RCL8: Handle creation of nuker, final 4 labs, powerSpawn, observer, 3 more towers, final 2 links, third spawn, and final 10 extensions (which now all hold 200 each)
-						break;
-					default:
-						//# This should never happen
-						console.log(`Unknown Exception occured in main colony room loop!`);
-						break;
-				} */
-			}
-
-			if (room.controller.level >= 1) FUNC.visualRCProgress(room.controller);
-			if (room.memory?.visuals?.settings?.displayTowerRanges) FUNC.towerDamageOverlay(room);
 			FUNC.displayEnergyCapacity(room);
 			FUNC.displayEnergyStorage(room);
 
