@@ -7,6 +7,8 @@ import Repairer 	from "./roles/Repairer";
 import Reserver 	from "./roles/Reserver";
 import Scout 			from "./roles/Scout";
 import Upgrader 	from "./roles/Upgrader";
+import Conveyor 	from "./roles/Conveyor";
+import Worker 		from "./roles/Worker";
 
 const CreepAI = {
 	Builder,
@@ -17,7 +19,9 @@ const CreepAI = {
 	Repairer,
 	Reserver,
 	Scout,
-	Upgrader
+	Upgrader,
+	Conveyor,
+	Worker
 }
 
 export default CreepAI;
