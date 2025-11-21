@@ -33,16 +33,24 @@ const Builder = {
 
 				// Harvest phase - collect energy
 				if (!cMem.working) {
-					const energySource = findEnergySource(creep);
+					// Priority 0: Check for any piles of energy within a few tiles of location, and use the closest
+					const piles = pos.findInRange(FIND_DROPPED_RESOURCES, 3, { filter: { resourceType: RESOURCE_ENERGY } });
+					if (piles.length) {
+						const nearestPile = pos.findClosestByRange(piles);
+						if (nearestPile)
+							if (creep.pickup(nearestPile) === ERR_NOT_IN_RANGE)
+								creep.advMoveTo(nearestPile, pathing.builderPathing);
+					} else {
+						const energySource = findEnergySource(creep);
 
-					if (energySource) {
-						const result = creep.withdraw(energySource, RESOURCE_ENERGY);
-						if (result === ERR_NOT_IN_RANGE)
-							creep.advMoveTo(energySource, pathing.builderPathing);
-						else if (result === OK) {
-							// Successfully withdrew - check if we should transition to working
-							if (creep.store.getFreeCapacity(RESOURCE_ENERGY) === 0) {
-								cMem.working = true;
+						if (energySource) {
+							const result = creep.withdraw(energySource, RESOURCE_ENERGY);
+							if (result === ERR_NOT_IN_RANGE)
+								creep.advMoveTo(energySource, pathing.builderPathing);
+							else if (result === OK) {
+								// Successfully withdrew - check if we should transition to working
+								if (creep.store.getFreeCapacity(RESOURCE_ENERGY) === 0)
+									cMem.working = true;
 							}
 						}
 						// On any other error, keep trying next tick
@@ -55,14 +63,12 @@ const Builder = {
 						const nearestCSite = pos.findClosestByRange(cSites);
 						if (nearestCSite) {
 							const result = creep.build(nearestCSite);
-							if (result === ERR_NOT_IN_RANGE) {
+							if (result === ERR_NOT_IN_RANGE)
 								creep.advMoveTo(nearestCSite, pathing.builderPathing);
-							} else if (result === ERR_NOT_ENOUGH_ENERGY) {
-								// Out of energy while building - transition back to harvest
+							else if (result === ERR_NOT_ENOUGH_ENERGY)
 								cMem.working = false;
-							} else if (result === OK) {
+							else if (result === OK)
 								rMem.stats.constructionPoints += creep.getActiveBodyparts(WORK) * 5;
-							}
 						}
 					} else {
 						// No construction sites - upgrade controller instead
@@ -84,10 +90,16 @@ const Builder = {
  * Finds the best energy source for the builder creep.
  * Priority: Storage (if sufficient) > Containers
  */
-function findEnergySource(creep: Creep): StructureStorage | StructureContainer | null {
+function findEnergySource(creep: Creep): StructureStorage | StructureContainer | null | Ruin {
 	const room = creep.room;
 	const pos = creep.pos;
 
+	const ruins = pos.findInRange(FIND_RUINS, 3, { filter: (s) => { s.store[RESOURCE_ENERGY] > 0 }});
+	if (ruins.length) {
+		const nearestRuin = pos.findClosestByRange(ruins);
+		if (nearestRuin)
+			return nearestRuin;
+	}
 	// Priority 1: Storage (if it has enough energy to justify using it)
 	if (room.storage && room.storage.store.getUsedCapacity(RESOURCE_ENERGY) > (creep.store.getCapacity() + 1000)) {
 		return room.storage;
@@ -96,7 +108,7 @@ function findEnergySource(creep: Creep): StructureStorage | StructureContainer |
 	// Priority 2: Containers with energy
 	const containers = room.find(FIND_STRUCTURES, {
 		filter: (s) => s.structureType === STRUCTURE_CONTAINER
-			&& (s as StructureContainer).store.getUsedCapacity(RESOURCE_ENERGY) > 0
+			&& (s as StructureContainer).store.getUsedCapacity(RESOURCE_ENERGY) >= creep.store.getCapacity()
 	}) as StructureContainer[];
 
 	if (containers.length > 0) {

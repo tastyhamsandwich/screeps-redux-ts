@@ -120,7 +120,7 @@ function findEnergySource(creep: Creep): Tombstone | Resource | Ruin | AnyStoreS
 	}
 
 	// Priority 5: Prestorage Container (if built)
-	if (room.memory?.containers?.prestorage)
+	if (room.prestorage && room.prestorage.store.getUsedCapacity(RESOURCE_ENERGY) >= creep.store.getCapacity())
 		return Game.getObjectById(room.memory.containers.prestorage);
 
 	// Priority 6: Containers (with null safety)
