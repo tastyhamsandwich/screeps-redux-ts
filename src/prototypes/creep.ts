@@ -88,25 +88,20 @@ Creep.prototype.advGet = function (target: Source | Id<Source> | Mineral | Id<Mi
 	return result;
 }
 
-Creep.prototype.advGet = function (target: Source | Id<Source> | Mineral | Id<Mineral> | Deposit | Id<Deposit> | AnyStoreStructure | Resource | Tombstone | Ruin | Id<AnyStoreStructure> | Id<Resource> | Id<Tombstone> | Id<Ruin>, pathing?: MoveToOpts, resource?: ResourceConstant, canTravel?: boolean): ScreepsReturnCode {
+Creep.prototype.advGet = function (target: Source | Mineral | Deposit | AnyStoreStructure | Resource | Tombstone | Ruin , pathing?: MoveToOpts, resource?: ResourceConstant, canTravel?: boolean): ScreepsReturnCode {
 
 	let finalTarget;
 	if (canTravel === undefined)
 		canTravel = true;
 
-	if (typeof target === 'string') {
-		finalTarget = Game.getObjectById(finalTarget);
-
-		if (!finalTarget) return ERR_INVALID_TARGET;
-	}
-
 	if (!resource) {
-		if (finalTarget instanceof StructureContainer || finalTarget instanceof StructureStorage || finalTarget instanceof StructureLink || finalTarget instanceof StructureLab || finalTarget instanceof Tombstone || finalTarget instanceof Ruin) {
+		if (finalTarget instanceof StructureContainer || finalTarget instanceof StructureStorage || finalTarget instanceof StructureLink || finalTarget instanceof StructureLab || finalTarget instanceof StructureTower || finalTarget instanceof Tombstone || finalTarget instanceof Ruin) {
 			const finalTargetResources = Object.keys(finalTarget.store) as ResourceConstant[];
 			resource = finalTargetResources[0];
 		} else if (finalTarget instanceof Resource) {
 			resource = finalTarget.resourceType;
 		} else {
+			this.log(`Error: Invalid args`);
 			return ERR_INVALID_ARGS;
 		}
 	}

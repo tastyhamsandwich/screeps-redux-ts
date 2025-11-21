@@ -34,27 +34,27 @@ export default class RoomPlanningVisualizer {
 		const visuals = this.room.memory.visuals || {};
 
 		// Layer 1: Distance Transform
-		if (visuals.visDistTrans && distanceTransform) {
+		if (visuals.basePlan.visDistTrans && distanceTransform) {
 			this.drawDistanceTransform(distanceTransform);
 		}
 
 		// Layer 2: Flood Fill
-		if (visuals.visFloodFill && floodFill) {
+		if (visuals.basePlan.visFloodFill && floodFill) {
 			this.drawFloodFill(floodFill);
 		}
 
 		// Layer 3: Base Layout
-		if (visuals.visBasePlan && basePlan) {
+		if (visuals.basePlan.visBasePlan && basePlan) {
 			this.drawBasePlan(basePlan);
 		}
 
 		// Layer 4: Planning Info
-		if (visuals.visPlanInfo) {
+		if (visuals.basePlan.visPlanInfo) {
 			this.drawPlanningInfo(basePlan);
 		}
 
 		// Layer 5: Build Progress
-		if (visuals.visBuildProgress && basePlan) {
+		if (visuals.basePlan.buildProgress && basePlan) {
 			this.drawBuildProgress(basePlan);
 		}
 	}
@@ -732,13 +732,21 @@ export default class RoomPlanningVisualizer {
 	 * @author randomencounter
 	 */
 	public static toggleLayer(room: Room, layer: string): void {
-		if (!room.memory.visuals)
-			room.memory.visuals = {};
+		if (!room.memory.visuals.basePlan)
+			room.memory.visuals = {
+				basePlan: {
+					visDistTrans: false,
+					visBasePlan: false,
+					visFloodFill: false,
+					visPlanInfo: false
+				},
+				enableVisuals: false,
+			};
 
 		const key = `vis${layer}`;
-		(room.memory.visuals as Record<string, boolean>)[key] = !room.memory.visuals[key];
+		(room.memory.visuals.basePlan as Record<string, boolean>)[key] = !room.memory.visuals[key];
 
-		console.log(`[${room.name}] Visualization '${layer}' is now ${room.memory.visuals[key] ? 'ON' : 'OFF'}`);
+		console.log(`[${room.name}] Visualization '${layer}' is now ${room.memory.visuals.basePlan[key] ? 'ON' : 'OFF'}`);
 	}
 
 	/**
@@ -747,14 +755,14 @@ export default class RoomPlanningVisualizer {
 	 * @author randomencounter
 	 */
 	public static enableAll(room: Room): void {
-		if (!room.memory.visuals)
-			room.memory.visuals = {};
+		if (!room.memory.visuals.basePlan)
+			room.memory.visuals.basePlan = {};
 
-		room.memory.visuals.visDistTrans = true;
-		room.memory.visuals.visFloodFill = true;
-		room.memory.visuals.visBasePlan = true;
-		room.memory.visuals.visPlanInfo = true;
-		room.memory.visuals.visBuildProgress = true;
+		room.memory.visuals.basePlan.visDistTrans = true;
+		room.memory.visuals.basePlan.visFloodFill = true;
+		room.memory.visuals.basePlan.visBasePlan = true;
+		room.memory.visuals.basePlan.visPlanInfo = true;
+		room.memory.visuals.basePlan.buildProgress = true;
 
 		console.log(`[${room.name}] All visualizations enabled`);
 	}
@@ -765,14 +773,14 @@ export default class RoomPlanningVisualizer {
 	 * @author randomencounter
 	 */
 	public static disableAll(room: Room): void {
-		if (!room.memory.visuals)
-			room.memory.visuals = {};
+		if (!room.memory.visuals.basePlan)
+			room.memory.visuals.basePlan = {};
 
-		room.memory.visuals.visDistTrans = false;
-		room.memory.visuals.visFloodFill = false;
-		room.memory.visuals.visBasePlan = false;
-		room.memory.visuals.visPlanInfo = false;
-		room.memory.visuals.visBuildProgress = false;
+		room.memory.visuals.basePlan.visDistTrans = false;
+		room.memory.visuals.basePlan.visFloodFill = false;
+		room.memory.visuals.basePlan.visBasePlan = false;
+		room.memory.visuals.basePlan.visPlanInfo = false;
+		room.memory.visuals.basePlan.buildProgress = false;
 
 		console.log(`[${room.name}] All visualizations disabled`);
 	}
@@ -785,7 +793,7 @@ interface RoomMemory {
 		visFloodFill?: boolean;
 		visBasePlan?: boolean;
 		visPlanInfo?: boolean;
-		visBuildProgress?: boolean;
+		buildProgress?: boolean;
 		[key: string]: any;
 	};
 	[key: string]: any;
@@ -848,12 +856,12 @@ global.RoomVis = {
 		}
 
 		const visuals = room.memory.visuals || {};
-		console.log(`[${roomName}] Visualization Status:`);
-		console.log(`  Distance Transform: ${visuals.visDistTrans ? 'ON' : 'OFF'}`);
-		console.log(`  Flood Fill: ${visuals.visFloodFill ? 'ON' : 'OFF'}`);
-		console.log(`  Base Plan: ${visuals.visBasePlan ? 'ON' : 'OFF'}`);
-		console.log(`  Plan Info: ${visuals.visPlanInfo ? 'ON' : 'OFF'}`);
-		console.log(`  Build Progress: ${visuals.visBuildProgress ? 'ON' : 'OFF'}`);
+		room.log(`[${roomName}] Visualization Status:`);
+		room.log(`  Distance Transform: ${visuals.basePlan.visDistTrans ? 'ON' : 'OFF'}`);
+		room.log(`  Flood Fill: ${visuals.basePlan.visFloodFill ? 'ON' : 'OFF'}`);
+		room.log(`  Base Plan: ${visuals.basePlan.visBasePlan ? 'ON' : 'OFF'}`);
+		room.log(`  Plan Info: ${visuals.basePlan.visPlanInfo ? 'ON' : 'OFF'}`);
+		room.log(`  Build Progress: ${visuals.basePlan.buildProgress ? 'ON' : 'OFF'}`);
 	}
 };
 

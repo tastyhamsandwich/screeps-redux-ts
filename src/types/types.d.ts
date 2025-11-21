@@ -62,6 +62,12 @@ namespace NodeJS {
 			controller: string;
 			prestorage: string;
 		};
+		links: {
+			sourceOne: string;
+			sourceTwo: string;
+			controller: string;
+			storage: string;
+		};
 		settings: RoomSettings;
 		data: { [key: string]: any };
 		stats: ColonyStats;
@@ -80,6 +86,10 @@ namespace NodeJS {
 		hostColony?: string;
 		remoteSources?: { [key: string]: RemoteSourceData };
 		flags: RoomFlags;
+		hostileTracking: {
+			invaderCount: number;
+			playerCreepCount: number;
+		};
 		spawnManager: {
 			queue: SpawnRequest[];
 			scheduled: ScheduledSpawn[];
@@ -101,12 +111,15 @@ namespace NodeJS {
 		};
 		visuals: {
 			settings?: { [key: string]: any };
-			enableVisuals?: boolean;
-			visDistTrans?: boolean;
-			visFloodFill?: boolean;
-			visBasePlan?: boolean;
-			visPlanInfo?: boolean;
-			visBuildProgress?: boolean;
+			enableVisuals: boolean;
+			basePlan: {
+				visDistTrans?: boolean;
+				visFloodFill?: boolean;
+				visBasePlan?: boolean;
+				visPlanInfo?: boolean;
+				buildProgress?: boolean;
+			};
+			redAlertOverlay?: boolean;
 			showPlanning?: boolean;
 		};
 	}
@@ -146,6 +159,11 @@ namespace NodeJS {
 		containerTwo: StructureContainer;
 		containerController: StructureContainer;
 		prestorage: StructureContainer;
+		links: Id<StructureLink>[];
+		linkOne: StructureLink;
+		linkTwo: StructureLink;
+		linkController: StructureLink;
+		linkStorage: StructureLink;
 	}
 
 	interface Creep {
@@ -173,6 +191,7 @@ namespace NodeJS {
 		spawnScout(rally: string | string[], swampScout: boolean, memory: { [key: string]: any }): ScreepsReturnCode;
 		retryPending(): ScreepsReturnCode;
 		cloneCreep(creepName: string): ScreepsReturnCode;
+		spawnEmergencyHarvester(): ScreepsReturnCode;
 		spawnFiller(maxEnergy: number): ScreepsReturnCode;
 	}
 
@@ -381,7 +400,7 @@ namespace NodeJS {
 
 	//# OTHER/GENERAL TYPEDEFS
 	type alignment = 'left' | 'right' | 'center';
-	type CreepRole = "harvester" | "upgrader" | "builder" | "repairer" | "defender" | "filler" | "hauler" | "remoteharvester" | "reserver" | "scout"
+	type CreepRole = "harvester" | "upgrader" | "builder" | "repairer" | "defender" | "filler" | "hauler" | "remoteharvester" | "reserver" | "scout" | "conveyor" | "worker"
 	type RoomName = `${'W' | 'E'}${number}${'N' | 'S'}${number}`;
 
 	//# ROOM MANAGER INTERFACES
@@ -564,6 +583,14 @@ namespace NodeJS {
 		dropoffTarget: Id<AnyStoreStructure>;
 		cargoManifest: CargoManifest;
 	}
+
+	//# CUSTOM RETURN CODES
+	const enum CUSTOM_RETURN_CODES {
+		OK_BUT_INCOMPLETE = 100,
+		STILL_IN_PROGRESS = 101,
+	}
+
+	type ExtendedReturnCode = ScreepsReturnCode | CUSTOM_RETURN_CODES;
 
 }
 

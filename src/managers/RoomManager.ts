@@ -6,6 +6,7 @@ import { legacySpawnManager } from './room/utils';
 import { calcPathLength, log, getReturnCode, calcPath } from '../functions/utils/globals';
 import { determineBodyParts } from '../functions/creep/body';
 import RoomPlanningVisualizer from '@modules/PlanVisualizer';
+import * as FUNC from '@functions/index';
 
 /** Manages all logic and operations for a single room. */
 export default class RoomManager {
@@ -29,11 +30,27 @@ export default class RoomManager {
 		this.planVisualizer = new RoomPlanningVisualizer(room);
 
 		// Initialize all required room memory structures
+		this.initializeMemory(); // Partial initialization - other settings added as needed
+	}
+
+	private initializeMemory() {
 		if (!this.room.memory.data) this.room.memory.data = {};
 		if (!this.room.memory.data.flags) this.room.memory.data.flags = {};
 		if (!this.room.memory.data.indices) this.room.memory.data.indices = {};
-		if (!this.room.memory.flags) this.room.memory.flags = {};
-		if (!this.room.memory.visuals) this.room.memory.visuals = {};
+		if (!this.room.memory.visuals)
+			this.room.memory.visuals = {
+				settings: {},
+				basePlan: {
+					visDistTrans: false,
+					visBasePlan: false,
+					visFloodFill: false,
+					visPlanInfo: false,
+					buildProgress: false
+				},
+				enableVisuals: false,
+				redAlertOverlay: true,
+				showPlanning: false
+			};
 		if (!this.room.memory.quotas) this.room.memory.quotas = {};
 		if (!this.room.memory.objects) this.room.memory.objects = {};
 		if (!this.room.memory.containers) this.room.memory.containers = {} as any;
@@ -41,14 +58,34 @@ export default class RoomManager {
 		if (!this.room.memory.settings)
 			this.room.memory.settings = {
 				basePlanning: { debug: false }
-			} as any; // Partial initialization - other settings added as needed
+			} as any;
 	}
 
 	/** Main run method - called every tick */
 	run(): void {
 
-		const roomMem = this.room.memory;
-		let rmData = roomMem.data;
+		const room = this.room;
+		const roomMem = room.memory;
+		roomMem.data ??= { flags: {}, indices: {} };
+		const rmData = roomMem.data;
+
+		if (!rmData.flags.initialized) {
+			rmData.flags.advSpawnSystem = false;
+			Memory.globalData.numColonies++;
+			this.room.initRoom();
+			rmData.flags.initialized ??= true;
+			this.room.log(`First Time Room Initialization Complete!`);
+		}
+
+		if (room.controller && room.controller.level !== room.memory.data.controllerLevel) {
+			const newLevel = room.controller.level;
+			room.memory.data.controllerLevel = newLevel;
+			this.stats.controllerLevel = newLevel;
+			if (newLevel > room.memory.stats.controllerLevelReached)
+				room.memory.stats.controllerLevelReached = newLevel;
+		}
+
+		if (room.memory?.visuals?.settings?.displayTowerRanges) FUNC.towerDamageOverlay(room);
 
 		// Update resources and stats (throttled to every 10 ticks for performance)
 		if (!rmData.lastResourceScan || Game.time - rmData.lastResourceScan >= 10) {
@@ -57,15 +94,8 @@ export default class RoomManager {
 			rmData.lastResourceScan = Game.time;
 		}
 
-		if (rmData.flags.firstTimeInit === undefined || rmData.flags.firstTimeInit === false) {
-			rmData.flags.advSpawnSystem = false;
-			Memory.globalData.numColonies++;
-			this.room.initRoom();
-			// Re-assign rmData after initRoom() replaces memory.data
-			rmData = this.room.memory.data;
-			rmData.flags.firstTimeInit = true;
-			console.log(`${this.room.link()} First Time Room Initialization Complete!`);
-		}
+		if (this.room.linkStorage && this.room.linkController && this.room.storage && !this.room.memory.quotas.conveyor)
+			this.room.setQuota('conveyor', 1);
 
 		// Assess need for bootstrapping mode
 		this.updateBootstrapState();
@@ -76,10 +106,10 @@ export default class RoomManager {
 
 		// Initialize visual settings if needed
 		if (!rmData.flags.basePlanGenerated) {
-			if (!this.room.memory.visuals) this.room.memory.visuals = {};
-			this.room.memory.visuals.visDistTrans ??= true;
-			this.room.memory.visuals.visFloodFill ??= true;
-			this.room.memory.visuals.visBasePlan ??= true;
+			if (!this.room.memory.visuals.basePlan) this.room.memory.visuals.basePlan = {};
+			this.room.memory.visuals.basePlan.visDistTrans ??= true;
+			this.room.memory.visuals.basePlan.visFloodFill ??= true;
+			this.room.memory.visuals.basePlan.visBasePlan ??= true;
 			rmData.flags.basePlanGenerated = true;
 		}
 
@@ -154,7 +184,7 @@ export default class RoomManager {
 		const creepCount = this.room.find(FIND_MY_CREEPS).length;
 
 		if (!this.room.memory.flags) this.room.memory.flags = {};
-		this.room.memory.flags.bootstrap = (level === 1 && creepCount < 5 && !hasContainer);
+		this.room.memory.data.flags.bootstrappingMode = (level === 1 && creepCount < 5 && !hasContainer);
 	}
 
 	/** Scans the room for all relevant structures and resources */
@@ -182,11 +212,11 @@ export default class RoomManager {
 
 	/** Toggle base planner visuals */
 	public togglePlanVisuals(): void {
-		if (!this.room.memory.visuals) this.room.memory.visuals = {};
-		const current = this.room.memory.visuals.visBasePlan ?? false;
-		this.room.memory.visuals.visBasePlan = !current;
-		this.room.memory.visuals.visDistTrans = !current;
-		this.room.memory.visuals.visFloodFill = !current;
+		if (!this.room.memory.visuals.basePlan) this.room.memory.visuals.basePlan = {};
+		const current = this.room.memory.visuals.basePlan.visBasePlan ?? false;
+		this.room.memory.visuals.basePlan.visBasePlan = !current;
+		this.room.memory.visuals.basePlan.visDistTrans = !current;
+		this.room.memory.visuals.basePlan.visFloodFill = !current;
 		console.log(`${this.room.link()} Base planner visuals ${!current ? 'enabled' : 'disabled'}`);
 	}
 
@@ -1174,15 +1204,15 @@ export default class RoomManager {
 	private drawPlannerVisuals(): void {
 		const vis = new RoomVisual(this.room.name);
 
-		if (this.room.memory.visuals.visDistTrans && this.basePlanner?.dtGrid) {
+		if (this.room.memory.visuals.basePlan.visDistTrans && this.basePlanner?.dtGrid) {
 			this.drawDistanceTransform(vis, this.basePlanner.dtGrid);
 		}
 
-		if (this.room.memory.visuals.visFloodFill && this.basePlanner?.floodGrid) {
+		if (this.room.memory.visuals.basePlan.visFloodFill && this.basePlanner?.floodGrid) {
 			this.drawFloodFill(vis, this.basePlanner.floodGrid);
 		}
 
-		if (this.room.memory.visuals.visBasePlan && this.basePlan) {
+		if (this.room.memory.visuals.basePlan.visBasePlan && this.basePlan) {
 			this.drawBaseLayout(vis, this.basePlan);
 		}
 	}

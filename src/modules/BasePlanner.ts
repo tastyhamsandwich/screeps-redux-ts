@@ -374,101 +374,81 @@ export default class BasePlanner {
 
 	/**
 	 * Step 4: Designate controller upgrade area
-	 * Finds a 3x3 area within range 3 of controller for upgrade container and workspace
-	 * Prioritizes positions between core and controller for better road connectivity
+	 * Uses pathfinding to find optimal position between controller and core
+	 * Searches along the path from controller to core center, finding positions with all 8 surrounding
+	 * tiles walkable and within range 3 of controller. Falls back to requiring only 7, 6, etc. positions
+	 * if necessary to guarantee a solution.
 	 * @author randomencounter
 	 */
 	private designateControllerArea(): void {
 		const controller = this.room.controller;
 		if (!controller || !this.startPos) return;
 
-		// Find 3x3 area near core that's within range 3 of controller
-		let bestArea: RoomPosition | null = null;
-		let bestScore = -Infinity;
+		// Create path from controller to core center
+		const path = controller.pos.findPathTo(this.startPos, {
+			ignoreCreeps: true,
+			ignoreRoads: true
+		});
 
-		// Search in an expanding area, prioritizing positions closer to core
-		const searchRanges = [6, 8, 10];
+		// Try progressively relaxed walkability requirements: 8 down to 1 surrounding positions
+		for (let requiredWalkable = 8; requiredWalkable >= 1; requiredWalkable--) {
+			// Iterate through path steps from controller toward core
+			for (const step of path) {
+				const centerPos = new RoomPosition(step.x, step.y, this.room.name);
+				const positions: RoomPosition[] = [];
+				let walkableCount = 0;
+				let inRangeCount = 0;
 
-		for (const searchRange of searchRanges) {
-			if (bestArea) break; // Found a good position, stop searching
+				// Check all 8 surrounding positions (excluding center)
+				for (let dx = -1; dx <= 1; dx++) {
+					for (let dy = -1; dy <= 1; dy++) {
+						if (dx === 0 && dy === 0) continue; // Skip center position
 
-			for (let x = this.startPos.x - searchRange; x <= this.startPos.x + searchRange; x++) {
-				for (let y = this.startPos.y - searchRange; y <= this.startPos.y + searchRange; y++) {
-					if (x < 2 || x > 47 || y < 2 || y > 47) continue;
+						const x = centerPos.x + dx;
+						const y = centerPos.y + dy;
 
-					const center = new RoomPosition(x, y, this.room.name);
+						// Check bounds
+						if (x < 1 || x > 48 || y < 1 || y > 48) continue;
 
-					// Check if all 9 positions are valid and within range 3 of controller
-					let validArea = true;
-					const positions: RoomPosition[] = [];
+						// Check terrain
+						if (this.terrain.get(x, y) === TERRAIN_MASK_WALL) continue;
 
-					for (let dx = -1; dx <= 1; dx++) {
-						for (let dy = -1; dy <= 1; dy++) {
-							const px = x + dx;
-							const py = y + dy;
-							const pos = new RoomPosition(px, py, this.room.name);
+						const pos = new RoomPosition(x, y, this.room.name);
+						walkableCount++;
+						positions.push(pos);
 
-							if (pos.getRangeTo(controller) > 3) {
-								validArea = false;
-								break;
-							}
-
-							if (this.terrain.get(px, py) === TERRAIN_MASK_WALL) {
-								validArea = false;
-								break;
-							}
-
-							positions.push(pos);
-						}
-						if (!validArea) break;
-					}
-
-					if (validArea) {
-						// Score based on multiple factors:
-						let score = 0;
-
-						// Primary: Proximity to core (closer is better for road efficiency)
-						const coreDistance = center.getRangeTo(this.startPos);
-						score += (20 - coreDistance) * 10;
-
-						// Secondary: Distance to controller (too close may block paths)
-						const controllerDistance = center.getRangeTo(controller);
-						if (controllerDistance <= 2) {
-							score += (3 - controllerDistance) * 5; // Slightly prefer closer but not adjacent
-						} else {
-							score -= 50; // Strong penalty if too far
-						}
-
-						// Tertiary: Prefer positions on the path from core toward controller
-						// Calculate if position is roughly between core and controller
-						const coreToCtrllr = controller.pos.x - this.startPos.x + (controller.pos.y - this.startPos.y);
-						const coreToArea = center.x - this.startPos.x + (center.y - this.startPos.y);
-						if (coreToArea > 0 && coreToArea < coreToCtrllr) {
-							score += 15; // Bonus for being on the path
-						}
-
-						if (score > bestScore) {
-							bestScore = score;
-							bestArea = center;
-							this.controllerUpgradeArea = positions;
+						// Check if within range 3 of controller
+						if (pos.getRangeTo(controller) <= 3) {
+							inRangeCount++;
 						}
 					}
+				}
+
+				// Accept this position if we have enough walkable tiles AND all are in range 3
+				if (walkableCount >= requiredWalkable && inRangeCount === walkableCount) {
+					this.controllerUpgradeArea = positions;
+
+					// Place container one tile to the left of center (will be upgraded to link later at RCL 5)
+					const key = `${centerPos.x - 1},${centerPos.y}`;
+					this.structurePlacements.set(key + '_container', {
+						pos: { x: centerPos.x - 1, y: centerPos.y },
+						structure: STRUCTURE_CONTAINER,
+						priority: 1,
+						meta: { type: 'controller', upgradeTo: STRUCTURE_LINK }
+					});
+
+					console.log(`${this.room.link()} Controller area designated at ${centerPos} with ${positions.length} walkable surrounding positions`);
+					return;
+				}
+
+				// If we've gone past range 3 of controller, no point continuing with this requirement level
+				if (inRangeCount === 0) {
+					break; // Exit inner loop, try next requirement level
 				}
 			}
 		}
 
-		if (bestArea) {
-			// Place container at center (will be upgraded to link later at RCL 5)
-			const key = `${bestArea.x},${bestArea.y}`;
-			this.structurePlacements.set(key + '_container', {
-				pos: { x: bestArea.x, y: bestArea.y },
-				structure: STRUCTURE_CONTAINER,
-				priority: 1,
-				meta: { type: 'controller', upgradeTo: STRUCTURE_LINK }
-			});
-
-			console.log(`${this.room.link()} Controller area designated at ${bestArea} (range to controller: ${bestArea.getRangeTo(controller)}, to core: ${bestArea.getRangeTo(this.startPos)})`);
-		}
+		console.log(`${this.room.link()} Warning: Could not find suitable controller area`);
 	}
 
 	/**
@@ -1239,16 +1219,16 @@ export default class BasePlanner {
 		// Handle storage location with container placeholder
 		const storage = this.getPlacementByType(STRUCTURE_STORAGE);
 		if (storage) {
-			// Place container at storage location for RCL 1-3
+			// Place container one tile to the right of storage location for RCL 1-3
 			const containerPlacement: StructurePlacement = {
-				pos: storage.pos,
+				pos: { x: storage.pos.x + 1, y: storage.pos.y },
 				structure: STRUCTURE_CONTAINER,
 				priority: 0,
 				meta: { type: 'storage_placeholder' }
 			};
 
 			// Add to RCL 1 if not already there
-			if (!schedule[1].some(p => p.pos.x === storage.pos.x && p.pos.y === storage.pos.y)) {
+			if (!schedule[1].some(p => p.pos.x === storage.pos.x + 1 && p.pos.y === storage.pos.y)) {
 				schedule[1].push(containerPlacement);
 			}
 		}
@@ -1415,17 +1395,17 @@ export default class BasePlanner {
 			const visual = new RoomVisual(this.room.name);
 
 			// Draw distance transform
-			if (this.room.memory.visuals.visDistTrans && this.dtGrid) {
+			if (this.room.memory.visuals.basePlan.visDistTrans && this.dtGrid) {
 				this.drawDistanceTransform(visual);
 			}
 
 			// Draw flood fill
-			if (this.room.memory.visuals.visFloodFill && this.floodGrid) {
+			if (this.room.memory.visuals.basePlan.visFloodFill && this.floodGrid) {
 				this.drawFloodFill(visual);
 			}
 
 			// Draw base layout
-			if (this.room.memory.visuals.visBasePlan) {
+			if (this.room.memory.visuals.basePlan.visBasePlan) {
 				this.drawBaseLayout(visual);
 			}
 		}
