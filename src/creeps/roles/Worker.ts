@@ -1,3 +1,5 @@
+//const profiler = require('screeps-profiler');
+
 import { aiAlert, navRallyPoint } from '../common';
 import { pathing } from '@constants';
 import { getReturnCode } from '@globals';
@@ -195,5 +197,7 @@ const Worker = {
 		}
 	}
 }
+
+//profiler.registerObject(Worker, 'CreepWorker');
 
 export default Worker;

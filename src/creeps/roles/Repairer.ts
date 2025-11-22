@@ -1,3 +1,5 @@
+//const profiler = require('screeps-profiler');
+
 import { aiAlert, navRallyPoint, upgraderBehavior } from '../common';
 import { pathing } from '@constants';
 import { repairProgress } from '@funcs/visual';
@@ -181,5 +183,7 @@ function findRepairableStructures(room: Room): AnyStructure[] {
 
 	return allSites;
 }
+
+//profiler.registerObject(Repairer, 'CreepRepairer');
 
 export default Repairer;

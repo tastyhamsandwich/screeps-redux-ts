@@ -1,6 +1,7 @@
+//const profiler = require('screeps-profiler');
+
 import { aiAlert, navRallyPoint } from '../common';
 import { pathing } from '@constants';
-import { log } from '@globals';
 
 const Reserver = {
 	run: (creep: Creep) => {
@@ -42,5 +43,7 @@ const Reserver = {
 		}
 	}
 }
+
+//profiler.registerObject(Reserver, 'CreepReserver');
 
 export default Reserver;

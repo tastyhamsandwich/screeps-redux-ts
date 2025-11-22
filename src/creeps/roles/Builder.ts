@@ -1,3 +1,5 @@
+//const profiler = require('screeps-profiler');
+
 import { aiAlert, navRallyPoint, upgraderBehavior } from "../common";
 import { pathing } from "@constants";
 
@@ -58,10 +60,20 @@ const Builder = {
 				}
 				// Build phase - construct or upgrade
 				else {
+					if (cMem.buildTarget) {
+						const target: ConstructionSite | null = Game.getObjectById(cMem.buildTarget as Id<ConstructionSite>);
+						if (target) {
+							if (creep.build(target) === ERR_NOT_IN_RANGE) {
+								creep.advMoveTo(target, pathing.builderPathing);
+								return;
+							}
+						} else delete cMem.buildTarget;
+					}
 					const cSites = room.find(FIND_CONSTRUCTION_SITES);
 					if (cSites.length > 0) {
 						const nearestCSite = pos.findClosestByRange(cSites);
 						if (nearestCSite) {
+							cMem.buildTarget = nearestCSite.id;
 							const result = creep.build(nearestCSite);
 							if (result === ERR_NOT_IN_RANGE)
 								creep.advMoveTo(nearestCSite, pathing.builderPathing);
@@ -121,5 +133,7 @@ function findEnergySource(creep: Creep): StructureStorage | StructureContainer |
 
 	return null;
 }
+
+//profiler.registerObject(Builder, 'CreepBuilder');
 
 export default Builder;

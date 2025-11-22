@@ -1,3 +1,5 @@
+//const profiler = require('screeps-profiler');
+
 import { aiAlert, navRallyPoint } from '../common';
 import { pathing } from '@constants';
 
@@ -34,5 +36,7 @@ const Scout = {
 		}
 	}
 }
+
+//profiler.registerObject(Scout, 'CreepScout');
 
 export default Scout;

@@ -1,3 +1,5 @@
+//const profiler = require('screeps-profiler');
+
 import { aiAlert, navRallyPoint, exitMortalCoil } from '../common';
 import { pathing } from '@constants';
 
@@ -70,5 +72,7 @@ const Defender = {
 		} else aiAlert(creep);
 	}
 }
+
+//profiler.registerObject(Defender, 'CreepDefender');
 
 export default Defender;

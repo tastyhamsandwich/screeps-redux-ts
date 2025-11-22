@@ -1,3 +1,5 @@
+//const profiler = require('screeps-profiler');
+
 import { assign } from 'lodash';
 import { aiAlert, navRallyPoint } from '../common';
 import { pathing } from '@constants';
@@ -88,5 +90,7 @@ function assignHaulRoute(creep: Creep): void {
 	// Advance index for the next hauler (wraps to zero automatically)
 	creep.room.memory.data.indices.haulerIndex = (idx + 1) % routeArray.length;
 }
+
+//profiler.registerObject(Hauler, 'CreepHauler');
 
 export default Hauler;

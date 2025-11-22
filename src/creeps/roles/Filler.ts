@@ -1,3 +1,4 @@
+//const profiler = require('screeps-profiler');
 import { aiAlert, navRallyPoint } from '../common';
 import { pathing } from '@constants';
 
@@ -119,9 +120,29 @@ function findEnergySource(creep: Creep): Tombstone | Resource | Ruin | AnyStoreS
 		return room.storage;
 	}
 
-	// Priority 5: Prestorage Container (if built)
+	// Priority 5A Prestorage Container (if built)
 	if (room.prestorage && room.prestorage.store.getUsedCapacity(RESOURCE_ENERGY) >= creep.store.getCapacity())
-		return Game.getObjectById(room.memory.containers.prestorage);
+		return room.prestorage;
+
+	// Priority 5B: Source Containers (if built)
+	const containerOne = room.containerOne ?? null;
+	const containerTwo = room.containerTwo ?? null;
+	if (containerOne && !containerTwo) {
+		if (containerOne.store.getUsedCapacity(RESOURCE_ENERGY) > 100)
+			return containerOne;
+	} else if (containerTwo && !containerOne) {
+		if (containerTwo.store.getUsedCapacity(RESOURCE_ENERGY) > 100)
+			return containerTwo;
+	} else if (containerOne && containerTwo) {
+		if (containerOne.store.getUsedCapacity(RESOURCE_ENERGY) > containerTwo.store.getUsedCapacity(RESOURCE_ENERGY))
+			return containerOne;
+		else
+			return containerTwo;
+	}
+
+	// Priority 5C: Controller Container (if built)
+	if (room.containerController && room.containerController.store.getUsedCapacity(RESOURCE_ENERGY) > 100)
+		return room.containerController;
 
 	// Priority 6: Containers (with null safety)
 	const containers = room.find(FIND_STRUCTURES, {
@@ -178,5 +199,7 @@ function withdrawFromTarget(creep: Creep, target: Tombstone | Resource | Ruin | 
 	// For structures (storage, containers), always withdraw energy
 	return creep.withdraw(target, RESOURCE_ENERGY);
 }
+
+//profiler.registerObject(Filler, 'CreepFiller');
 
 export default Filler;

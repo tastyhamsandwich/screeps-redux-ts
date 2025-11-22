@@ -1,3 +1,5 @@
+//const profiler = require('screeps-profiler');
+
 import { aiAlert, navRallyPoint } from '../common';
 import { pathing } from '@constants';
 
@@ -33,23 +35,31 @@ const Harvester = {
 				}
 
 				const sourceID: Id<Source> = cMem.source;
-
 				const isBootstrap = creep.room.memory.data.flags.bootstrappingMode;
+				const source: Source = Game.getObjectById(sourceID)!;
+				const container: StructureContainer | null = Game.getObjectById(cMem.bucket as Id<StructureContainer>);
+				const contPos = (cMem.sourceNum === 1) ? room.containerOne.pos : room.containerTwo.pos;
 
 				//: DROP HARVESTING LOGIC
 				if (creep.getActiveBodyparts(CARRY) === 0) {
-					const source: Source = Game.getObjectById(sourceID)!;
-					if (!pos.isNearTo(source)) creep.advMoveTo(source, pathing.harvesterPathing);
+					if (cMem.inPosition)
+						creep.harvestEnergy();
 					else {
-						const containers: StructureContainer[] = source.pos.findInRange(FIND_STRUCTURES, 2, { filter: { structureType: STRUCTURE_CONTAINER } });
-						if (containers.length) {
-							const bucket = pos.findClosestByRange(containers);
-							if (bucket) {
-								if (cMem.bucket === undefined) cMem.bucket = bucket.id;
-								if (!pos.isEqualTo(bucket))	creep.advMoveTo(bucket, pathing.harvesterPathing);
-								else creep.harvestEnergy();
+						if (container || contPos) {
+							if (container && !pos.isEqualTo(container.pos))
+								creep.advMoveTo(container, pathing.harvesterPathing);
+							else if (contPos && !pos.isEqualTo(contPos))
+								creep.advMoveTo(contPos, pathing.harvesterPathing);
+							else {
+								cMem.inPosition = true;
+								creep.harvestEnergy();
 							}
-						} else creep.harvestEnergy();
+						} else if (source) {
+							if (!pos.isNearTo(source))
+								creep.advMoveTo(source, pathing.harvesterPathing);
+							else
+								cMem.inPosition = true;
+						}
 					}
 				//: STATIC HARVESTING LOGIC
 				} else {
@@ -76,7 +86,6 @@ const Harvester = {
 							const fillers = creep.room.find(FIND_MY_CREEPS, {
 								filter: (c) => c.memory.role === 'filler' && c.memory.home === creep.room.name
 							}).length >= 1;
-							console.log(`Fillers: ${fillers}`);
 							// If no fillers, return energy to spawn for early growth
 							if (!fillers) {
 								const spawns = creep.room.find(FIND_MY_SPAWNS);
@@ -134,7 +143,10 @@ const Harvester = {
 					} else {
 						// Move to source before harvesting
 						const source = Game.getObjectById(cMem.source) as Source;
+						const containerID = (cMem.sourceNum === 1) ? room.memory.containers.sourceOne : room.memory.containers.sourceTwo;
+						const container: StructureContainer | null = Game.getObjectById(containerID);
 						if (!source) creep.say('No src!');
+						else if (container && !pos.isEqualTo(container.pos)) creep.advMoveTo(container, pathing.harvesterPathing);
 						else if (!pos.isNearTo(source)) creep.advMoveTo(source, pathing.harvesterPathing);
 						else creep.harvestEnergy();
 					}
@@ -293,4 +305,7 @@ function buildContainer(creep: Creep): void {
 		}
 	}
 }
+
+//profiler.registerObject(Harvester, 'Harvester');
+
 export default Harvester;

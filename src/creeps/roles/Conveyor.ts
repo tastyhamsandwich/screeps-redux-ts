@@ -1,3 +1,5 @@
+//const profiler = require('screeps-profiler');
+
 import { aiAlert, navRallyPoint } from '../common';
 import { pathing } from '@constants';
 import { getReturnCode } from '@globals';
@@ -156,5 +158,7 @@ function linkSourceXfer(creep: Creep, link: StructureLink) {
 		}
 	}
 }
+
+//profiler.registerObject(Conveyor, 'CreepConveyor');
 
 export default Conveyor;

@@ -1,3 +1,5 @@
+//const profiler = require('screeps-profiler');
+
 import { aiAlert, navRallyPoint } from '../common';
 import { pathing } from '@constants';
 
@@ -145,5 +147,7 @@ function findEnergySource(creep: Creep): StructureStorage | StructureLink | Stru
 
 	return null;
 }
+
+//profiler.registerObject(Upgrader, 'CreepUpgrader');
 
 export default Upgrader;
