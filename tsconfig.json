@@ -28,6 +28,6 @@
 			"@main": 		["./main"]
 		}
 	},
-	"include": [ "src", "src/types/**/*.d.ts"],
+	"include": [ "src", "src/types/**/*.d.ts", "docs/screeps-profiler.js"],
 	"exclude": [ "node_modules", "unused/**/*.ts" ],
 }
