@@ -1,5 +1,3 @@
-//const profiler = require('screeps-profiler');
-
 import { getDistanceTransform, getPositionsByPathCost, getMinCut } from './PlanningFunctions';
 
 /**
@@ -1655,5 +1653,3 @@ interface RoomData {
 	[key: string]: any;
 }
  */
-
-//profiler.registerClass(BasePlanner, 'BasePlanner');

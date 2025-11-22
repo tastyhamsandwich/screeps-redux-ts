@@ -1,4 +1,4 @@
-//const profiler = require('screeps-profiler');
+
 /**
  * A system for managing creep movement and traffic coordination in Screeps.
  *
@@ -34,6 +34,13 @@
  * @property {number} priority - Movement priority (higher numbers get precedence)
  * @property {MoveToOpts} [opts] - Optional movement options
  */
+export interface MoveIntent {
+	creep: Creep;
+	from: RoomPosition;
+	to: RoomPosition;
+	priority: number;
+	opts?: MoveToOpts;
+}
 
 declare global {
 	var TrafficIntents: MoveIntent[];
@@ -95,5 +102,3 @@ export default class TrafficManager {
 		global.TrafficIntents = [];
 	}
 }
-
-//profiler.registerClass(TrafficManager, 'TrafficManager');

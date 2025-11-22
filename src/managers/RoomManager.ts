@@ -1,5 +1,3 @@
-//const profiler = require('screeps-profiler');
-
 import RoomDefense from './DefenseManager';
 import SpawnManager from './SpawnManager';
 import BasePlanner, { computePlanChecksum } from '../modules/BasePlanner';
@@ -21,8 +19,6 @@ export default class RoomManager {
 	private basePlan: PlanResult | null = null;
 	private haulerPairs: { start: string, end: string, length: number }[] | null = null;
 	public planVisualizer: RoomPlanningVisualizer | null = null;
-	public colonyName: string;
-	public spawns: StructureSpawn[];
 
 	constructor(room: Room) {
 		this.room = room;
@@ -32,31 +28,15 @@ export default class RoomManager {
 		this.legacySpawnManager = legacySpawnManager;
 		this.basePlanner = null; // Only create when regeneration is needed
 		this.planVisualizer = new RoomPlanningVisualizer(room);
-		this.colonyName = `Col${Memory.globalData.numColonies ?? 0}`;
-		this.spawns = this.room.find(FIND_MY_SPAWNS);
 
 		// Initialize all required room memory structures
 		this.initializeMemory(); // Partial initialization - other settings added as needed
 	}
 
 	private initializeMemory() {
-		if (!this.room.memory.data)
-			this.room.memory.data = {
-				flags: {
-					dropHarvestingEnabled: false,
-					bootstrappingMode: false,
-					initialized: false,
-					basePlanGenerated: false
-				},
-				indices: {
-					nextHarvesterAssigned: 0,
-					haulerIndex: 0,
-					lastNormalRoleIndex: 0,
-					lastBootstrapRoleIndex: 0,
-				},
-				controllerLevel: 1,
-				numCSites: 0
-			};
+		if (!this.room.memory.data) this.room.memory.data = {};
+		if (!this.room.memory.data.flags) this.room.memory.data.flags = {};
+		if (!this.room.memory.data.indices) this.room.memory.data.indices = {};
 		if (!this.room.memory.visuals)
 			this.room.memory.visuals = {
 				settings: {},
@@ -79,8 +59,6 @@ export default class RoomManager {
 			this.room.memory.settings = {
 				basePlanning: { debug: false }
 			} as any;
-
-			this.room.memory.data.colonyName = this.colonyName;
 	}
 
 	/** Main run method - called every tick */
@@ -91,18 +69,18 @@ export default class RoomManager {
 		roomMem.data ??= { flags: {}, indices: {} };
 		const rmData = roomMem.data;
 
-		if (rmData.flags.initialized ===  undefined || rmData.flags.initialized === false) {
+		if (!rmData.flags.initialized) {
 			rmData.flags.advSpawnSystem = false;
 			Memory.globalData.numColonies++;
 			this.room.initRoom();
-			rmData.flags.initialized = true;
+			rmData.flags.initialized ??= true;
 			this.room.log(`First Time Room Initialization Complete!`);
 		}
 
 		if (room.controller && room.controller.level !== room.memory.data.controllerLevel) {
 			const newLevel = room.controller.level;
 			room.memory.data.controllerLevel = newLevel;
-			//this.stats.controllerLevelReached = newLevel;
+			this.stats.controllerLevel = newLevel;
 			if (newLevel > room.memory.stats.controllerLevelReached)
 				room.memory.stats.controllerLevelReached = newLevel;
 		}
@@ -116,12 +94,8 @@ export default class RoomManager {
 			rmData.lastResourceScan = Game.time;
 		}
 
-		if (!rmData.flags.conveyorAllowed) {
-			if (this.room.linkStorage && this.room.linkController && this.room.storage && !this.room.memory.quotas.conveyor) {
-				this.room.setQuota('conveyor', 1);
-				rmData.flags.conveyorAllowed = true;
-			}
-		}
+		if (this.room.linkStorage && this.room.linkController && this.room.storage && !this.room.memory.quotas.conveyor)
+			this.room.setQuota('conveyor', 1);
 
 		// Assess need for bootstrapping mode
 		this.updateBootstrapState();
@@ -165,31 +139,6 @@ export default class RoomManager {
 		// Process the plan if available
 		if (this.basePlan) this.handleBasePlan(this.basePlan);
 
-		if (!rmData.sourceOnePathLength && room.sourceOne) {
-			if (roomMem.basePlan) {
-				const startPos = new RoomPosition(roomMem?.basePlan?.data?.startPos.x, roomMem?.basePlan?.data?.startPos.y, room.name);
-				const endPos = new RoomPosition(room.sourceOne.pos.x, room.sourceOne.pos.y, room.name);
-				const pathLength = FUNC.calcPathLength(startPos, endPos);
-				rmData.sourceOnePathLength = pathLength;
-			}
-		}
-		if (!rmData.sourceTwoPathLength && room.sourceTwo) {
-			if (roomMem.basePlan) {
-				const startPos = new RoomPosition(roomMem?.basePlan?.data?.startPos.x, roomMem?.basePlan?.data?.startPos.y, room.name);
-				const endPos = new RoomPosition(room.sourceTwo.pos.x, room.sourceTwo.pos.y, room.name);
-				const pathLength = FUNC.calcPathLength(startPos, endPos);
-				rmData.sourceTwoPathLength = pathLength;
-			}
-		}
-
-		// Once both sources have containers built, and the first 5 extensions are down (such that energy cap is 550)
-		// Enable drop harvesting if it isn't already set (harvesters w/ 5 work + 1 move = 550 energy)
-		const dropHarvestingCriteria = room.containerOne && room.containerTwo && room.energyCapacityAvailable >= 550;
-		if (dropHarvestingCriteria && !rmData.flags.dropHarvestingEnabled) {
-			rmData.flags.dropHarvestingEnabled = true;
-			room.log(`Source containers built, extensions built, enabling drop harvesting mode!`);
-		}
-
 		if (this.room.controller!.level >= 4 && this.room.storage && this.room.energyCapacityAvailable >= 1200)
 			this.scanAdjacentRooms();
 
@@ -202,15 +151,13 @@ export default class RoomManager {
 			}
 		}
 
-		// Determine which spawning system to use
 		if (rmData.flags.advSpawnSystem) {
 			this.spawnManager.run();
 			this.assessCreepNeeds();
-		} else this.legacySpawnManager.run(this.room);
-
-		// Display spawning creep information
-		for (const spawn of this.spawns)
-			/*if (spawn.spawning)*/	FUNC.displaySpawnInfo(spawn);
+		} else {
+			// Otherwise execute legacy spawn manager logic
+			this.legacySpawnManager.run(this.room);
+		}
 
 		// Assign tasks to worker creeps
 		this.assignCreepTasks();
@@ -232,7 +179,7 @@ export default class RoomManager {
 
 	/** Sets current bootstrapping state in room memory */
 	private updateBootstrapState(): void {
-		const level = this.stats.controllerLevelReached;
+		const level = this.stats.controllerLevel;
 		const hasContainer = this.resources.containers.length > 0;
 		const creepCount = this.room.find(FIND_MY_CREEPS).length;
 
@@ -1428,5 +1375,3 @@ export default class RoomManager {
 	}
 
 }
-
-//profiler.registerClass(RoomManager, 'RoomManager');

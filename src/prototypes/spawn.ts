@@ -285,8 +285,6 @@ StructureSpawn.prototype.determineBodyParts = function (role: string, maxEnergy?
 			else return [];
 		case 'scout':
 			return [MOVE,MOVE,MOVE];
-		case 'conveyor':
-			return [MOVE,CARRY,CARRY,CARRY,CARRY,CARRY,CARRY,CARRY,CARRY];
 		default:
 			throw new Error("Invalid parameters passed.");
 	}

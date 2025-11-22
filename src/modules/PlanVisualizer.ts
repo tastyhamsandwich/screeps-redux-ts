@@ -1,4 +1,3 @@
-//const profiler = require('screeps-profiler');
 /**
  * Room Planning Visualizer
  * Provides comprehensive visualization for base planning algorithms
@@ -876,5 +875,3 @@ function flatten2D<T>(grid: T[][]): T[] {
 	}
 	return out;
 }
-
-//profiler.registerClass(RoomPlanningVisualizer, 'RoomPlanningVisualizer');

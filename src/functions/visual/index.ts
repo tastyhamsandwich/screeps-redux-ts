@@ -4,4 +4,3 @@ export * from "./speedrun";
 export * from "./structures";
 export * from "./console";
 export * from "./roominfo";
-export * from "./spawninfo";

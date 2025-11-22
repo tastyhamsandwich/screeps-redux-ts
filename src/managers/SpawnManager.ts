@@ -1,4 +1,30 @@
-//const profiler = require('screeps-profiler');
+interface SpawnRequest {
+	id: string;
+	role: string;
+	priority: number;
+	body: BodyPartConstant[];
+	memory: CreepMemory;
+	roomName: string;
+	urgent: boolean;
+	requestedAt: number;
+	estimatedSpawnTime?: number;
+	energyCost?: number;
+}
+
+interface ScheduledSpawn {
+	role: string;
+	scheduledTick: number;
+	duration: number;
+	energyCost: number;
+	priority: number;
+}
+
+interface EnergyForecast {
+	currentEnergy: number;
+	capacityAvailable: number;
+	incomePerTick: number;
+	projectedEnergy: (ticks: number) => number;
+}
 
 /** SpawnManager - Centralized spawning system that manages spawn requests across all rooms */
 export default class SpawnManager {
@@ -436,5 +462,3 @@ export default class SpawnManager {
 		return [...this.scheduledSpawns];
 	}
 }
-
-//profiler.registerClass(SpawnManager, 'SpawnManager');

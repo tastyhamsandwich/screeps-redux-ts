@@ -1,5 +1,3 @@
-//const profiler = require('screeps-profiler');
-
 /** Manages creep spawning for a room using a legacy round-robin scheduling system.
  *
  * Operates in two phases:
@@ -285,18 +283,7 @@ export const legacySpawnManager = {
 			_.filter(creep.body, part => part.type === WORK).length
 		);
 
-		// Determine how much lead time is needed to pre-spawn replacement harvesters
-		for (const creep of harvesters) {
-			const spawnTime = creep.body.length * 3;
-			const tilesPerTick = Math.ceil(creep.getActiveBodyparts(WORK) / creep.getActiveBodyparts(MOVE));
-			const pathLength = (creep.memory.sourceNum === 1) ? room.memory.data.sourceOnePathLength : room.memory.data.sourceTwoPathLength ?? 1;
-			const travelTime = Math.ceil(pathLength / tilesPerTick);
-			if (creep.ticksToLive && creep.ticksToLive <= (spawnTime + travelTime)) {
-				// This should cause the spawn manager to believe there is one less harvester, and initiate spawning a replacement.
-				creep.memory.RFQ = `${creep.memory.role}_dying`;
-			}
-		}
-		// Use cached spawn IDs instead of room.find()
+		// Use cached spawn IDs instead of expensive room.find()
 		const spawnIds = room.memory.objects?.spawns || [];
 		const spawns = (Array.isArray(spawnIds) ? spawnIds : [spawnIds])
 			.map((id: any) => Game.getObjectById(id as Id<StructureSpawn>))
@@ -305,7 +292,7 @@ export const legacySpawnManager = {
 		if (!spawns.length)
 			room.cacheObjects();
 
-		// Ensure sources are cached before spawning
+		// Safety check: ensure sources are cached before spawning
 		if (!room.memory.objects?.sources || room.memory.objects.sources.length === 0) {
 			if (debugSpawn) console.log(`${room.link()}Legacy Spawn Manager: No sources cached, skipping spawn logic this tick`);
 			return;
@@ -313,10 +300,14 @@ export const legacySpawnManager = {
 
 		if (debugSpawn) console.log(`${room.link()}Legacy Spawn Manager: Sources cached (${room.memory.objects.sources.length}), spawns found (${spawns.length})`);
 
-		const harvesters_and_fillers_satisfied = (
-			(totalWorkParts >= (room.memory.objects.sources.length * 5) ||
-			harvesters.length >= harvesterTarget) && fillers.length >= fillerTarget);
-		const colName = room.memory.data.colonyName ?? 'Col1';
+		const harvesters_and_fillers_satisfied = ((totalWorkParts >= (room.memory.objects.sources.length * 5) || harvesters.length >= harvesterTarget) && fillers.length >= fillerTarget);
+
+		if (harvesters_and_fillers_satisfied)
+			new RoomVisual(roomName).text('✅', 1,1,{color: 'green', align: 'left', });
+		else
+			new RoomVisual(roomName).text('⏳', 1,1,{color: 'red', align: 'left', });
+
+		const colName = `Col1`;
 
 		if (debugSpawn) console.log(`${room.link()}Legacy Spawn Manager: Harvesters=${harvesters.length}, WorkParts=${totalWorkParts}, Satisfied=${harvesters_and_fillers_satisfied}`);
 
@@ -330,12 +321,16 @@ export const legacySpawnManager = {
 				// If we have no harvesters, stop using the room's energy capacity for
 				// body measurements and use what we have right now to spawn a new harvester
 				if (harvesters.length == 0) cap = spawn.room.energyAvailable;
+
 				if (debugSpawn) console.log(`${room.link()}${spawn.name}: Spawning=${spawn.spawning}, Cap=${cap}`);
+
 				if (!spawn.spawning) {
 					// Check for pending spawn request (stored in room memory)
 					const pending = room.memory.data.pendingSpawn;
+
 					if (pending) {
 						const timeSincePending = Game.time - pending.time;
+
 						// Absolute timeout: clear pending spawn if it's been stuck for 100 ticks
 						if (timeSincePending >= 100) {
 							console.log(`${room.link()}${spawn.name}> TIMEOUT: Clearing pending spawn for ${pending.memory.role} (${pending.name}) after ${timeSincePending} ticks`);
@@ -353,10 +348,11 @@ export const legacySpawnManager = {
 						// Check if we have enough energy every tick
 						else if (room.energyAvailable >= pending.cost) {
 							const result = spawn.retryPending();
-							if (result === OK)
+							if (result === OK) {
 								console.log(`${room.link()}${spawn.name}> Resumed pending spawn for ${pending.memory.role} (${pending.name}) after ${timeSincePending} ticks`);
-							else if (result !== ERR_NOT_ENOUGH_ENERGY)
+							} else if (result !== ERR_NOT_ENOUGH_ENERGY) {
 								console.log(`${room.link()}${spawn.name}> Failed to resume pending ${pending.memory.role}: ${FUNC.getReturnCode(result)}`);
+							}
 							return; // Skip other spawn logic this tick
 						}
 						// Pending spawn exists but not enough energy yet
@@ -411,10 +407,10 @@ export const legacySpawnManager = {
 						switch (nextRole) {
 							case 'harvester': {
 								const nextAssigned = (room.memory.data.indices.nextHarvesterAssigned % 2) + 1;
-								const sourceID = (nextAssigned === 1) ? room.sourceOne.id : room.sourceTwo.id ?? room.sourceOne.id;
+								const sourceID = (nextAssigned === 1) ? room.sourceOne.id : room.sourceTwo.id;
 								let containerID = 'none';
 								if (!room.memory.data.flags.dropHarvestingEnabled && (room.containerOne || room.containerTwo))
-									containerID = (nextAssigned === 1) ? room.containerOne.id : room.containerTwo.id ?? '';
+									containerID = (nextAssigned === 1) ? room.containerOne.id : room.containerTwo.id;
 								const sourceNum = (nextAssigned === 1) ? 1 : 2;
 								room.memory.data.indices.nextHarvesterAssigned++;
 								trySpawnCreep(spawn, 'harvester', { role: 'harvester', RFQ: 'harvester', home: room.name, room: room.name, working: false, disable: false, rally: 'none', source: sourceID, bucket: containerID, sourceNum: sourceNum }, room, colName, cap);
@@ -459,8 +455,9 @@ export const legacySpawnManager = {
 								// Skip rooms owned by other players
 								if (info.controllerOwner && info.controllerOwner !== PLAYER_USERNAME) continue;
 
-								for (const sid of info.sources)
+								for (const sid of info.sources) {
 									sourceEntries.push({ roomName: rName, sourceId: sid });
+								}
 							}
 
 							// Determine sources already assigned to existing remote harvesters
@@ -491,8 +488,9 @@ export const legacySpawnManager = {
 
 								const reservation = info.reservation;
 								const reservedByUs = reservation && reservation.username === PLAYER_USERNAME;
-								if (!reservedByUs || (reservation && reservation.ticksToEnd < 500))
+								if (!reservedByUs || (reservation && reservation.ticksToEnd < 500)) {
 									roomsNeedingReserve.push(rName);
+								}
 							}
 
 							if (roomsNeedingReserve.length > 0) {
@@ -537,5 +535,3 @@ function needMoreHarvesters(room: Room, harvesters: Creep[]): boolean {
 	const neededWorkParts = numSources * 5;
 	return totalWorkParts < neededWorkParts;
 }
-
-//profiler.registerFN(legacySpawnManager, 'LegacySpawnManager');

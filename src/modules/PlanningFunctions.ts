@@ -1,5 +1,3 @@
-//const profiler = require('screeps-profiler');
-
 /**
  * Planning functions for base layout optimization
  * Includes distance transform, flood fill, and minimum cut algorithms
@@ -559,7 +557,3 @@ function pointAdd(pos: { x: number; y: number }, vector: { x: number; y: number 
 		y: pos.y + vector.y
 	};
 }
-
-//profiler.registerFN(getDistanceTransform, 'GetDistanceTransform');
-//profiler.registerFN(getPositionsByPathCost, 'FloodFill');
-//profiler.registerFN(getMinCut, 'GetMinCut');

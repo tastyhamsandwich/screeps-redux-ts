@@ -1,5 +1,28 @@
 import { PART_COST } from "@utils/constants";
-//const profiler = require('screeps-profiler');
+
+/* declare global {
+	interface Global {
+		splitRoomName(roomName: string): [string, number, string, number];
+		roomExitsTo(roomName: string, direction: DirectionConstant | number | string): string;
+		calcPath(startPos: RoomPosition, endPos: RoomPosition): { path: RoomPosition[], length: number, ops: number, cost: number, incomplete: boolean };
+		calcPathLength(startPos: RoomPosition, endPos: RoomPosition): number;
+		asRoomPosition(value: RoomPosition | { pos?: RoomPosition } | undefined | null): RoomPosition | null;
+		log(logMsg: string | string[], room: Room | false): void;
+		createRoomFlag(room: string): string | null;
+		validateRoomName(roomName: string): RoomName;
+		randomInt(min: number, max: number): number;
+		randomColor(): ColorConstant;
+		randomColorAsInt(): number;
+		determineBodyParts(role: string, maxEnergy: number, extras?: { [key: string]: any }): BodyPartConstant[] | undefined;
+		initGlobal(override: boolean): boolean;
+		calcBodyCost(body: BodyPartConstant[] | undefined | null): number;
+		log(): void;
+		capitalize(string: string): string;
+		tickTime: number;
+		PART_COST: Record<BodyPartConstant, number>;
+		pathing: { [key: string]: any };
+	}
+} */
 
 let controllerPPTArray: number[] = [];
 let controllerProgress: number = 0;
@@ -745,11 +768,3 @@ export function getReturnCode(code: number): string {
 			return 'UNKNOWN';
 	}
 }
-
-/*
-profiler.registerFN(calcPath, 'calcPath');
-profiler.registerFN(calcPathLength, 'calcPathLength');
-profiler.registerFN(getReturnCode, 'getReturnCode');
-profiler.registerFN(visualRCProgress, 'visualRCProgress');
-profiler.registerFN();
-*/
