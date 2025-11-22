@@ -36,7 +36,7 @@ export const pathing: { [key: string]: MoveToOpts } = {
 	builderPathing: {
 		visualizePathStyle: { stroke: "#0000ff", opacity: 0.3, lineStyle: "dotted" },
 		reusePath: cSet.builder.reusePathValue || 3,
-		ignoreCreeps: false //cSet.builder.ignoreCreeps
+		ignoreCreeps: true //cSet.builder.ignoreCreeps
 	},
 	defenderPathing: {
 		visualizePathStyle: { stroke: "#ff0000", opacity: 0.3, lineStyle: "dashed" },
@@ -46,12 +46,12 @@ export const pathing: { [key: string]: MoveToOpts } = {
 	fillerPathing: {
 		visualizePathStyle: { stroke: "#44ffaa", opacity: 0.3, lineStyle: "dotted" },
 		reusePath: cSet.hauler.reusePathValue || 3,
-		ignoreCreeps: false //cSet.filler.ignoreCreeps
+		ignoreCreeps: true //cSet.filler.ignoreCreeps
 	},
 	haulerPathing: {
 		visualizePathStyle: { stroke: "#880088", opacity: 0.3, lineStyle: "dotted" },
 		reusePath: cSet.hauler.reusePathValue || 3,
-		ignoreCreeps: false //cSet.hauler.ignoreCreeps
+		ignoreCreeps: true //cSet.hauler.ignoreCreeps
 	},
 	harvesterPathing: {
 		visualizePathStyle: { stroke: "#00ff00", opacity: 0.5, lineStyle: "dashed" },
@@ -86,12 +86,12 @@ export const pathing: { [key: string]: MoveToOpts } = {
 	upgraderPathing: {
 		visualizePathStyle: { stroke: "#ffff00", opacity: 0.3, lineStyle: "dotted" },
 		reusePath: cSet.upgrader.reusePathValue || 3,
-		ignoreCreeps: false //cSet.upgrader.ignoreCreeps
+		ignoreCreeps: true //cSet.upgrader.ignoreCreeps
 	},
 	workerPathing: {
 		visualizePathStyle: { stroke: '#dddddd', opacity: 0.6, lineStyle: 'solid' },
 		reusePath: cSet.reusePathValue || 3,
-		ignoreCreeps: false
+		ignoreCreeps: true
 	},
 	rallyPointPathing: {
 		visualizePathStyle: { stroke: "#ffffff", opacity: 1.0, lineStyle: "solid" },

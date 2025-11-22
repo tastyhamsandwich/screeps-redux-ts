@@ -1,4 +1,4 @@
-
+//const profiler = require('screeps-profiler');
 export default class SmartNavigator {
 	static getNextStep(creep: Creep, target: RoomPosition): RoomPosition | null {
 		// If destination is in same visible room:
@@ -49,3 +49,5 @@ declare global {
 		};
 	}
 }
+
+//profiler.registerClass(SmartNavigator, 'SmartNavigator');

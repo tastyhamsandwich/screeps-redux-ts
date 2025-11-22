@@ -225,6 +225,34 @@ namespace NodeJS {
 		priority: number;
 	}
 
+	interface SpawnRequest {
+		id: string;
+		role: string;
+		priority: number;
+		body: BodyPartConstant[];
+		memory: CreepMemory;
+		roomName: string;
+		urgent: boolean;
+		requestedAt: number;
+		estimatedSpawnTime?: number;
+		energyCost?: number;
+	}
+
+	interface ScheduledSpawn {
+		role: string;
+		scheduledTick: number;
+		duration: number;
+		energyCost: number;
+		priority: number;
+	}
+
+	interface EnergyForecast {
+		currentEnergy: number;
+		capacityAvailable: number;
+		incomePerTick: number;
+		projectedEnergy: (ticks: number) => number;
+	}
+
 	//# REMOTES INTERFACES
 	interface OutpostData {
 		name: string;
@@ -443,6 +471,7 @@ namespace NodeJS {
 	}
 
 	interface RoomStats {
+		[x: string]: any;
 		controllerLevel: number;
 		energyAvailable: number;
 		energyCapacityAvailable: number;
@@ -583,6 +612,15 @@ namespace NodeJS {
 		dropoffTarget: Id<AnyStoreStructure>;
 		cargoManifest: CargoManifest;
 	}
+
+	interface MoveIntent {
+		creep: Creep;
+		from: RoomPosition;
+		to: RoomPosition;
+		priority: number;
+		opts?: MoveToOpts;
+	}
+
 
 	//# CUSTOM RETURN CODES
 	const enum CUSTOM_RETURN_CODES {

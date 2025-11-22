@@ -303,7 +303,7 @@ Room.prototype.cacheObjects = function () {
 		}
 	}
 
-	// Find structures more efficiently by type
+	// Find structures by type
 	const spawns = this.find(FIND_MY_SPAWNS);
 	cacheObjectArray(spawns, 'spawns');
 
@@ -329,41 +329,68 @@ Room.prototype.cacheObjects = function () {
 			if (spawns.length)
 				spawnPos = spawns[0].pos || undefined;
 		}
-		// Assign containers based on proximity
+		// Track assigned containers to avoid duplicates
+		const assignedContainers = new Set<string>();
+
+		// Assign containers to sources based on proximity (closest unassigned first)
+		for (let sourceIdx = 0; sourceIdx < sourcePositions.length; sourceIdx++) {
+			const sourcePos = sourcePositions[sourceIdx].pos;
+			let closestContainer: { id: string; distance: number } | null = null;
+
+			// Find closest unassigned container within range 2
+			for (const container of containers) {
+				if (assignedContainers.has(container.id)) continue;
+				if (!container.pos.inRangeTo(sourcePos, 2)) continue;
+
+				const distance = container.pos.getRangeTo(sourcePos);
+				if (!closestContainer || distance < closestContainer.distance) {
+					closestContainer = { id: container.id, distance };
+				}
+			}
+
+			// Assign the closest container found for this source
+			if (closestContainer) {
+				if (sourceIdx === 0)
+					this.memory.containers.sourceOne = closestContainer.id;
+				else if (sourceIdx === 1)
+					this.memory.containers.sourceTwo = closestContainer.id;
+				assignedContainers.add(closestContainer.id);
+			}
+		}
+
+		// Assign remaining containers to other structures
 		for (const container of containers) {
 			const pos = container.pos;
 
-			// Check if near sources (within range 2)
+			// Skip if already assigned to a source
+			if (assignedContainers.has(container.id)) continue;
+
 			let assigned = false;
-			for (let i = 0; i < sourcePositions.length; i++) {
-				if (pos.inRangeTo(sourcePositions[i].pos, 2)) {
-					if (sourcePositions[i].id === this.memory.objects.sources?.[0])
-						this.memory.containers.sourceOne = container.id;
-					else if (sourcePositions[i].id === this.memory.objects.sources?.[1])
-						this.memory.containers.sourceTwo = container.id;
-					assigned = true;
-					break;
-				}
-			}
 
 			// Check if near controller (within range 3)
 			if (!assigned && controllerPos && pos.inRangeTo(controllerPos, 3)) {
 				this.memory.containers.controller = container.id;
+				assignedContainers.add(container.id);
 				assigned = true;
 			}
 
 			// Check if near mineral (within range 2)
-			if (!assigned && mineralPos && pos.inRangeTo(mineralPos, 2))
+			if (!assigned && mineralPos && pos.inRangeTo(mineralPos, 2)) {
 				this.memory.containers.mineral = container.id;
+				assignedContainers.add(container.id);
+				assigned = true;
+			}
 
 			// Check if near spawn (within range 2)
 			if (this.controller && this.controller.my) {
-				if (!assigned && spawnPos && pos.inRangeTo(spawnPos, 2))
+				if (!assigned && spawnPos && pos.inRangeTo(spawnPos, 2)) {
 					this.memory.containers.prestorage = container.id;
+					assignedContainers.add(container.id);
+				}
 			}
 		}
 
-		// Build ordered container array (sourceOne, sourceTwo, controller, mineral)
+	// Build ordered container array (sourceOne, sourceTwo, controller, mineral)
 		const containerIDs = containers.map(c => c.id);
 		const orderedContainers: Id<StructureContainer>[] = [];
 
@@ -498,6 +525,21 @@ Room.prototype.cacheObjects = function () {
 /** Initializes a room's quota list. */
 Room.prototype.initQuotas = function (roleQuotaObject?): void {
 	if (!this.memory.quotas) this.memory.quotas = {};
+	if (!roleQuotaObject)
+		roleQuotaObject = {
+			harvester: 4,
+			upgrader: 2,
+			filler: 2,
+			hauler: 0,
+			builder: 2,
+			repairer: 0,
+			worker: 0,
+			conveyor: 0,
+			defender: 0,
+			reserver: 0,
+			scout: 0,
+			remoteharvester: 0
+		};
 
 	this.memory.quotas = {
 		harvesters: roleQuotaObject?.harvester || 4,
@@ -506,22 +548,29 @@ Room.prototype.initQuotas = function (roleQuotaObject?): void {
 		haulers: roleQuotaObject?.hauler || 0,
 		builders: roleQuotaObject?.builder || 1,
 		repairers: roleQuotaObject?.repairer || 1,
+		workers: roleQuotaObject?.worker || 0,
+		conveyors: roleQuotaObject?.conveyor || 0,
 		defenders: roleQuotaObject?.defender || 0,
 		reservers: roleQuotaObject?.reserver || 0,
 		scouts: roleQuotaObject?.scout || 0,
 		remoteharvesters: roleQuotaObject?.remoteharvester || 0,
-
 	}
 
-	log(`Quotas initialized: Harvesters (2), Upgraders (2), Fillers (2), Haulers (0), Builders (1), Defenders (0), Reservers (0), Scouts (0), Remote Harvesters (0)`);
+	log(`Quotas initialized: Harvesters (${roleQuotaObject.harvester}), Upgraders (${roleQuotaObject.upgrader}),
+		Fillers (${roleQuotaObject.filler}), Haulers (${roleQuotaObject.hauler}), Builders (${roleQuotaObject.builder}),
+		Defenders (${roleQuotaObject.defender}), Reservers (${roleQuotaObject.reserver}), Scouts (${roleQuotaObject.scout}),
+		Remote Harvesters (${roleQuotaObject.remoteharvester}), Worker (${roleQuotaObject.worker}),
+		Conveyor (${roleQuotaObject.conveyor})`);
+
+	return;
 }
 
 Room.prototype.enableDropHarvesting = function() {
 	this.memory.data.flags.dropHarvestingEnabled ??= true;
 }
-/** Initializes a room with default memory structure and settings. Sets up quotas, visual settings, repair settings, and stats tracking. */
+
+/** Initializes a room with default memory structure and settings. Sets up container & link memory objects, room data objects, visual settings, repair settings, and stats tracking. */
 Room.prototype.initRoom = function () {
-	this.initQuotas();
 
 	const visualSettings: VisualSettings = { progressInfo: { alignment: 'left', xOffset: 1, yOffsetFactor: 0.6, stroke: '#000000', fontSize: 0.6, color: '' } };
 	const progressInfo = { alignment: 'left', xOffset: 1, yOffsetFactor: 0.6, stroke: '#000000', fontSize: 0.6, color: '' };
@@ -537,83 +586,80 @@ Room.prototype.initRoom = function () {
 		catalyzedZynthiumAlkalide: 0, catalyzedGhodiumAcid: 0, catalyzedGhodiumAlkalide: 0 };
 	const labStats: LabStats = { compoundsMade: compoundStats, creepsBoosted: 0, boostsUsed: compoundStats, energySpentBoosting: 0 };
 
-	this.memory.containers = {
-		sourceOne: '',
-		sourceTwo: '',
-		controller: '',
-		mineral: '',
-		prestorage: ''
-	};
-	this.memory.links = {
-		sourceOne: '',
-		sourceTwo: '',
-		controller: '',
-		storage: ''
-	};
-	this.memory.data = {
-		flags: {
-			dropHarvestingEnabled: false
-		},
-		indices: {
-			lastBootstrapRoleIndex: 0,
-			lastNormalRoleIndex: 0,
-			haulerIndex: 0,
-			nextHarvesterAssigned: 0
-		},
-		controllerLevel: 0,
-		numCSites: 0,
-		spawnEnergyLimit: 0
-	};
-	this.memory.settings = {
-		visualSettings: visualSettings,
-		repairSettings: repairSettings,
-		flags: {},
-		basePlanner: {
-			debug: false
-		}
-	};
-	this.memory.outposts = {
-		list: {},
-		array: [],
-		reserverLastAssigned: 0,
-		numSources: 0,
-		numHarvesters: 0,
-		counter: 0,
-		guardCounter: 0
-	};
-	this.memory.stats = {
-		energyHarvested: 0,
-		controlPoints: 0,
-		constructionPoints: 0,
-		creepsSpawned: 0,
-		creepPartsSpawned: 0,
-		controllerLevelReached: 0,
-		npcInvadersKilled: 0,
-		hostilePlayerCreepsKilled: 0,
-		mineralsHarvested: mineralsHarvested,
-		labStats: labStats };
-	this.memory.visuals = {
-		settings: {
-			spawnInfo: spawnInfo,
-			roomFlags: roomFlags,
-			progressInfo: progressInfo,
-			displayTowerRanges: false,
-			displayControllerUpgradeRange: false
-		},
-		basePlan: {
-			visDistTrans: false,
-			visBasePlan: false,
-			visFloodFill: false,
-			visPlanInfo: false,
-			buildProgress: false,
-		},
-		enableVisuals: false,
-		redAlertOverlay: true,
-	};
-	this.memory.remoteRooms = {};
-	this.cacheObjects();
-}
+	if (!this.memory.containers)
+		this.memory.containers = {
+			sourceOne: '',
+			sourceTwo: '',
+			controller: '',
+			mineral: '',
+			prestorage: ''
+		};
+	if (!this.memory.links)
+		this.memory.links = {
+			sourceOne: '',
+			sourceTwo: '',
+			controller: '',
+			storage: ''
+		};
+	if (!this.memory.data)
+		this.memory.data = {
+			flags: {
+				dropHarvestingEnabled: false
+			},
+			indices: {
+				lastBootstrapRoleIndex: 0,
+				lastNormalRoleIndex: 0,
+				haulerIndex: 0,
+				nextHarvesterAssigned: 0
+			},
+			controllerLevel: 0,
+			numCSites: 0,
+			spawnEnergyLimit: 0
+		};
+		this.memory.settings = {
+			visualSettings: visualSettings,
+			repairSettings: repairSettings,
+			flags: {},
+			basePlanner: {
+				debug: false
+			}
+		};
+	if (!this.memory.stats)
+		this.memory.stats = {
+			energyHarvested: 0,
+			controlPoints: 0,
+			constructionPoints: 0,
+			creepsSpawned: 0,
+			creepPartsSpawned: 0,
+			controllerLevelReached: 0,
+			npcInvadersKilled: 0,
+			hostilePlayerCreepsKilled: 0,
+			mineralsHarvested: mineralsHarvested,
+			labStats: labStats
+		};
+	if (!this.memory.visuals)
+		this.memory.visuals = {
+			settings: {
+				spawnInfo: spawnInfo,
+				roomFlags: roomFlags,
+				progressInfo: progressInfo,
+				displayTowerRanges: false,
+				displayControllerUpgradeRange: false
+			},
+			basePlan: {
+				visDistTrans: false,
+				visBasePlan: false,
+				visFloodFill: false,
+				visPlanInfo: false,
+				buildProgress: false,
+			},
+			enableVisuals: false,
+			redAlertOverlay: true,
+		};
+	if (!this.memory.remoteRooms)
+		this.memory.remoteRooms = {};
 
+}
 
 /** Disables all BasePlanner room visuals */
 Room.prototype.toggleBasePlannerVisuals = function (): void {
@@ -622,24 +668,6 @@ Room.prototype.toggleBasePlannerVisuals = function (): void {
 	this.memory.visuals.basePlan.visBasePlan  = !this.memory.visuals.basePlan.visBasePlan;
 	this.memory.visuals.basePlan.visPlanInfo  = !this.memory.visuals.basePlan.visPlanInfo;
 	log(`Base Planner visuals are now set to '${this.memory.visuals.basePlan.visDistTrans}'`);
-}
-
-/** Initializes room flags with default settings. Sets up various behavior flags for creeps and structures. */
-Room.prototype.initFlags = function () {
-
-	const flagSettings = this.memory.settings.flags;
-
-	if (!this.memory.settings.flags)
-		this.memory.settings.flags = {};
-
-	if (flagSettings.haulersPickupEnergy === undefined)
-		flagSettings.haulersPickupEnergy = false;
-
-	if (flagSettings.closestConSites === undefined)
-		flagSettings.closestConSites = false;
-
-	log(`Room flags initialized: haulersPickupEnergy(${flagSettings.haulersPickupEnergy}), closestConSites(${flagSettings.closestConSites})`, this);
-	return;
 }
 
 /** Discovers and registers all possible resource transfer routes in the room.
@@ -857,7 +885,7 @@ Room.prototype.setQuota = function (roleTarget: CreepRole, newTarget: number) {
 	const oldTarget = this.memory.quotas[pluralRoleTarget];
 	this.memory.quotas[pluralRoleTarget] = newTarget;
 
-	log('Set role \'' + pluralRoleTarget + '\' quota to ' + newTarget + ' (was ' + oldTarget + ').', this);
+	this.log(`Set role '${pluralRoleTarget}' quota to ${newTarget} (was ${oldTarget}).`);
 	return;
 }
 
