@@ -1,9 +1,11 @@
+import { log } from '@globals';
+
 export function creepCleanup(countObj: { [key: string]: number }): void {
 	for (let name in Memory.creeps) {
 		if (!Game.creeps[name]) {
 			const role = Memory.creeps[name].role;
 			delete Memory.creeps[name];
-			console.log('[GENERAL]: Clearing nonexistent creep memory: ', name);
+			log(`Clearing nonexistent creep memory: ${name}`);
 			// reset naming counter for type of creep that died
 			switch (role) {
 				case 'harvester':

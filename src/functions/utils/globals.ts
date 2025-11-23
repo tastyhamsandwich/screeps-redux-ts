@@ -170,17 +170,17 @@ export function log(logMsg: string | string[], room: Room | false = false): void
 		let finalLog: string = '';
 		for (let i = 0; i < logMsg.length; i++) {
 			if (room)
-				finalLog += room.link() + logMsg[i] + '\n';
+				finalLog += `${room.link()}${logMsg[i]}\n`;
 			else
-				finalLog += '[GENERAL]: ' + logMsg[i] + '\n';
+				finalLog += `[<span color='green'>GLOBAL</span>]: ${logMsg[i]}\n`;
 		}
 		console.log(finalLog);
 		return;
 	} else if (typeof logMsg === 'string') {
 		if (room)
-			console.log(room.link() + logMsg);
+			console.log(`${room.link()}${logMsg}`);
 		else
-			console.log('[GENERAL]: ' + logMsg);
+			console.log(`[<span color='green'>GLOBAL</span>]: ${logMsg}`);
 		return;
 	}
 }
@@ -453,7 +453,7 @@ export function adjustPathingValues(role: string, reuseValue: number = 3, ignore
 	Memory.globalSettings.creepSettings[role].reusePathValue = reuseValue;
 	Memory.globalSettings.creepSettings[role].ignoreCreeps = ignoreCreeps;
 
-	console.log(`[GENERAL]: Pathing Settings for '${role}' now set to: Ignore Creeps (${ignoreCreeps}), Reuse Path Value (${reuseValue})`);
+	log(`Pathing Settings for '${role}' now set to: Ignore Creeps (${ignoreCreeps}), Reuse Path Value (${reuseValue})`);
 	return;
 }
 
@@ -712,23 +712,6 @@ export function calcTickTime(tickSamples: number = 1000): string { // Call this 
 		Memory.time.lastTickMillis = millis;
 	}
 	return 'Done';
-}
-
-function determineRemoteHarvestersNeeded(room: Room): number {
-	const outpostMem = room.memory.outposts;
-	const numOutposts = outpostMem.array.length;
-
-	let totalNumSources = 0;
-
-	for (let i = 0; i < numOutposts; i++) {
-		const outpostName = outpostMem.array[i];
-		const numSources = outpostMem.list[outpostName].sourceIDs.length;
-
-		totalNumSources += numSources;
-	}
-
-	return totalNumSources;
-
 }
 
 export function getReturnCode(code: number): string {
