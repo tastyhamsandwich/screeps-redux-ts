@@ -9,6 +9,7 @@ import Scout 			from "./roles/Scout";
 import Upgrader 	from "./roles/Upgrader";
 import Conveyor 	from "./roles/Conveyor";
 import Worker 		from "./roles/Worker";
+import Infantry 	from "./roles/Infantry";
 
 const CreepAI = {
 	Builder,
@@ -21,7 +22,8 @@ const CreepAI = {
 	Scout,
 	Upgrader,
 	Conveyor,
-	Worker
+	Worker,
+	Infantry
 }
 
 export default CreepAI;
