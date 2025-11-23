@@ -107,6 +107,9 @@ module.exports.loop = function() {
 				case 'worker':
 					if (!creepSuspend.all || !creepSuspend.worker)
 						CreepAI.Worker.run(creep);
+				case 'infantry':
+					if (!creepSuspend.all)
+						CreepAI.Infantry.run(creep);
 				default:
 					break;
 			}
@@ -127,9 +130,9 @@ module.exports.loop = function() {
 		rMem.data ??= { numCSites: 0 };
 
 		const cSites: Array<ConstructionSite> = room.find(FIND_CONSTRUCTION_SITES, { filter: (i) => i.structureType !== STRUCTURE_ROAD });
-		const numCSitesPrevious: number = rMem.data.numCSites || 0;
+		const numCSitesPrevious: number = rMem.data.numCSites ?? 0;
 		rMem.data.numCSites = cSites.length;
-		const numCSites: number = rMem.data.numCSites || 0;
+		const numCSites: number = rMem.data.numCSites ?? 0;
 
 		if (room.memory.objects === undefined) 	room.cacheObjects();
 		if (numCSites < numCSitesPrevious) 			room.cacheObjects();
@@ -198,6 +201,11 @@ module.exports.loop = function() {
 
 			FUNC.displayEnergyCapacity(room);
 			FUNC.displayEnergyStorage(room);
+
+			if (room.controller && room.controller.level > room.memory.stats.controllerLevelReached) {
+				room.memory.stats.controllerLevelReached = room.controller.level;
+				room.memory.data.controllerLevel = room.controller.level;
+			}
 
 		} //* end of if (room.controller && room.controller.my) {}
 	}) //* end of _.forEach(Game.rooms, room => {}) loop
