@@ -281,9 +281,6 @@ Room.prototype.cacheObjects = function () {
 	});
 	if (sources.length > 0) {
 		const sourceIDs = cacheObjectArray(sources, 'sources');
-		if (this.memory.hostColony && sourceIDs) {
-			Game.rooms[this.memory.hostColony].memory.outposts.list[this.name].sourceIDs = sourceIDs;
-		}
 	}
 
 	// Find and cache minerals
@@ -297,10 +294,7 @@ Room.prototype.cacheObjects = function () {
 	// Find and cache controller
 	if (this.controller) {
 		this.memory.objects.controller = [this.controller.id];
-		log('Cached 1 controller.', this);
-		if (this.memory.hostColony) {
-			Game.rooms[this.memory.hostColony].memory.outposts.list[this.name].controllerID = this.controller.id;
-		}
+		this.log('Cached 1 controller.');
 	}
 
 	// Find structures more efficiently by type
@@ -336,7 +330,7 @@ Room.prototype.cacheObjects = function () {
 			// Check if near sources (within range 2)
 			let assigned = false;
 			for (let i = 0; i < sourcePositions.length; i++) {
-				if (pos.inRangeTo(sourcePositions[i].pos, 2)) {
+				if (pos.inRangeTo(sourcePositions[i].pos, 1)) {
 					if (sourcePositions[i].id === this.memory.objects.sources?.[0])
 						this.memory.containers.sourceOne = container.id;
 					else if (sourcePositions[i].id === this.memory.objects.sources?.[1])
@@ -380,14 +374,7 @@ Room.prototype.cacheObjects = function () {
 
 		this.memory.objects.containers = orderedContainers;
 
-		// Update outpost info if applicable
-		let updateInfo = '';
-		if (this.memory.hostColony) {
-			Game.rooms[this.memory.hostColony].memory.outposts.list[this.name].containerIDs = orderedContainers;
-			updateInfo = "\n>>> NOTICE: Room is an outpost of a main colony. Updated outpost info with new container IDs.";
-		}
-
-		log(`Cached ${containers.length} container${containers.length > 1 ? 's' : ''}.${updateInfo}`, this);
+		this.log(`Cached ${containers.length} container${containers.length > 1 ? 's' : ''}.`);
 	}
 
 	// Cache remaining structures
@@ -572,15 +559,6 @@ Room.prototype.initRoom = function () {
 			debug: false
 		}
 	};
-	this.memory.outposts = {
-		list: {},
-		array: [],
-		reserverLastAssigned: 0,
-		numSources: 0,
-		numHarvesters: 0,
-		counter: 0,
-		guardCounter: 0
-	};
 	this.memory.stats = {
 		energyHarvested: 0,
 		controlPoints: 0,
@@ -591,7 +569,8 @@ Room.prototype.initRoom = function () {
 		npcInvadersKilled: 0,
 		hostilePlayerCreepsKilled: 0,
 		mineralsHarvested: mineralsHarvested,
-		labStats: labStats };
+		labStats: labStats
+	};
 	this.memory.visuals = {
 		settings: {
 			spawnInfo: spawnInfo,

@@ -46,7 +46,7 @@ const Harvester = {
 						creep.harvestEnergy();
 					else {
 						if (container || contPos) {
-							if (container && !pos.isEqualTo(container.pos))
+							if (container && !pos.isEqualTo(container))
 								creep.advMoveTo(container, pathing.harvesterPathing);
 							else if (contPos && !pos.isEqualTo(contPos))
 								creep.advMoveTo(contPos, pathing.harvesterPathing);
@@ -178,7 +178,6 @@ const Harvester = {
 					creep.unloadEnergy();
 					creep.say('☠️');
 					if (cMem.haveCalledDeathAction === false) {
-						Game.rooms[cMem.home].memory.outposts.numHarvesters--;
 						cMem.haveCalledDeathAction = true;
 					}
 				}
