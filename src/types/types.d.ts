@@ -72,20 +72,10 @@ namespace NodeJS {
 		data: { [key: string]: any };
 		stats: ColonyStats;
 		availableCreeps: string[];
-		remoteRooms: { [key: string]: any };
-		outposts: {
-			list: { [key: string]: OutpostData };
-			array: string[];
-			numSources: number;
-			numHarvesters: number;
-			reserverLastAssigned: number;
-			counter: number;
-			guardCounter: number;
+		remoteRooms: {
+			[key: string]: RemoteRoom
 		};
 		quotas: { [key: string]: number };
-		hostColony?: string;
-		remoteSources?: { [key: string]: RemoteSourceData };
-		flags: RoomFlags;
 		hostileTracking: {
 			invaderCount: number;
 			playerCreepCount: number;
@@ -188,7 +178,7 @@ namespace NodeJS {
 	interface StructureSpawn {
 		spawnList: CreepRole[];
 		determineBodyParts(role: string, maxEnergy?: number, extras?: { [key: string]: any }): BodyPartConstant[];
-		spawnScout(rally: string | string[], swampScout: boolean, memory: { [key: string]: any }): ScreepsReturnCode;
+		spawnScout(rally: string | string[], swampScout: boolean, memory: { [key: string]: any }): { name: string, result: ScreepsReturnCode };
 		retryPending(): ScreepsReturnCode;
 		cloneCreep(creepName: string): ScreepsReturnCode;
 		spawnEmergencyHarvester(): ScreepsReturnCode;
@@ -226,20 +216,15 @@ namespace NodeJS {
 	}
 
 	//# REMOTES INTERFACES
-	interface OutpostData {
-		name: string;
-		controllerFlag: string;
-		sourceIDs: Id<Source>[];
-		containerIDs: Id<StructureContainer>[];
-		controllerID: Id<StructureController>;
-	}
 
-	interface RemoteSourceData {
-		pos: { x: number, y: number, roomName: string };
-		assignedHarvester: string | null;
-		containerId: string | null;
-		containerPos: { x: number, y: number, roomName: string } | null;
-		lastChecked: number;
+	interface RemoteRoom {
+		lastScanned: number;
+		sources: Id<Source>[];
+		reservation: any;
+		scouted?: boolean;
+		controllerOwner?: string;
+		controllerId?: Id<StructureController>;
+		scoutAssigned?: string
 	}
 
 	//# STATISTICS INTERFACES
