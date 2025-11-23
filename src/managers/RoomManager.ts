@@ -19,6 +19,7 @@ export default class RoomManager {
 	private basePlan: PlanResult | null = null;
 	private haulerPairs: { start: string, end: string, length: number }[] | null = null;
 	public planVisualizer: RoomPlanningVisualizer | null = null;
+	public spawns: StructureSpawn[];
 
 	constructor(room: Room) {
 		this.room = room;
@@ -28,6 +29,7 @@ export default class RoomManager {
 		this.legacySpawnManager = legacySpawnManager;
 		this.basePlanner = null; // Only create when regeneration is needed
 		this.planVisualizer = new RoomPlanningVisualizer(room);
+		this.spawns = this.room.find(FIND_MY_SPAWNS);
 
 		// Initialize all required room memory structures
 		this.initializeMemory(); // Partial initialization - other settings added as needed
@@ -139,8 +141,9 @@ export default class RoomManager {
 		// Process the plan if available
 		if (this.basePlan) this.handleBasePlan(this.basePlan);
 
-		if (this.room.controller!.level >= 4 && this.room.storage && this.room.energyCapacityAvailable >= 1200)
+		if (this.room.controller!.level >= 4 && this.room.storage && this.room.energyCapacityAvailable >= 1200) {
 			this.scanAdjacentRooms();
+		}
 
 		// Assess creep needs and submit spawn requests if using advanced spawn manager
 		if (rmData.flags.advSpawnSystem === false && rmData.pendingSpawn && this.room.energyAvailable === this.room.energyCapacityAvailable) {
@@ -183,7 +186,7 @@ export default class RoomManager {
 		const hasContainer = this.resources.containers.length > 0;
 		const creepCount = this.room.find(FIND_MY_CREEPS).length;
 
-		if (!this.room.memory.flags) this.room.memory.flags = {};
+		if (!this.room.memory.data.flags) this.room.memory.data.flags = {};
 		this.room.memory.data.flags.bootstrappingMode = (level === 1 && creepCount < 5 && !hasContainer);
 	}
 
@@ -793,7 +796,7 @@ export default class RoomManager {
 	}
 
 	/** Determine if there is a need to update or create new hauler route pair information. */
-	private shouldManageContainers(): boolean {
+	private shouldManageContainers(debug: boolean = false): boolean {
 		const cont = this.room.memory.containers || {};
 		const ids = [
 			cont.sourceOne || '',
@@ -803,7 +806,12 @@ export default class RoomManager {
 			(this.room.storage && this.room.storage.id) || ''
 		].join('|');
 
-		// simple change-detection stored in memory
+		if (debug) {
+			this.room.log(`Stored Hash: ${this.room.memory.data._lastContainerHash}`);
+			this.room.log(`Current Hash: ${ids}`);
+		}
+
+		// simple change-detection "hash" stored in memory
 		if (this.room.memory.data._lastContainerHash !== ids) {
 			this.room.memory.data._lastContainerHash = ids;
 			return true;
@@ -816,16 +824,13 @@ export default class RoomManager {
 
 		const pairArray: { start: string, end: string, length: number }[] = [];
 		if (this.room.memory.containers.sourceOne && (this.room.memory.containers.prestorage || this.room.storage)) {
-			const sourceOneContainer: StructureContainer = Game.getObjectById(this.room.memory.containers.sourceOne)!;
-			let storageCont;
-			if (this.room.storage)
-				storageCont = this.room.storage;
-			else if (this.room.prestorage)
-				storageCont = this.room.prestorage;
-
-			const pathLength = calcPathLength(sourceOneContainer.pos, storageCont.pos);
-			const pair = { start: this.room.memory.containers.sourceOne, end: storageCont.id, length: pathLength };
-			pairArray.push(pair);
+			const sourceOneContainer: StructureContainer | null = Game.getObjectById(this.room.memory.containers.sourceOne)!;
+			const storageCont = (this.room.storage) ? this.room.storage : (this.room.prestorage) ? this.room.prestorage : null;
+			if (storageCont) {
+				const pathLength = calcPathLength(sourceOneContainer.pos, storageCont.pos);
+				const pair = { start: this.room.memory.containers.sourceOne, end: storageCont.id, length: pathLength };
+				pairArray.push(pair);
+			}
 		}
 		if (this.room.memory.containers.sourceTwo && (this.room.memory.containers.prestorage || this.room.storage)) {
 			const sourceTwoContainer: StructureContainer = Game.getObjectById(this.room.memory.containers.sourceTwo)!;
@@ -846,11 +851,11 @@ export default class RoomManager {
 			const pair = { start: storage.id, end: this.room.memory.containers.controller, length: pathLength };
 			pairArray.push(pair);
 		} else if (this.room.memory.containers.controller && this.room.memory.containers.prestorage) {
-				const controllerContainer: StructureContainer = Game.getObjectById(this.room.memory.containers.controller)!;
-				const prestorageContainer: StructureContainer = Game.getObjectById(this.room.memory.containers.prestorage)!;
-				const pathLength = calcPathLength(prestorageContainer.pos, controllerContainer.pos);
-				const pair = { start: this.room.memory.containers.prestorage, end: this.room.memory.containers.controller, length: pathLength };
-				pairArray.push(pair);
+			const controllerContainer: StructureContainer = Game.getObjectById(this.room.memory.containers.controller)!;
+			const prestorageContainer: StructureContainer = Game.getObjectById(this.room.memory.containers.prestorage)!;
+			const pathLength = calcPathLength(prestorageContainer.pos, controllerContainer.pos);
+			const pair = { start: this.room.memory.containers.prestorage, end: this.room.memory.containers.controller, length: pathLength };
+			pairArray.push(pair);
 		}
 
 		if (this.room.memory.remoteRooms && Object.keys(this.room.memory.remoteRooms).length && this.room.storage) {
@@ -885,10 +890,8 @@ export default class RoomManager {
 		this.room.setQuota('hauler', pairArray.length);
 	}
 
-	/**
- * Scan adjacent rooms (exits) for visible rooms, cache their objects
- * and request scouts for non-visible rooms (throttled).
- */
+	/** Scan adjacent rooms (exits) for visible rooms, cache their objects
+ * and request scouts for non-visible rooms (throttled). */
 	private scanAdjacentRooms(): void {
 		const roomName = this.room.name;
 		const exits = Game.map.describeExits(roomName);
@@ -916,9 +919,9 @@ export default class RoomManager {
 			// If we have visibility:
 			const remoteRoom = Game.rooms[rName];
 			if (remoteRoom) {
+				remoteRoom.cacheObjects();
 				remoteRooms[rName].lastScanned = now;
-				const sources = remoteRoom.find(FIND_SOURCES);
-				remoteRooms[rName].sources = sources.map(s => s.id);
+				remoteRooms[rName].sources = remoteRoom.memory.objects.sources;
 				remoteRooms[rName].controllerId = remoteRoom.controller?.id;
 				remoteRooms[rName].controllerOwner = remoteRoom.controller?.owner?.username;
 				remoteRooms[rName].reservation = remoteRoom.controller?.reservation ? {
@@ -949,21 +952,27 @@ export default class RoomManager {
 				} else {
 					let scouts: Creep[] = _.filter(Game.creeps, (creep) => creep.memory.role == 'scout' && creep.memory.home === this.room.name);
 					if (scouts.length < remoteRooms.length) {
-						const spawn: StructureSpawn | null = Game.getObjectById(this.room.memory.objects.spawns[0]);
-						const result = spawn!.spawnScout('none', false, { targetRoom: rName } );
-						console.log(`${this.room.link()}: Attempted to spawn scout: ${getReturnCode(result)}`)
-
-						if (result === OK) {
-							const numCreeps: number = Object.keys(Game.creeps).length;
-							const name = Object.keys(Game.creeps)[Object.keys(Game.creeps).length - 1];
-							this.room.memory.remoteRooms[rName].scoutAssigned = name;
+						const freeSpawn = () => {
+							const spawns = this.room.find(FIND_MY_SPAWNS);
+							for (const spawn of spawns) {
+								if (!spawn.spawning) return spawn;
+								else continue;
+							}
+							return;
 						}
+						const spawn = freeSpawn();
+						if (spawn) {
+							const {name, result} = spawn!.spawnScout('none', false, { targetRoom: rName } );
+							this.room.log(`Attempted to spawn scout: ${getReturnCode(result)}`)
+						if (result === OK)
+							this.room.memory.remoteRooms[rName].scoutAssigned = name;
 					}
 				}
 			}
 		}
 		this.room.memory.remoteRooms = remoteRooms;
 	}
+}
 
 	/** Returns true if there is a pending or scheduled scout spawn targeting `roomName` */
 	private isScoutPendingFor(targetRoom: string): boolean {

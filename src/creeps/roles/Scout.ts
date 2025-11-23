@@ -25,8 +25,16 @@ const Scout = {
 			if (cMem.rally !== 'none') navRallyPoint(creep);
 			else {
 				if (cMem.targetRoom) {
-					const targetPos = new RoomPosition(25, 25, cMem.targetRoom);
-					creep.advMoveTo(targetPos, pathing.builderPathing, false);
+					if (creep.room.name !== Game.rooms[cMem.targetRoom].name) {
+						const targetPos = new RoomPosition(25, 25, cMem.targetRoom);
+						creep.advMoveTo(targetPos, pathing.builderPathing, false);
+					} else {
+						const targetRoom = Game.rooms[cMem.targetRoom];
+						if (!targetRoom.memory.objects) {
+							targetRoom.cacheObjects();
+							Game.rooms[cMem.home].memory.remoteRooms[cMem.targetRoom].scouted = true;
+						}
+					}
 				} else {
 					if (Scout.tickCount % 5) creep.say('🥱');
 					else creep.say('💤');

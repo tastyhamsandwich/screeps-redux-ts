@@ -295,10 +295,11 @@ StructureSpawn.prototype.determineBodyParts = function (role: string, maxEnergy?
  * Spawns a scout creep directly.
  * @param rally A string with the name of a flag (or array of strings) to be used for navigation
  * @param swampScout Set to true to spawn scout with 5 MOVE parts, defaults to false (and thus just one MOVE)
+ * @param memory Any additional memory values that should be stored (standard values such as role, RFQ, disable, etc. are supplied automatically)
  * @returns Screeps Return Code from the result of the spawnCreep() function
  * @example const result = Game.spawns.Spawn1.spawnCreep(['Flag1','Flag2','Flag3'], true);
  */
-StructureSpawn.prototype.spawnScout = function (rally: string | string[] = 'none', swampScout: boolean = false, memory = { }): ScreepsReturnCode {
+StructureSpawn.prototype.spawnScout = function (rally: string | string[] = 'none', swampScout: boolean = false, memory = { }): { name: string, result: ScreepsReturnCode } {
 
 	const baseMem = { role: 'scout', RFQ: 'scout', disable: false, rally, home: this.room.name, room: this.room.name};
 	const finalMemory = { ...baseMem, ...memory};
@@ -319,8 +320,11 @@ StructureSpawn.prototype.spawnScout = function (rally: string | string[] = 'none
 		console.log(`${this.room.link()}${this.name}> Spawning Scout in room ${this.room.name}`);
 	else
 		console.log(`${this.room.link()}${this.name}> Failed to spawn Scout in room ${this.room.name}: ${result}`);
-
-	return result;
+	const output = {
+		name,
+		result
+	}
+	return output;
 }
 
 /**
