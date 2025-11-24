@@ -313,6 +313,34 @@ export const legacySpawnManager = {
 
 		if (spawns.length) {
 
+			const creepCounts = {
+				harvesters,
+				fillers,
+				haulers,
+				upgraders,
+				builders,
+				repairers,
+				reservers,
+				conveyors,
+				workers,
+				defenders,
+				remoteharvesters
+			}
+
+			const creepTargets = {
+				harvesterTarget,
+				fillerTarget,
+				haulerTarget,
+				upgraderTarget,
+				builderTarget,
+				repairerTarget,
+				reserverTarget,
+				conveyorTarget,
+				workerTarget,
+				defenderTarget,
+				remoteharvesterTarget
+			}
+
 			_.forEach(spawns, (spawnAny) => {
 				// For every spawn in the room that we own
 				const spawn = spawnAny as StructureSpawn;
@@ -361,34 +389,6 @@ export const legacySpawnManager = {
 								console.log(`${room.link()}${spawn.name}> Pending ${pending.memory.role} waiting for energy (${room.energyAvailable}/${pending.cost}, age: ${timeSincePending}t)`);
 							return; // Skip other spawn logic this tick
 						}
-					}
-
-					const creepCounts = {
-						harvesters,
-						fillers,
-						haulers,
-						upgraders,
-						builders,
-						repairers,
-						reservers,
-						conveyors,
-						workers,
-						defenders,
-						remoteharvesters
-					}
-
-					const creepTargets = {
-						harvesterTarget,
-						fillerTarget,
-						haulerTarget,
-						upgraderTarget,
-						builderTarget,
-						repairerTarget,
-						reserverTarget,
-						conveyorTarget,
-						workerTarget,
-						defenderTarget,
-						remoteharvesterTarget
 					}
 
 					// Get the next role to spawn using round-robin scheduling
@@ -513,6 +513,23 @@ export const legacySpawnManager = {
 					}
 				}
 			});
+
+			const creepCountsDisp = {
+				harvesters: creepCounts.harvesters.length,
+				fillers: creepCounts.fillers.length,
+				haulers: creepCounts.haulers.length,
+				upgraders: creepCounts.upgraders.length,
+				builders: creepCounts.builders.length,
+				repairers: creepCounts.repairers.length,
+				workers: creepCounts.workers.length,
+				conveyors: creepCounts.conveyors.length,
+				defenders: creepCounts.defenders.length,
+				reservers: creepCounts.reservers.length,
+				remoteharvesters: creepCounts.remoteharvesters.length,
+			}
+
+			// Display console information regarding creep counts and energy state
+			FUNC.DisplayConsolePrompt(room, creepCountsDisp, creepTargets);
 		}
 	}
 }

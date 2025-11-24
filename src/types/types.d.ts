@@ -53,7 +53,23 @@ namespace NodeJS {
 	}
 
 	interface RoomMemory {
-		objects: { [key: string]: Id<AnyStructure>[] | Id<AnyStructure> };
+		objects: {
+			sources?: Id<Source>[];
+			spawns?: Id<StructureSpawn>[];
+			towers?: Id<StructureTower>[];
+			controller?: Id<StructureController>[];
+			containers?: Id<StructureContainer>[];
+			links?: Id<StructureLink>[];
+			labs?: Id<StructureLab>[];
+			storage?: Id<StructureStorage>;
+			extensions?: Id<StructureExtension>[];
+			walls?: Id<StructureWall>[];
+			ramparts?: Id<StructureRampart>[];
+			terminal?: Id<StructureTerminal>;
+			extractor?: Id<StructureExtractor>;
+
+
+		 };
 		sources: { [key: string]: string[] };
 		containers: {
 			sourceOne: string;
