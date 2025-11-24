@@ -25,7 +25,7 @@ const Scout = {
 			if (cMem.rally !== 'none') navRallyPoint(creep);
 			else {
 				if (cMem.targetRoom) {
-					if (creep.room.name !== Game.rooms[cMem.targetRoom].name) {
+					if (creep.room.name !== cMem.targetRoom) {
 						const targetPos = new RoomPosition(25, 25, cMem.targetRoom);
 						creep.advMoveTo(targetPos, pathing.builderPathing, false);
 					} else {
