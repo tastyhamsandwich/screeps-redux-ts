@@ -429,12 +429,17 @@ export function initGlobal(eraseAll: boolean = false): boolean {
 				defender: false,
 				reserver: false,
 				scout: false,
-				remoteharvester: false
+				remoteharvester: false,
+				worker: false,
+				conveyor: false,
+				infantry: false
 			},
 			creepDebug: false,
-			spawnDebug: false,
+			dataDebug: false,
 			plannerDebug: false,
-			visualsDebug: false
+			spawnDebug: false,
+			visualsDebug: false,
+
 		}
 
 	if (!Memory.stats) Memory.stats = {
