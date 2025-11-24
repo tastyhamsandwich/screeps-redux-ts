@@ -38,6 +38,9 @@ const getNameSuffix = (role: string, counter: number): string => {
 		case 'reserver': return `_Rsv${creepRoleCounts.reserver + counter}`;
 		case 'scout': return `_Sct${creepRoleCounts.scout + counter}`;
 		case 'remoteharvester': return `_RH${creepRoleCounts.remoteharvester + counter}`;
+		case 'worker': return `_W${creepRoleCounts.worker + counter}`;
+		case 'conveyor': return `_C${creepRoleCounts.conveyor + counter}`;
+		case 'infantry': return `_Inf${creepRoleCounts.infantry + counter}`;
 		default: return `_${counter}`;
 	}
 };
@@ -205,6 +208,12 @@ function getNextRoleToSpawn(
 				count: creepCount.workers.length,
 				target: creepTargets.workerTarget,
 				check: () => true
+			},
+			{
+				name: 'infantry',
+				count: creepCount.infantry.length,
+				target: creepTargets.infantryTarget,
+				check: () => true
 			}
 		];
 		currentIndex = (room.memory.data as any).indices.lastNormalRoleIndex ?? -1;
@@ -254,6 +263,7 @@ export const legacySpawnManager = {
 		let builderTarget: 		number = _.get(room.memory, ['quotas', 'builders'		], 2);
 		let repairerTarget: 	number = _.get(room.memory, ['quotas', 'repairers'	], 0);
 		let defenderTarget: 	number = _.get(room.memory, ['quotas', 'defenders'	], 2);
+		let infantryTarget:		number = _.get(room.memory, ['quotas', 'infantry'		], 0);
 		let reserverTarget: 	number = _.get(room.memory, ['quotas', 'reservers'	], 1);
 		let conveyorTarget:		number = _.get(room.memory, ['quotas', 'conveyors'	], 0);
 		let workerTarget: 		number = _.get(room.memory, ['quotas', 'workers'		], 0);
@@ -274,6 +284,7 @@ export const legacySpawnManager = {
 		let builders: 				Creep[] = creepsByRole['builder'				] || [];
 		let repairers: 				Creep[] = creepsByRole['repairer'				] || [];
 		let defenders: 				Creep[] = creepsByRole['defender'				] || [];
+		let infantry:					Creep[] = creepsByRole['infantry'				] || [];
 		let reservers: 				Creep[] = creepsByRole['reserver'				] || [];
 		let remoteharvesters: Creep[] = creepsByRole['remoteharvester'] || [];
 		let conveyors:				Creep[] = creepsByRole['conveyor'				] || [];
@@ -324,6 +335,7 @@ export const legacySpawnManager = {
 				conveyors,
 				workers,
 				defenders,
+				infantry,
 				remoteharvesters
 			}
 
@@ -338,6 +350,7 @@ export const legacySpawnManager = {
 				conveyorTarget,
 				workerTarget,
 				defenderTarget,
+				infantryTarget,
 				remoteharvesterTarget
 			}
 
@@ -440,6 +453,9 @@ export const legacySpawnManager = {
 							case 'worker':
 								trySpawnCreep(spawn, 'worker', { role: 'worker', RFQ: 'worker', home: room.name, room: room.name, disable: false, rally: 'none'}, room, colName);
 								return;
+							case 'infantry':
+								trySpawnCreep(spawn, 'infantry', { role: 'infantry', RFQ: 'infantry', home: room.name, room: room.name, disable: false, rally: 'none'}, room, colName);
+								return;
 						}
 					}
 					// If round-robin didn't select a role, attempt remote/reserver spawning using cached remoteRooms
@@ -524,6 +540,7 @@ export const legacySpawnManager = {
 				workers: creepCounts.workers.length,
 				conveyors: creepCounts.conveyors.length,
 				defenders: creepCounts.defenders.length,
+				infantry: creepCounts.infantry.length,
 				reservers: creepCounts.reservers.length,
 				remoteharvesters: creepCounts.remoteharvesters.length,
 			}
