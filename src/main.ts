@@ -1,6 +1,7 @@
 
 // Import Global Functions and VizFuncs
 import * as FUNC from '@functions/index';
+import { log } from '@globals';
 
 
 // Import Manager Daemons
@@ -180,12 +181,24 @@ module.exports.loop = function() {
 		rMem.data.hostileTracking.invaderCount = currentInvaderCount;
 		rMem.data.hostileTracking.playerCreepCount = currentPlayerCreepCount;
 
-		if (hostileOwners.length > 0) {
-			FUNC.log(`: -----------------HOSTILE CREEPS PRESENT----------------- `, room);
-			FUNC.log(`OWNED BY: ${hostileNameString}`);
-			if (room.memory.visuals.redAlertOverlay)
-				room.visual.rect(-1, -1, 51, 51, { fill: '#440000', stroke: '#ff0000', opacity: 0.2, strokeWidth: 0.2 });
+	if (hostileOwners.length > 0) {
+		// Initialize hostile creeps logging tracking in room memory if not present
+		rMem.data.hostileLogging ??= { logCount: 0, lastLogTick: 0 };
+
+		// Log first 5 times, then only every 50 ticks
+		const shouldLog = rMem.data.hostileLogging.logCount < 5 ||
+		                  (tickCount - rMem.data.hostileLogging.lastLogTick >= 50);
+
+		if (shouldLog) {
+			log(`: -----------------HOSTILE CREEPS PRESENT----------------- `, room);
+			log(`OWNED BY: ${hostileNameString}`);
+			rMem.data.hostileLogging.logCount++;
+			rMem.data.hostileLogging.lastLogTick = tickCount;
 		}
+
+		if (room.memory.visuals && room.memory.visuals.redAlertOverlay)
+			room.visual.rect(-1, -1, 51, 51, { fill: '#440000', stroke: '#ff0000', opacity: 0.2, strokeWidth: 0.2 });
+	}
 
 		//* From here, only rooms where we own the controller have this code ran
 		if (room.controller && room.controller.my) {
@@ -196,15 +209,24 @@ module.exports.loop = function() {
 			const RoomManagerInstance = global.roomManagers[roomName];
 			RoomManagerInstance.run();
 
-			if (room.controller && room.controller.level >= 1)
+			if (room.controller.level >= 1)
 				FUNC.visualRCProgress(room.controller);
 
 			FUNC.displayEnergyCapacity(room);
 			FUNC.displayEnergyStorage(room);
 
-			if (room.controller && room.controller.level > room.memory.stats.controllerLevelReached) {
-				room.memory.stats.controllerLevelReached = room.controller.level;
+			const update_controller_level = room.controller.level !== room.memory.data.controllerLevel;
+			const update_controller_stats_level = room.controller.level > room.memory.stats.controllerLevelReached;
+
+			if (Memory.globalSettings.debug.dataDebug)
+				room.log(`Update C.Level: ${update_controller_level} | Update C.StatsLevel: ${update_controller_stats_level}`);
+			if (update_controller_level) {
 				room.memory.data.controllerLevel = room.controller.level;
+				room.log(`Updated Controller Level! (was ${room.controller.level - 1}, now ${room.controller.level})`);
+			}
+			if (update_controller_stats_level) {
+				room.memory.stats.controllerLevelReached = room.controller.level;
+				room.log(`New highest controller for the room reached!`);
 			}
 
 		} //* end of if (room.controller && room.controller.my) {}
