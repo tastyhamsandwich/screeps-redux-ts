@@ -19,20 +19,54 @@ export default class RoomManager {
 	private basePlan: PlanResult | null = null;
 	private haulerPairs: { start: string, end: string, length: number }[] | null = null;
 	public planVisualizer: RoomPlanningVisualizer | null = null;
-	public spawns: StructureSpawn[];
+	private _spawns: Id<StructureSpawn>[];
+	private _creeps: {[creepName: string]: Creep;}
+	private _towers: Id<StructureTower>[] | undefined;
 
 	constructor(room: Room) {
 		this.room = room;
+
+		// Initialize all required room memory structures
+		this.initializeMemory(); // Partial initialization - other settings added as needed
+		this.room.cacheObjects();
 		this.resources = this.scanResources();
 		this.stats = this.gatherStats();
 		this.spawnManager = new SpawnManager(room);
 		this.legacySpawnManager = legacySpawnManager;
 		this.basePlanner = null; // Only create when regeneration is needed
 		this.planVisualizer = new RoomPlanningVisualizer(room);
-		this.spawns = this.room.find(FIND_MY_SPAWNS);
+		this._spawns = this.room.find(FIND_MY_SPAWNS).map((s) => s.id);
+		this._creeps = Game.creeps;
+		this._towers = this.room.memory.objects.towers;
 
-		// Initialize all required room memory structures
-		this.initializeMemory(); // Partial initialization - other settings added as needed
+	}
+
+	get spawns(): StructureSpawn[] {
+		return this._spawns
+			.map(id => Game.getObjectById(id))
+			.filter((spawn): spawn is StructureSpawn => spawn !== null);
+	}
+
+	get towers(): StructureTower[] {
+		if (!this._towers) return [];
+		return this._towers
+			.map(id => Game.getObjectById(id))
+			.filter((tower): tower is StructureTower => tower !== null);
+	}
+
+	get creeps(): Creep[] {
+		return Object.values(Game.creeps).filter(creep => creep.memory.home === this.room.name);
+	}
+
+	get remotes(): { [roomName: string]: Room | undefined } {
+		return new Proxy(this.room.memory.remoteRooms, {
+			get: (target, prop: string) => {
+				if (prop in target) {
+					return Game.rooms[prop];
+				}
+				return undefined;
+			}
+		}) as unknown as { [roomName: string]: Room | undefined };
 	}
 
 	private initializeMemory() {
@@ -74,9 +108,9 @@ export default class RoomManager {
 		if (!rmData.flags.initialized) {
 			rmData.flags.advSpawnSystem = false;
 			Memory.globalData.numColonies++;
-			this.room.initRoom();
+			room.initRoom();
 			rmData.flags.initialized ??= true;
-			this.room.log(`First Time Room Initialization Complete!`);
+			room.log(`First Time Room Initialization Complete!`);
 		}
 
 		if (room.controller && room.controller.level !== room.memory.data.controllerLevel) {
@@ -96,30 +130,30 @@ export default class RoomManager {
 			rmData.lastResourceScan = Game.time;
 		}
 
-		if (this.room.linkStorage && this.room.linkController && this.room.storage && !this.room.memory.quotas.conveyor)
-			this.room.setQuota('conveyor', 1);
+		const conveyor_needed = room.linkStorage && room.linkController && room.storage && !room.memory.quotas.conveyor;
+		if (conveyor_needed)
+			room.setQuota('conveyor', 1);
 
 		// Assess need for bootstrapping mode
 		this.updateBootstrapState();
 
 		// Generate and cache base plan data
 		const rcl = this.room.controller?.level ?? 0;
-		const mem = this.room.memory;
 
 		// Initialize visual settings if needed
 		if (!rmData.flags.basePlanGenerated) {
-			if (!this.room.memory.visuals.basePlan) this.room.memory.visuals.basePlan = {};
-			this.room.memory.visuals.basePlan.visDistTrans ??= true;
-			this.room.memory.visuals.basePlan.visFloodFill ??= true;
-			this.room.memory.visuals.basePlan.visBasePlan ??= true;
+			if (!roomMem.visuals.basePlan) roomMem.visuals.basePlan = {};
+			roomMem.visuals.basePlan.visDistTrans ??= true;
+			roomMem.visuals.basePlan.visFloodFill ??= true;
+			roomMem.visuals.basePlan.visBasePlan ??= true;
 			rmData.flags.basePlanGenerated = true;
 		}
 
 		let regenerate = false;
 
 		// Determine whether to regenerate plan
-		if (!mem.basePlan) regenerate = true;
-		else if (mem.basePlan.rclAtGeneration !== rcl) regenerate = true;
+		if (!roomMem.basePlan) regenerate = true;
+		else if (roomMem.basePlan.rclAtGeneration !== rcl) regenerate = true;
 
 		// If regeneration is required
 		if (regenerate) {
@@ -127,27 +161,28 @@ export default class RoomManager {
 			this.basePlan = this.basePlanner.createPlan();
 
 			if (this.basePlan) {
-				mem.basePlan = {
+				roomMem.basePlan = {
 					lastGenerated: Game.time,
 					rclAtGeneration: rcl,
 					checksum: computePlanChecksum(this.basePlan),
 					data: this.basePlan
 				};
-				console.log(`${this.room.link()} Base plan regenerated for RCL${rcl}`);
+				room.log(`Base plan regenerated for RCL${rcl}`);
 				// Otherwise, load cached plan (only assign from memory if not already loaded)
 			}
-		} else if (!this.basePlan && mem.basePlan) this.basePlan = mem.basePlan.data;
+		} else if (!this.basePlan && roomMem.basePlan) this.basePlan = roomMem.basePlan.data;
 
 		// Process the plan if available
 		if (this.basePlan) this.handleBasePlan(this.basePlan);
 
-		if (this.room.controller!.level >= 4 && this.room.storage && this.room.energyCapacityAvailable >= 1200) {
+		const ready_for_remotes = room.controller!.level >= 4 && room.storage && room.energyCapacityAvailable >= 1200;
+		if (ready_for_remotes) {
 			this.scanAdjacentRooms();
 		}
 
 		// Assess creep needs and submit spawn requests if using advanced spawn manager
-		if (rmData.flags.advSpawnSystem === false && rmData.pendingSpawn && this.room.energyAvailable === this.room.energyCapacityAvailable) {
-			const spawns = this.room.find(FIND_MY_SPAWNS, { filter: i => !i.spawning});
+		if (rmData.flags.advSpawnSystem === false && rmData.pendingSpawn && room.energyAvailable === room.energyCapacityAvailable) {
+			const spawns = room.find(FIND_MY_SPAWNS, { filter: i => !i.spawning});
 			for (const spawn of spawns) {
 				const result = spawn.retryPending();
 				if (result === OK) break;
@@ -176,7 +211,7 @@ export default class RoomManager {
 			this.manageLinks();
 		}
 
-		if (this.room.memory.visuals.enableVisuals)
+		if (roomMem.visuals.enableVisuals)
 			this.planVisualizer?.visualize(this.basePlan?.dtGrid, this.basePlan?.floodFill, this.basePlan?.placements);
 	}
 
@@ -226,7 +261,7 @@ export default class RoomManager {
 	/** Force regeneration of base plan */
 	public regenerateBasePlan(): void {
 		delete this.room.memory.basePlan;
-		console.log(`${this.room.link()} Base plan cleared - will regenerate next tick`);
+		this.room.log(`Base plan cleared - will regenerate next tick`);
 	}
 
 	/** Gathers current room statistics */
@@ -951,7 +986,7 @@ export default class RoomManager {
 					}
 				} else {
 					let scouts: Creep[] = _.filter(Game.creeps, (creep) => creep.memory.role == 'scout' && creep.memory.home === this.room.name);
-					if (scouts.length < remoteRooms.length) {
+					if (scouts.length < Object.keys(remoteRooms).length) {
 						const freeSpawn = () => {
 							const spawns = this.room.find(FIND_MY_SPAWNS);
 							for (const spawn of spawns) {
