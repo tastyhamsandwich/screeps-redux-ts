@@ -67,8 +67,7 @@ namespace NodeJS {
 			ramparts?: Id<StructureRampart>[];
 			terminal?: Id<StructureTerminal>;
 			extractor?: Id<StructureExtractor>;
-
-
+			[key: string]: any;
 		 };
 		sources: { [key: string]: string[] };
 		containers: {
@@ -128,6 +127,7 @@ namespace NodeJS {
 			redAlertOverlay?: boolean;
 			showPlanning?: boolean;
 		};
+		remoteOfRoom?: string;
 	}
 
 	interface CreepMemory {
@@ -193,6 +193,7 @@ namespace NodeJS {
 
 	interface StructureSpawn {
 		spawnList: CreepRole[];
+		log(logMsg: string): void;
 		determineBodyParts(role: string, maxEnergy?: number, extras?: { [key: string]: any }): BodyPartConstant[];
 		spawnScout(rally: string | string[], swampScout: boolean, memory: { [key: string]: any }): { name: string, result: ScreepsReturnCode };
 		retryPending(): ScreepsReturnCode;
@@ -236,6 +237,7 @@ namespace NodeJS {
 	interface RemoteRoom {
 		lastScanned: number;
 		sources: Id<Source>[];
+		containers: Id<StructureContainer>[];
 		reservation: any;
 		scouted?: boolean;
 		controllerOwner?: string;
@@ -583,6 +585,51 @@ namespace NodeJS {
 									 Id<Resource | Tombstone | Ruin>[];
 		dropoffTarget: Id<AnyStoreStructure>;
 		cargoManifest: CargoManifest;
+	}
+
+	//# TASK MANAGER INTERFACES
+
+	interface TaskProgress {
+		cargoTransferred?: Partial<Record<ResourceConstant, number>>;
+		repairAmount?: number;
+		buildAmount?: number;
+		harvestAmount?: number;
+		upgradeAmount?: number;
+		filledAmount?: number;
+	}
+
+	type TaskStatus = 'pending' | 'assigned' | 'in_progress' | 'completed' | 'failed';
+	type WorkerType = 'hauler' | 'builder' | 'mixed';
+
+	type TaskObject = TaskAssignment & {
+		taskId: string;
+		priority: boolean;
+		createdAt: number;
+		assignedCreeps: string[];
+		status: TaskStatus;
+		progress: TaskProgress;
+	};
+
+	interface WorkerInfo {
+		creep: Creep;
+		type: WorkerType;
+		available: boolean;
+		currentTaskId?: string;
+		typeDetectedAt: number;
+	}
+
+	interface TaskManagerMemory {
+		queue: TaskObject[];
+		workerAssignments: { [creepName: string]: string };
+		workerTypes: { [creepName: string]: { type: WorkerType; detectedAt: number } };
+		workerQuota: number;
+		lastScanned: number;
+		stats: {
+			tasksCompleted: number;
+			tasksCreatedThisTick: number;
+			totalCargoMoved: number;
+			totalEnergyTransferred: number;
+		};
 	}
 
 	//# CUSTOM RETURN CODES
