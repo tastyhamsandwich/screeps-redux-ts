@@ -1,5 +1,6 @@
 import RoomDefense from './DefenseManager';
 import SpawnManager from './SpawnManager';
+//import TaskManager from '../../unused/TaskManager';
 import BasePlanner, { computePlanChecksum } from '../modules/BasePlanner';
 import { STRUCTURE_PRIORITY, PLAYER_USERNAME } from '../functions/utils/constants';
 import { legacySpawnManager } from './room/utils';
@@ -14,11 +15,12 @@ export default class RoomManager {
 	private resources: RoomResources;
 	private stats: RoomStats;
 	private spawnManager: SpawnManager;
-	private legacySpawnManager;
-	private basePlanner: BasePlanner | null;
+	//private TaskManager: TaskManager;
+	private LegacySpawnManager;
+	private BasePlanner: BasePlanner | null;
 	private basePlan: PlanResult | null = null;
 	private haulerPairs: { start: string, end: string, length: number }[] | null = null;
-	public planVisualizer: RoomPlanningVisualizer | null = null;
+	public PlanVisualizer: RoomPlanningVisualizer | null = null;
 	private _spawns: Id<StructureSpawn>[];
 	private _creeps: {[creepName: string]: Creep;}
 	private _towers: Id<StructureTower>[] | undefined;
@@ -32,9 +34,10 @@ export default class RoomManager {
 		this.resources = this.scanResources();
 		this.stats = this.gatherStats();
 		this.spawnManager = new SpawnManager(room);
-		this.legacySpawnManager = legacySpawnManager;
-		this.basePlanner = null; // Only create when regeneration is needed
-		this.planVisualizer = new RoomPlanningVisualizer(room);
+		//this.TaskManager = new TaskManager(room);
+		this.LegacySpawnManager = legacySpawnManager;
+		this.BasePlanner = null; // Only create when regeneration is needed
+		this.PlanVisualizer = new RoomPlanningVisualizer(room);
 		this._spawns = this.room.find(FIND_MY_SPAWNS).map((s) => s.id);
 		this._creeps = Game.creeps;
 		this._towers = this.room.memory.objects.towers;
@@ -42,65 +45,88 @@ export default class RoomManager {
 	}
 
 	get spawns(): StructureSpawn[] {
-		return this._spawns
-			.map(id => Game.getObjectById(id))
-			.filter((spawn): spawn is StructureSpawn => spawn !== null);
+		try {
+			return this._spawns
+				.map(id => Game.getObjectById(id))
+				.filter((spawn): spawn is StructureSpawn => spawn !== null);
+		} catch (e) {
+			console.log(`Execution Error In Function: RoomManager.spawns(${this.room.name}) on Tick ${Game.time}. Error: ${e}`);
+			return [];
+		}
 	}
 
 	get towers(): StructureTower[] {
-		if (!this._towers) return [];
-		return this._towers
-			.map(id => Game.getObjectById(id))
-			.filter((tower): tower is StructureTower => tower !== null);
+		try {
+			if (!this._towers) return [];
+			return this._towers
+				.map(id => Game.getObjectById(id))
+				.filter((tower): tower is StructureTower => tower !== null);
+		} catch (e) {
+			console.log(`Execution Error In Function: RoomManager.towers(${this.room.name}) on Tick ${Game.time}. Error: ${e}`);
+			return [];
+		}
 	}
 
 	get creeps(): Creep[] {
-		return Object.values(Game.creeps).filter(creep => creep.memory.home === this.room.name);
+		try {
+			return Object.values(Game.creeps).filter(creep => creep.memory.home === this.room.name);
+		} catch (e) {
+			console.log(`Execution Error In Function: RoomManager.creeps(${this.room.name}) on Tick ${Game.time}. Error: ${e}`);
+			return [];
+		}
 	}
 
 	get remotes(): { [roomName: string]: Room | undefined } {
-		return new Proxy(this.room.memory.remoteRooms, {
-			get: (target, prop: string) => {
-				if (prop in target) {
-					return Game.rooms[prop];
+		try {
+			return new Proxy(this.room.memory.remoteRooms, {
+				get: (target, prop: string) => {
+					if (prop in target)
+						return Game.rooms[prop];
+					return undefined;
 				}
-				return undefined;
-			}
-		}) as unknown as { [roomName: string]: Room | undefined };
+			}) as unknown as { [roomName: string]: Room | undefined };
+		} catch (e) {
+			console.log(`Execution Error In Function: RoomManager.remotes(${this.room.name}) on Tick ${Game.time}. Error: ${e}`);
+			return {};
+		}
 	}
 
 	private initializeMemory() {
-		if (!this.room.memory.data) this.room.memory.data = {};
-		if (!this.room.memory.data.flags) this.room.memory.data.flags = {};
-		if (!this.room.memory.data.indices) this.room.memory.data.indices = {};
-		if (!this.room.memory.visuals)
-			this.room.memory.visuals = {
-				settings: {},
-				basePlan: {
-					visDistTrans: false,
-					visBasePlan: false,
-					visFloodFill: false,
-					visPlanInfo: false,
-					buildProgress: false
-				},
-				enableVisuals: false,
-				redAlertOverlay: true,
-				showPlanning: false
-			};
-		if (!this.room.memory.quotas) this.room.memory.quotas = {};
-		if (!this.room.memory.objects) this.room.memory.objects = {};
-		if (!this.room.memory.containers) this.room.memory.containers = {} as any;
-		if (!this.room.memory.remoteRooms) this.room.memory.remoteRooms = {};
-		if (!this.room.memory.settings)
-			this.room.memory.settings = {
-				basePlanning: { debug: false }
-			} as any;
+		try {
+			if (!this.room.memory.data) this.room.memory.data = {};
+			if (!this.room.memory.data.flags) this.room.memory.data.flags = {};
+			if (!this.room.memory.data.indices) this.room.memory.data.indices = {};
+			if (!this.room.memory.visuals)
+				this.room.memory.visuals = {
+					settings: {},
+					basePlan: {
+						visDistTrans: false,
+						visBasePlan: false,
+						visFloodFill: false,
+						visPlanInfo: false,
+						buildProgress: false
+					},
+					enableVisuals: false,
+					redAlertOverlay: true,
+					showPlanning: false
+				};
+			if (!this.room.memory.quotas) this.room.memory.quotas = {};
+			if (!this.room.memory.objects) this.room.memory.objects = {};
+			if (!this.room.memory.containers) this.room.memory.containers = {} as any;
+			if (!this.room.memory.remoteRooms) this.room.memory.remoteRooms = {};
+			if (!this.room.memory.settings)
+				this.room.memory.settings = {
+					basePlanning: { debug: false }
+				} as any;
+		} catch (e) {
+			console.log(`Execution Error In Function: RoomManager.initializeMemory(${this.room.name}) on Tick ${Game.time}. Error: ${e}`);
+		}
 	}
 
 	/** Main run method - called every tick */
 	run(): void {
-
-		const room = this.room;
+		try {
+			const room = this.room;
 		const roomMem = room.memory;
 		roomMem.data ??= { flags: {}, indices: {} };
 		const rmData = roomMem.data;
@@ -111,6 +137,23 @@ export default class RoomManager {
 			room.initRoom();
 			rmData.flags.initialized ??= true;
 			room.log(`First Time Room Initialization Complete!`);
+		}
+
+		// Assess creep needs and submit spawn requests if using advanced spawn manager
+		if (rmData.flags.advSpawnSystem === false && rmData.pendingSpawn && room.energyAvailable === room.energyCapacityAvailable) {
+			const spawns = room.find(FIND_MY_SPAWNS, { filter: i => !i.spawning });
+			for (const spawn of spawns) {
+				const result = spawn.retryPending();
+				if (result === OK) break;
+			}
+		}
+
+		if (rmData.flags.advSpawnSystem) {
+			this.spawnManager.run();
+			this.assessCreepNeeds();
+		} else {
+			// Otherwise execute legacy spawn manager logic
+			this.LegacySpawnManager.run(this.room);
 		}
 
 		if (room.controller && room.controller.level !== room.memory.data.controllerLevel) {
@@ -130,7 +173,8 @@ export default class RoomManager {
 			rmData.lastResourceScan = Game.time;
 		}
 
-		const conveyor_needed = room.linkStorage && room.linkController && room.storage && !room.memory.quotas.conveyor;
+		const conveyor_needed = room.linkStorage && (room.linkController || room.linkOne || room.linkTwo) && room.storage && room.memory.quotas.conveyor === 0;
+
 		if (conveyor_needed)
 			room.setQuota('conveyor', 1);
 
@@ -157,8 +201,8 @@ export default class RoomManager {
 
 		// If regeneration is required
 		if (regenerate) {
-			this.basePlanner = new BasePlanner(this.room);
-			this.basePlan = this.basePlanner.createPlan();
+			this.BasePlanner = new BasePlanner(this.room);
+			this.basePlan = this.BasePlanner.createPlan();
 
 			if (this.basePlan) {
 				roomMem.basePlan = {
@@ -176,26 +220,11 @@ export default class RoomManager {
 		if (this.basePlan) this.handleBasePlan(this.basePlan);
 
 		const ready_for_remotes = room.controller!.level >= 4 && room.storage && room.energyCapacityAvailable >= 1200;
-		if (ready_for_remotes) {
+		if (ready_for_remotes)
 			this.scanAdjacentRooms();
-		}
 
-		// Assess creep needs and submit spawn requests if using advanced spawn manager
-		if (rmData.flags.advSpawnSystem === false && rmData.pendingSpawn && room.energyAvailable === room.energyCapacityAvailable) {
-			const spawns = room.find(FIND_MY_SPAWNS, { filter: i => !i.spawning});
-			for (const spawn of spawns) {
-				const result = spawn.retryPending();
-				if (result === OK) break;
-			}
-		}
-
-		if (rmData.flags.advSpawnSystem) {
-			this.spawnManager.run();
-			this.assessCreepNeeds();
-		} else {
-			// Otherwise execute legacy spawn manager logic
-			this.legacySpawnManager.run(this.room);
-		}
+		// Run task management for workers
+		//this.TaskManager.run();
 
 		// Assign tasks to worker creeps
 		this.assignCreepTasks();
@@ -207,107 +236,153 @@ export default class RoomManager {
 		if (this.shouldManageContainers()) this.manageContainers();
 
 		// Manage links (if any)
-		if (this.resources.links.length > 0) {
+		if (this.resources.links.length > 0)
 			this.manageLinks();
-		}
 
 		if (roomMem.visuals.enableVisuals)
-			this.planVisualizer?.visualize(this.basePlan?.dtGrid, this.basePlan?.floodFill, this.basePlan?.placements);
+			this.PlanVisualizer?.visualize(this.basePlan?.dtGrid, this.basePlan?.floodFill, this.basePlan?.placements);
+		} catch (e) {
+			console.log(`Execution Error In Function: RoomManager.run(${this.room.name}) on Tick ${Game.time}. Error: ${e}`);
+		}
 	}
 
 	/** Sets current bootstrapping state in room memory */
 	private updateBootstrapState(): void {
-		const level = this.stats.controllerLevel;
-		const hasContainer = this.resources.containers.length > 0;
-		const creepCount = this.room.find(FIND_MY_CREEPS).length;
+		try {
+			const level = this.stats.controllerLevel;
+			const hasContainer = this.resources.containers.length > 0;
+			const creepCount = this.room.find(FIND_MY_CREEPS).length;
 
-		if (!this.room.memory.data.flags) this.room.memory.data.flags = {};
-		this.room.memory.data.flags.bootstrappingMode = (level === 1 && creepCount < 5 && !hasContainer);
+			if (!this.room.memory.data.flags) this.room.memory.data.flags = {};
+			this.room.memory.data.flags.bootstrappingMode = (level === 1 && creepCount < 5 && !hasContainer);
+		} catch (e) {
+			console.log(`Execution Error In Function: RoomManager.updateBootstrapState(${this.room.name}) on Tick ${Game.time}. Error: ${e}`);
+		}
 	}
 
 	/** Scans the room for all relevant structures and resources */
 	private scanResources(): RoomResources {
-		return {
-			sources: this.room.find(FIND_SOURCES),
-			minerals: this.room.find(FIND_MINERALS),
-			controller: this.room.controller,
-			containers: this.room.find(FIND_STRUCTURES, {
-				filter: (s) => s.structureType === STRUCTURE_CONTAINER
-			}) as StructureContainer[],
-			towers: this.room.find(FIND_MY_STRUCTURES, {
-				filter: (s) => s.structureType === STRUCTURE_TOWER
-			}) as StructureTower[],
-			spawns: this.room.find(FIND_MY_STRUCTURES, {
-				filter: (s) => s.structureType === STRUCTURE_SPAWN
-			}) as StructureSpawn[],
-			links: this.room.find(FIND_MY_STRUCTURES, {
-				filter: (s) => s.structureType === STRUCTURE_LINK
-			}) as StructureLink[],
-			storage: this.room.storage,
-			terminal: this.room.terminal
-		};
+		try {
+			return {
+				sources: this.room.find(FIND_SOURCES),
+				minerals: this.room.find(FIND_MINERALS),
+				controller: this.room.controller,
+				containers: this.room.find(FIND_STRUCTURES, {
+					filter: (s) => s.structureType === STRUCTURE_CONTAINER
+				}) as StructureContainer[],
+				towers: this.room.find(FIND_MY_STRUCTURES, {
+					filter: (s) => s.structureType === STRUCTURE_TOWER
+				}) as StructureTower[],
+				spawns: this.room.find(FIND_MY_STRUCTURES, {
+					filter: (s) => s.structureType === STRUCTURE_SPAWN
+				}) as StructureSpawn[],
+				links: this.room.find(FIND_MY_STRUCTURES, {
+					filter: (s) => s.structureType === STRUCTURE_LINK
+				}) as StructureLink[],
+				storage: this.room.storage,
+				terminal: this.room.terminal
+			};
+		} catch (e) {
+			console.log(`Execution Error In Function: RoomManager.scanResources(${this.room.name}) on Tick ${Game.time}. Error: ${e}`);
+			return {
+				sources: [],
+				minerals: [],
+				controller: undefined,
+				containers: [],
+				towers: [],
+				spawns: [],
+				links: [],
+				storage: undefined,
+				terminal: undefined
+			};
+		}
 	}
 
 	/** Toggle base planner visuals */
 	public togglePlanVisuals(): void {
-		if (!this.room.memory.visuals.basePlan) this.room.memory.visuals.basePlan = {};
-		const current = this.room.memory.visuals.basePlan.visBasePlan ?? false;
-		this.room.memory.visuals.basePlan.visBasePlan = !current;
-		this.room.memory.visuals.basePlan.visDistTrans = !current;
-		this.room.memory.visuals.basePlan.visFloodFill = !current;
-		console.log(`${this.room.link()} Base planner visuals ${!current ? 'enabled' : 'disabled'}`);
+		try {
+			if (!this.room.memory.visuals.basePlan) this.room.memory.visuals.basePlan = {};
+			const current = this.room.memory.visuals.basePlan.visBasePlan ?? false;
+			this.room.memory.visuals.basePlan.visBasePlan = !current;
+			this.room.memory.visuals.basePlan.visDistTrans = !current;
+			this.room.memory.visuals.basePlan.visFloodFill = !current;
+			console.log(`${this.room.link()} Base planner visuals ${!current ? 'enabled' : 'disabled'}`);
+		} catch (e) {
+			console.log(`Execution Error In Function: RoomManager.togglePlanVisuals(${this.room.name}) on Tick ${Game.time}. Error: ${e}`);
+		}
 	}
 
 	/** Force regeneration of base plan */
 	public regenerateBasePlan(): void {
-		delete this.room.memory.basePlan;
-		this.room.log(`Base plan cleared - will regenerate next tick`);
+		try {
+			delete this.room.memory.basePlan;
+			this.room.log(`Base plan cleared - will regenerate next tick`);
+		} catch (e) {
+			console.log(`Execution Error In Function: RoomManager.regenerateBasePlan(${this.room.name}) on Tick ${Game.time}. Error: ${e}`);
+		}
 	}
 
 	/** Gathers current room statistics */
 	private gatherStats(): RoomStats {
-		const damagedStructures = this.room.find(FIND_STRUCTURES, {
-			filter: (s) => s.hits < s.hitsMax && s.structureType !== STRUCTURE_WALL
-		});
+		try {
+			const damagedStructures = this.room.find(FIND_STRUCTURES, {
+				filter: (s) => s.hits < s.hitsMax && s.structureType !== STRUCTURE_WALL
+			});
 
-		// Prioritize critical structures
-		damagedStructures.sort((a, b) => {
-			const aPriority = this.getRepairPriority(a);
-			const bPriority = this.getRepairPriority(b);
-			return bPriority - aPriority;
-		});
+			// Prioritize critical structures
+			damagedStructures.sort((a, b) => {
+				const aPriority = this.getRepairPriority(a);
+				const bPriority = this.getRepairPriority(b);
+				return bPriority - aPriority;
+			});
 
-		return {
-			controllerLevel: this.room.controller?.level || 0,
-			energyAvailable: this.room.energyAvailable,
-			energyCapacityAvailable: this.room.energyCapacityAvailable,
-			constructionSites: this.room.find(FIND_CONSTRUCTION_SITES),
-			damagedStructures
-		};
+			return {
+				controllerLevel: this.room.controller?.level || 0,
+				energyAvailable: this.room.energyAvailable,
+				energyCapacityAvailable: this.room.energyCapacityAvailable,
+				constructionSites: this.room.find(FIND_CONSTRUCTION_SITES),
+				damagedStructures
+			};
+		} catch (e) {
+			console.log(`Execution Error In Function: RoomManager.gatherStats(${this.room.name}) on Tick ${Game.time}. Error: ${e}`);
+			return {
+				controllerLevel: 0,
+				energyAvailable: 0,
+				energyCapacityAvailable: 0,
+				constructionSites: [],
+				damagedStructures: []
+			};
+		}
 	}
 
 	/** Determines repair priority for structures */
 	private getRepairPriority(structure: Structure): number {
-		const hitsPercent = structure.hits / structure.hitsMax;
+		try {
+			const hitsPercent = structure.hits / structure.hitsMax;
 
-		// Critical structures get highest priority
-		if (structure.structureType === STRUCTURE_TOWER) 			return 100 	- hitsPercent * 100;
-		if (structure.structureType === STRUCTURE_SPAWN) 			return 95 	- hitsPercent * 100;
-		if (structure.structureType === STRUCTURE_EXTENSION) 	return 80 	- hitsPercent * 100;
-		if (structure.structureType === STRUCTURE_CONTAINER) {
-			// Containers decay, only repair when below 50%
-			return hitsPercent < 0.5 ? 70 - hitsPercent * 100 : 0;
-		}
-		if (structure.structureType === STRUCTURE_ROAD) {
-			// Roads decay, only repair when below 50%
-			return hitsPercent < 0.5 ? 60 - hitsPercent * 100 : 0;
-		}
+			// Critical structures get highest priority
+			if (structure.structureType === STRUCTURE_TOWER) 			return 100 	- hitsPercent * 100;
+			if (structure.structureType === STRUCTURE_SPAWN) 			return 95 	- hitsPercent * 100;
+			if (structure.structureType === STRUCTURE_EXTENSION) 	return 80 	- hitsPercent * 100;
+			if (structure.structureType === STRUCTURE_CONTAINER) {
+				// Containers decay, only repair when below 50%
+				return hitsPercent < 0.5 ? 70 - hitsPercent * 100 : 0;
+			}
+			if (structure.structureType === STRUCTURE_ROAD) {
+				// Roads decay, only repair when below 50%
+				return hitsPercent < 0.5 ? 60 - hitsPercent * 100 : 0;
+			}
 
-		return 50 - hitsPercent * 100;
+			return 50 - hitsPercent * 100;
+		} catch (e) {
+			console.log(`Execution Error In Function: RoomManager.getRepairPriority(${this.room.name}) on Tick ${Game.time}. Error: ${e}`);
+			return 0;
+		}
 	}
 
 	/** Assesses which creeps are needed and submits spawn requests to SpawnManager */
 	private assessCreepNeeds(): void {
+		try {
 		const roomName = this.room.name;
 		const rMem = this.room.memory;
 
@@ -524,7 +599,7 @@ export default class RoomManager {
 					});
 				}
 			}
-			// Request Reservers
+			/*// Request Reservers
 			else if (cap >= 800 && totalReservers < reserverTarget) {
 				const body = determineBodyParts('reserver', cap, this.room);
 				if (body) {
@@ -545,7 +620,37 @@ export default class RoomManager {
 						urgent: false
 					});
 				}
-			}
+			}*/
+			// Request Workers (dynamically managed by TaskManager)
+			/*
+			const workers = creepsByRole['worker'] || [];
+			const workerQuota = this.TaskManager.getWorkerQuota();
+			const totalWorkers = workers.length + countPendingRole('worker');
+
+			if (totalWorkers < workerQuota) {
+				const preferredType = this.TaskManager.getPreferredWorkerType();
+				const body = determineBodyParts(preferredType, cap, this.room);
+				if (body) {
+					this.spawnManager.submitRequest({
+						role: 'worker',
+						priority: 75,
+						body: body,
+						memory: {
+							role: 'worker',
+							RFQ: 'worker',
+							home: roomName,
+							room: roomName,
+							working: false,
+							disable: false,
+							rally: 'none',
+							preferredType: preferredType.split('-')[1] || 'mixed' // Store the variant hint
+						},
+						roomName: roomName,
+						urgent: false
+					});
+				}
+			}*/
+
 			// Remote/reserver logic: use cached adjacent room data to decide on reservers and remote harvesters
 			try {
 				const remoteRoomsMem = this.room.memory.remoteRooms || {};
@@ -610,8 +715,9 @@ export default class RoomManager {
 				if (totalRemoteSources > 0 && totalRemoteHarvestersAll < totalRemoteSources) {
 					const needed = Math.min(totalRemoteSources - totalRemoteHarvestersAll, remoteharvesterTarget || (totalRemoteSources - totalRemoteHarvestersAll));
 					for (let i = 0; i < needed; i++) {
-						const body = determineBodyParts('harvester', cap, this.room); // reuse harvester body; customize later if needed
+						const body = determineBodyParts('remoteharvester', cap, this.room); // reuse harvester body; customize later if needed
 						if (!body) break;
+						this.room.log(`Submitting request to spawn remote harvester`);
 						this.spawnManager.submitRequest({
 							role: 'remoteharvester',
 							priority: 50,
@@ -634,26 +740,35 @@ export default class RoomManager {
 				console.log(`${this.room.link()} Remote spawn logic error: ${e}`);
 			}
 		}
+		} catch (e) {
+			console.log(`Execution Error In Function: RoomManager.assessCreepNeeds(${this.room.name}) on Tick ${Game.time}. Error: ${e}`);
+		}
 	}
 
 	/** Helper method to determine if more harvesters are needed (from main.ts logic) */
 	private needMoreHarvesters(): boolean {
-		const roomName = this.room.name;
-		const harvesters = _.filter(Game.creeps, (c) => (c.memory.RFQ == 'harvester' || c.memory.role == 'harvester') && c.memory.home == roomName);
+		try {
+			const roomName = this.room.name;
+			const harvesters = _.filter(Game.creeps, (c) => (c.memory.RFQ == 'harvester' || c.memory.role == 'harvester') && c.memory.home == roomName);
 
-		const sources = this.resources.sources;
-		let totalWorkParts = 0;
+			const sources = this.resources.sources;
+			let totalWorkParts = 0;
 
-		for (const harvester of harvesters)
-			totalWorkParts += harvester.body.filter(part => part.type === WORK).length;
+			for (const harvester of harvesters)
+				totalWorkParts += harvester.body.filter(part => part.type === WORK).length;
 
-		// Each source can support 5 WORK parts (generates 10 energy/tick), need at least that many
-		const neededWorkParts = sources.length * 5;
-		return totalWorkParts < neededWorkParts;
+			// Each source can support 5 WORK parts (generates 10 energy/tick), need at least that many
+			const neededWorkParts = sources.length * 5;
+			return totalWorkParts < neededWorkParts;
+		} catch (e) {
+			console.log(`Execution Error In Function: RoomManager.needMoreHarvesters(${this.room.name}) on Tick ${Game.time}. Error: ${e}`);
+			return false;
+		}
 	}
 
 	/** Assigns tasks to worker creeps based on room needs */
 	private assignCreepTasks(): void {
+		try {
 		const creeps = this.room.find(FIND_MY_CREEPS);
 
 		for (const creep of creeps) {
@@ -667,7 +782,11 @@ export default class RoomManager {
 				this.assignWorkerTask(creep);
 			}
 		}
+	} catch (e) {
+			console.log(`Execution Error In Function: RoomManager.assignCreepTasks() on Tick ${Game.time}. Error: ${e}`);
+			return;
 	}
+}
 
 	/** Assigns dynamic tasks to worker creeps based on priorities */
 	private assignWorkerTask(creep: Creep): void {
@@ -950,13 +1069,16 @@ export default class RoomManager {
 
 			// Throttle scanning of each remote room
 			if (now - (remoteRooms[rName].lastScanned || 0) < 50) continue;
-
 			// If we have visibility:
 			const remoteRoom = Game.rooms[rName];
 			if (remoteRoom) {
-				remoteRoom.cacheObjects();
+				remoteRoom.memory.remoteOfRoom = this.room.name;
+				if (!remoteRoom.memory.objects)
+					remoteRoom.cacheObjects();
 				remoteRooms[rName].lastScanned = now;
 				remoteRooms[rName].sources = remoteRoom.memory.objects.sources;
+				if (!remoteRooms[rName].containers)
+					remoteRooms[rName].containers = {};
 				remoteRooms[rName].controllerId = remoteRoom.controller?.id;
 				remoteRooms[rName].controllerOwner = remoteRoom.controller?.owner?.username;
 				remoteRooms[rName].reservation = remoteRoom.controller?.reservation ? {
@@ -1248,12 +1370,12 @@ export default class RoomManager {
 	private drawPlannerVisuals(): void {
 		const vis = new RoomVisual(this.room.name);
 
-		if (this.room.memory.visuals.basePlan.visDistTrans && this.basePlanner?.dtGrid) {
-			this.drawDistanceTransform(vis, this.basePlanner.dtGrid);
+		if (this.room.memory.visuals.basePlan.visDistTrans && this.BasePlanner?.dtGrid) {
+			this.drawDistanceTransform(vis, this.BasePlanner.dtGrid);
 		}
 
-		if (this.room.memory.visuals.basePlan.visFloodFill && this.basePlanner?.floodGrid) {
-			this.drawFloodFill(vis, this.basePlanner.floodGrid);
+		if (this.room.memory.visuals.basePlan.visFloodFill && this.BasePlanner?.floodGrid) {
+			this.drawFloodFill(vis, this.BasePlanner.floodGrid);
 		}
 
 		if (this.room.memory.visuals.basePlan.visBasePlan && this.basePlan) {
