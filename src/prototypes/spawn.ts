@@ -12,13 +12,12 @@ const PART = {
 	TOUGH: 10
 }
 
-// PROTODEF: Spawn Structure Prototype Extension
-declare global {
-
-}
-
 StructureSpawn.prototype.spawnList = [];
 
+StructureSpawn.prototype.log = function (logMsg: string): void {
+	console.log(`${this.room.link()}<span color='green'>${this.name}</span>: ${logMsg}`);
+	return;
+}
 /**
  * Determine's the body plan to use when spawning a creep based on the provided role and max energy available
  * @author randomencounter
@@ -285,6 +284,57 @@ StructureSpawn.prototype.determineBodyParts = function (role: string, maxEnergy?
 			else return [];
 		case 'scout':
 			return [MOVE,MOVE,MOVE];
+		case 'conveyor':
+			return [CARRY,CARRY,CARRY,CARRY,CARRY,CARRY,CARRY,CARRY,MOVE];
+		case 'worker':
+		case 'worker':
+		case 'worker-mixed': {
+			// Balanced worker for all task types (1200 cap)
+			const workerMax = Math.min(maxEnergy, 1200);
+			const workBudget = Math.floor(workerMax * 0.40);   // 40% work
+			const carryBudget = Math.floor(workerMax * 0.35);  // 35% carry
+			const moveBudget = Math.floor(workerMax * 0.25);   // 25% move
+
+			const mixedBody: BodyPartConstant[] = [];
+			for (let i = 0; i < workBudget / 100; i++) mixedBody.push(WORK);
+			for (let i = 0; i < carryBudget / 50; i++) mixedBody.push(CARRY);
+			for (let i = 0; i < moveBudget / 50; i++) mixedBody.push(MOVE);
+
+			log(`Cost for '${role}' with ${mixedBody} is ${calcBodyCost(mixedBody)}`);
+			return mixedBody;
+		}
+		case 'worker-hauler': {
+			// Logistics-focused: Max CARRY and MOVE, minimal WORK
+			// Cap at 1100 to stay efficient for hauling
+			const haulerMax = Math.min(maxEnergy, 1100);
+			const haulerWorkBudget = Math.floor(haulerMax * 0.10);   // 10% work (just one WORK part for utility)
+			const haulerCarryBudget = Math.floor(haulerMax * 0.50);  // 50% carry (prioritize cargo)
+			const haulerMoveBudget = Math.floor(haulerMax * 0.40);   // 40% move (speed for logistics)
+
+			const haulerBody: BodyPartConstant[] = [];
+			for (let i = 0; i < haulerWorkBudget / 100; i++) haulerBody.push(WORK);
+			for (let i = 0; i < haulerCarryBudget / 50; i++) haulerBody.push(CARRY);
+			for (let i = 0; i < haulerMoveBudget / 50; i++) haulerBody.push(MOVE);
+
+			log(`Cost for '${role}' with ${haulerBody} is ${calcBodyCost(haulerBody)}`);
+			return haulerBody;
+		}
+		case 'worker-builder': {
+			// Construction-focused: High WORK and CARRY, moderate MOVE
+			// Cap at 1400 for extended work sessions
+			const builderMax = Math.min(maxEnergy, 1400);
+			const builderWorkBudget = Math.floor(builderMax * 0.45);   // 45% work (strong building power)
+			const builderCarryBudget = Math.floor(builderMax * 0.35);  // 35% carry (good energy supply)
+			const builderMoveBudget = Math.floor(builderMax * 0.20);   // 20% move (less mobility needed)
+
+			const builderBody: BodyPartConstant[] = [];
+			for (let i = 0; i < builderWorkBudget / 100; i++) builderBody.push(WORK);
+			for (let i = 0; i < builderCarryBudget / 50; i++) builderBody.push(CARRY);
+			for (let i = 0; i < builderMoveBudget / 50; i++) builderBody.push(MOVE);
+
+			log(`Cost for '${role}' with ${builderBody} is ${calcBodyCost(builderBody)}`);
+			return builderBody;
+		}
 		default:
 			throw new Error("Invalid parameters passed.");
 	}
@@ -426,6 +476,7 @@ Spawn.prototype.spawnEmergencyHarvester = function(): ScreepsReturnCode {
 	else console.log(`Error spawning Emergency Harvester: ${getReturnCode(result)}`);
 	return result;
 }
+
 Spawn.prototype.spawnFiller = function(maxEnergy: number): ScreepsReturnCode {
 
 		// Limit fillers to max cost of 300, effectively 4 CARRY and 2 MOVE parts
