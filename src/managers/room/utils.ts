@@ -22,32 +22,42 @@
  */
 
 import { creepRoleCounts } from "@main";
-import { PLAYER_USERNAME } from '@functions/utils/constants';
+import { PLAYER_USERNAME, LEGACY_SPAWN_CHECK_RATE } from '@functions/utils/constants';
 import * as FUNC from '@functions/index';
 
 // Helper function to generate name suffix with current counter
 const getNameSuffix = (role: string, counter: number): string => {
-	switch (role) {
-		case 'harvester': return `_H${creepRoleCounts.harvester + counter}`;
-		case 'filler': return `_F${creepRoleCounts.filler + counter}`;
-		case 'hauler': return `_Hl${creepRoleCounts.hauler + counter}`;
-		case 'upgrader': return `_U${creepRoleCounts.upgrader + counter}`;
-		case 'builder': return `_B${creepRoleCounts.builder + counter}`;
-		case 'repairer': return `_Rep${creepRoleCounts.repairer + counter}`;
-		case 'defender': return `_Def${creepRoleCounts.defender + counter}`;
-		case 'reserver': return `_Rsv${creepRoleCounts.reserver + counter}`;
-		case 'scout': return `_Sct${creepRoleCounts.scout + counter}`;
-		case 'remoteharvester': return `_RH${creepRoleCounts.remoteharvester + counter}`;
-		case 'worker': return `_W${creepRoleCounts.worker + counter}`;
-		case 'conveyor': return `_C${creepRoleCounts.conveyor + counter}`;
-		case 'infantry': return `_Inf${creepRoleCounts.infantry + counter}`;
-		default: return `_${counter}`;
+	try {
+		switch (role) {
+			case 'harvester': return `_H${creepRoleCounts.harvester + counter}`;
+			case 'filler': return `_F${creepRoleCounts.filler + counter}`;
+			case 'hauler': return `_Hl${creepRoleCounts.hauler + counter}`;
+			case 'upgrader': return `_U${creepRoleCounts.upgrader + counter}`;
+			case 'builder': return `_B${creepRoleCounts.builder + counter}`;
+			case 'repairer': return `_Rep${creepRoleCounts.repairer + counter}`;
+			case 'defender': return `_Def${creepRoleCounts.defender + counter}`;
+			case 'reserver': return `_Rsv${creepRoleCounts.reserver + counter}`;
+			case 'scout': return `_Sct${creepRoleCounts.scout + counter}`;
+			case 'remoteharvester': return `_RH${creepRoleCounts.remoteharvester + counter}`;
+			case 'worker': return `_W${creepRoleCounts.worker + counter}`;
+			case 'conveyor': return `_C${creepRoleCounts.conveyor + counter}`;
+			case 'infantry': return `_Inf${creepRoleCounts.infantry + counter}`;
+			default: return `_${counter}`;
+		}
+	} catch (e) {
+		console.log(`Execution Error In Function: getNameSuffix(${role}, ${counter}) on Tick ${Game.time}. Error: ${e}`);
+		return `_${counter}`;
 	}
 };
 
 /** Calculate creep energy cost */
 function calculateCreepCost(body: BodyPartConstant[]): number {
-	return _.sum(body, p => BODYPART_COST[p]);
+	try {
+		return _.sum(body, p => BODYPART_COST[p]);
+	} catch (e) {
+		console.log(`Execution Error In Function: calculateCreepCost() on Tick ${Game.time}. Error: ${e}`);
+		return 0;
+	}
 }
 
 /** Attempts to spawn a creep with the specified role and memory configuration.
@@ -75,58 +85,62 @@ function calculateCreepCost(body: BodyPartConstant[]): number {
  * - Respects room.memory.data.spawnEnergyLimit if set (overrides capacity)
  */
 function trySpawnCreep(spawn: StructureSpawn,	role: string,	memory: CreepMemory, room: Room, colName: string,	capOverride?: number): ScreepsReturnCode {
+	try {
+		// Determine energy capacity (override for emergency harvesters)
+		let cap = capOverride ?? room.energyCapacityAvailable;
+		if (room.memory.data.spawnEnergyLimit && room.memory.data.spawnEnergyLimit > 0)
+			cap = room.memory.data.spawnEnergyLimit;
+		const body = spawn.determineBodyParts(role, cap);
+		const cost = calculateCreepCost(body);
+		const pending = room.memory.data.pendingSpawn;
 
-	// Determine energy capacity (override for emergency harvesters)
-	let cap = capOverride ?? room.energyCapacityAvailable;
-	if (room.memory.data.spawnEnergyLimit && room.memory.data.spawnEnergyLimit > 0)
-		cap = room.memory.data.spawnEnergyLimit;
-	const body = spawn.determineBodyParts(role, cap);
-	const cost = calculateCreepCost(body);
-	const pending = room.memory.data.pendingSpawn;
-
-	// If we already have a pending spawn and enough energy, try to resume it
-	if (pending && room.energyAvailable >= pending.cost) {
-		const result = spawn.spawnCreep(pending.body, pending.name, { memory: pending.memory });
-		if (result === OK) {
-			console.log(`${room.link()}${spawn.name}> Resuming pending spawn for ${pending.memory.role} (${pending.name})`);
-			delete room.memory.data.pendingSpawn;
-			room.memory.stats.creepsSpawned++;
-			room.memory.stats.creepPartsSpawned += pending.body.length;  // Use pending.body.length, not current body
-			return OK;
+		// If we already have a pending spawn and enough energy, try to resume it
+		if (pending && room.energyAvailable >= pending.cost) {
+			const result = spawn.spawnCreep(pending.body, pending.name, { memory: pending.memory });
+			if (result === OK) {
+				spawn.log(`Resuming pending spawn for ${pending.memory.role} (${pending.name})`);
+				delete room.memory.data.pendingSpawn;
+				room.memory.stats.creepsSpawned++;
+				room.memory.stats.creepPartsSpawned += pending.body.length;  // Use pending.body.length, not current body
+				return OK;
+			}
+			if (room.memory.data.debugSpawn)
+				spawn.log(`Pending Spawn Result: ${FUNC.getReturnCode(result)}`);
+			return result;
 		}
-		if (room.memory.data.debugSpawn)
-			console.log(`${room.link()}${spawn.name}> Pending Spawn Result: ${FUNC.getReturnCode(result)}`);
-		return result;
-	}
 
-	// If we already have a pending spawn but not enough energy yet, don't log again
-	if (pending && pending.role === role)
+		// If we already have a pending spawn but not enough energy yet, don't log again
+		if (pending && pending.role === role)
+			return ERR_NOT_ENOUGH_ENERGY;
+
+		// If we don't have a pending spawn, create one
+		let counter = 0;
+		let name = `${colName}${getNameSuffix(role, counter)}`;
+		let result = spawn.spawnCreep(body, name, { memory });
+
+		while (result === ERR_NAME_EXISTS) {
+			counter++;
+			name = `${colName}${getNameSuffix(role, counter)}`;
+			result = spawn.spawnCreep(body, name, { memory });
+		}
+
+		if (result === OK) {
+			spawn.log(`Spawning ${role} ${name} in ${room.name}`);
+			room.memory.stats.creepsSpawned++;
+			room.memory.stats.creepPartsSpawned += body.length;
+			return OK;
+		} else if (result === ERR_NOT_ENOUGH_ENERGY) {
+			const time = Game.time;
+			room.memory.data.pendingSpawn = { role, body, name, memory, cost, time };
+			spawn.log(`Not enough energy for ${role} (${cost}). Waiting until room energy >= ${cost}`);
+			return result;
+		} else {
+			spawn.log(`Failed to spawn ${(FUNC.capitalize(role))}: ${FUNC.getReturnCode(result)}`);
+			return result;
+		}
+	} catch (e) {
+		console.log(`Execution Error In Function: trySpawnCreep(${role}) on Tick ${Game.time}. Error: ${e}`);
 		return ERR_NOT_ENOUGH_ENERGY;
-
-	// If we don't have a pending spawn, create one
-	let counter = 0;
-	let name = `${colName}${getNameSuffix(role, counter)}`;
-	let result = spawn.spawnCreep(body, name, { memory });
-
-	while (result === ERR_NAME_EXISTS) {
-		counter++;
-		name = `${colName}${getNameSuffix(role, counter)}`;
-		result = spawn.spawnCreep(body, name, { memory });
-	}
-
-	if (result === OK) {
-		console.log(`${room.link()}${spawn.name}> Spawning ${role} ${name} in ${room.name}`);
-		room.memory.stats.creepsSpawned++;
-		room.memory.stats.creepPartsSpawned += body.length;
-		return OK;
-	} else if (result === ERR_NOT_ENOUGH_ENERGY) {
-		const time = Game.time;
-		room.memory.data.pendingSpawn = { role, body, name, memory, cost, time };
-		console.log(`${room.link()}${spawn.name}> Not enough energy for ${role} (${cost}). Waiting until room energy >= ${cost}`);
-		return result;
-	} else {
-		console.log(`${room.link()}${spawn.name}> Failed to spawn ${(FUNC.capitalize(role))}: ${FUNC.getReturnCode(result)}`);
-		return result;
 	}
 }
 
@@ -140,98 +154,102 @@ function getNextRoleToSpawn(
 	creepTargets: { [key: string]: number },
 	harvesters_and_fillers_satisfied: boolean
 ): string | null {
+	try {
+		let roleConfigs;
+		let currentIndex;
 
-	let roleConfigs;
-	let currentIndex;
-
-	if (!harvesters_and_fillers_satisfied) {
-		// Bootstrap phase: cycle between harvesters and fillers
-		roleConfigs = [
-			{
-				name: 'harvester',
-				count: creepCount.harvesters.length,
-				target: creepTargets.harvesterTarget,
-				check: () => needMoreHarvesters(room, creepCount.harvesters)
-			},
-			{
-				name: 'filler',
-				count: creepCount.fillers.length,
-				target: creepTargets.fillerTarget,
-				check: () => spawn.room.controller!.level >= 2 || creepCount.harvesters.length >= creepTargets.harvesterTarget
-			}
-		];
-		currentIndex = (room.memory.data as any).indices.lastBootstrapRoleIndex ?? -1;
-	} else {
-		// Normal phase: cycle through other roles
-		roleConfigs = [
-			{
-				name: 'hauler',
-				count: creepCount.haulers.length,
-				target: creepTargets.haulerTarget,
-				check: () => spawn.room.storage || room.memory.data.haulerPairs
-			},
-			{
-				name: 'upgrader',
-				count: creepCount.upgraders.length,
-				target: creepTargets.upgraderTarget,
-				check: () => true
-			},
-			{
-				name: 'builder',
-				count: creepCount.builders.length,
-				target: creepTargets.builderTarget,
-				check: () => room.memory.data.numCSites > 0
-			},
-			{
-				name: 'repairer',
-				count: creepCount.repairers.length,
-				target: creepTargets.repairerTarget,
-				check: () => room.find(FIND_STRUCTURES, { filter: (s) => { // Check if there are any roads or containers
-					return ((s.structureType === STRUCTURE_CONTAINER ||			 // that have less than 80% of their full health
-						s.structureType === STRUCTURE_ROAD) &&
-						s.hits / s.hitsMax > 0.80 ) }}).length > 0
-			},
-			{
-				name: 'reserver',
-				count: creepCount.reservers.length,
-				target: creepTargets.reserverTarget,
-				check: () => spawn.room.energyCapacityAvailable >= 800
-			},
-			{
-				name: 'conveyor',
-				count: creepCount.conveyors.length,
-				target: creepTargets.conveyorTarget,
-				check: () => room.storage && room.linkStorage && (room.linkOne || room.linkTwo || room.linkController)
-			},
-			{
-				name: 'worker',
-				count: creepCount.workers.length,
-				target: creepTargets.workerTarget,
-				check: () => true
-			},
-			{
-				name: 'infantry',
-				count: creepCount.infantry.length,
-				target: creepTargets.infantryTarget,
-				check: () => true
-			}
-		];
-		currentIndex = (room.memory.data as any).indices.lastNormalRoleIndex ?? -1;
-	}
-
-	// Try each role in round-robin order
-	for (let i = 0; i < roleConfigs.length; i++) {
-		const roleIndex = (currentIndex + 1 + i) % roleConfigs.length;
-		const roleConfig = roleConfigs[roleIndex];
-
-		if (roleConfig.count < roleConfig.target && roleConfig.check()) {
-			const indexKey = !harvesters_and_fillers_satisfied ? 'lastBootstrapRoleIndex' : 'lastNormalRoleIndex';
-			(room.memory.data.indices as any)[indexKey] = roleIndex;
-			return roleConfig.name;
+		if (!harvesters_and_fillers_satisfied) {
+			// Bootstrap phase: cycle between harvesters and fillers
+			roleConfigs = [
+				{
+					name: 'harvester',
+					count: creepCount.harvesters.length,
+					target: creepTargets.harvesterTarget,
+					check: () => needMoreHarvesters(room, creepCount.harvesters)
+				},
+				{
+					name: 'filler',
+					count: creepCount.fillers.length,
+					target: creepTargets.fillerTarget,
+					check: () => spawn.room.controller!.level >= 2 || creepCount.harvesters.length >= creepTargets.harvesterTarget
+				}
+			];
+			currentIndex = (room.memory.data as any).indices.lastBootstrapRoleIndex ?? -1;
+		} else {
+			// Normal phase: cycle through other roles
+			roleConfigs = [
+				{
+					name: 'hauler',
+					count: creepCount.haulers.length,
+					target: creepTargets.haulerTarget,
+					check: () => spawn.room.storage || room.memory.data.haulerPairs
+				},
+				{
+					name: 'upgrader',
+					count: creepCount.upgraders.length,
+					target: creepTargets.upgraderTarget,
+					check: () => true
+				},
+				{
+					name: 'builder',
+					count: creepCount.builders.length,
+					target: creepTargets.builderTarget,
+					check: () => room.memory.data.numCSites > 0
+				},
+				{
+					name: 'repairer',
+					count: creepCount.repairers.length,
+					target: creepTargets.repairerTarget,
+					check: () => room.find(FIND_STRUCTURES, { filter: (s) => { // Check if there are any roads or containers
+						return ((s.structureType === STRUCTURE_CONTAINER ||			 // that have less than 80% of their full health
+							s.structureType === STRUCTURE_ROAD) &&
+							s.hits / s.hitsMax > 0.80 ) }}).length > 0
+				},
+				{
+					name: 'reserver',
+					count: creepCount.reservers.length,
+					target: creepTargets.reserverTarget,
+					check: () => spawn.room.energyCapacityAvailable >= 800
+				},
+				{
+					name: 'conveyor',
+					count: creepCount.conveyors.length,
+					target: creepTargets.conveyorTarget,
+					check: () => room.storage && room.linkStorage && (room.linkOne || room.linkTwo || room.linkController)
+				},
+				{
+					name: 'worker',
+					count: creepCount.workers.length,
+					target: creepTargets.workerTarget,
+					check: () => true
+				},
+				{
+					name: 'infantry',
+					count: creepCount.infantry.length,
+					target: creepTargets.infantryTarget,
+					check: () => true
+				}
+			];
+			currentIndex = (room.memory.data as any).indices.lastNormalRoleIndex ?? -1;
 		}
-	}
 
-	return null;
+		// Try each role in round-robin order
+		for (let i = 0; i < roleConfigs.length; i++) {
+			const roleIndex = (currentIndex + 1 + i) % roleConfigs.length;
+			const roleConfig = roleConfigs[roleIndex];
+
+			if (roleConfig.count < roleConfig.target && roleConfig.check()) {
+				const indexKey = !harvesters_and_fillers_satisfied ? 'lastBootstrapRoleIndex' : 'lastNormalRoleIndex';
+				(room.memory.data.indices as any)[indexKey] = roleIndex;
+				return roleConfig.name;
+			}
+		}
+
+		return null;
+	} catch (e) {
+		console.log(`Execution Error In Function: getNextRoleToSpawn() on Tick ${Game.time}. Error: ${e}`);
+		return null;
+	}
 }
 
 /** Legacy version spawn management system which checks against role quotas and existing creep roles saved in their memory to determine spawn requirements.
@@ -239,21 +257,23 @@ function getNextRoleToSpawn(
  * Uses round-robin scheduling to spawn roles evenly in two phases: bootstrap (harvesters/fillers) and normal (other roles). */
 export const legacySpawnManager = {
 	run: (room: Room) => {
-
-		const roomName = room.name;
+		try {
+			const roomName = room.name;
 		const debugSpawn = Memory.globalSettings?.debug?.spawnDebug || false;
 
 		if (debugSpawn) console.log(`${room.link()}Legacy Spawn Manager: Starting spawn check`);
 
 		// Throttle spawn assessments to prevent excessive CPU usage (every 3 ticks for legacy system)
 		if (!room.memory.data) room.memory.data = {};
+		if (!room.memory.data.spawnCheckRate) room.memory.data.spawnCheckRate = LEGACY_SPAWN_CHECK_RATE;
 		if (room.memory.data.lastSpawnCheck && Game.time - room.memory.data.lastSpawnCheck < 3) {
-			if (debugSpawn) console.log(`${room.link()}Legacy Spawn Manager: Throttled (last check: ${room.memory.data.lastSpawnCheck}, current: ${Game.time})`);
+			if (debugSpawn) room.log(`Legacy Spawn Manager: Throttled (last check: ${room.memory.data.lastSpawnCheck}, current: ${Game.time})`);
 			return;
 		}
 
+		//! EVERYTHING PAST THIS POINT IS EXECUTED ONCE EVERY THREE TICKS ONLY
 		room.memory.data.lastSpawnCheck = Game.time;
-		if (debugSpawn) console.log(`${room.link()}Legacy Spawn Manager: Passed throttle check`);
+		if (debugSpawn) room.log(`Legacy Spawn Manager: Passed throttle check`);
 
 		// pull creep role caps from room memory, or set to default value if none are set
 		let harvesterTarget: 	number = _.get(room.memory, ['quotas', 'harvesters'	], 2);
@@ -300,17 +320,15 @@ export const legacySpawnManager = {
 			.map((id: any) => Game.getObjectById(id as Id<StructureSpawn>))
 			.filter((s): s is StructureSpawn => s !== null && s.my);
 
-		if (!spawns.length)
-			room.cacheObjects();
+		if (!spawns.length)	room.cacheObjects();
 
 		// Safety check: ensure sources are cached before spawning
 		if (!room.memory.objects?.sources || room.memory.objects.sources.length === 0) {
-			if (debugSpawn) console.log(`${room.link()}Legacy Spawn Manager: No sources cached, skipping spawn logic this tick`);
+			if (debugSpawn) room.log(`Legacy Spawn Manager: No sources cached, skipping spawn logic this tick`);
 			return;
 		}
 
-		if (debugSpawn) console.log(`${room.link()}Legacy Spawn Manager: Sources cached (${room.memory.objects.sources.length}), spawns found (${spawns.length})`);
-
+		if (debugSpawn) room.log(`Legacy Spawn Manager: Sources cached (${room.memory.objects.sources.length}), spawns found (${spawns.length})`);
 		const harvesters_and_fillers_satisfied = ((totalWorkParts >= (room.memory.objects.sources.length * 5) || harvesters.length >= harvesterTarget) && fillers.length >= fillerTarget);
 
 		if (harvesters_and_fillers_satisfied)
@@ -320,7 +338,7 @@ export const legacySpawnManager = {
 
 		const colName = `Col1`;
 
-		if (debugSpawn) console.log(`${room.link()}Legacy Spawn Manager: Harvesters=${harvesters.length}, WorkParts=${totalWorkParts}, Satisfied=${harvesters_and_fillers_satisfied}`);
+		if (debugSpawn) room.log(`Legacy Spawn Manager: Harvesters=${harvesters.length}, WorkParts=${totalWorkParts}, Satisfied=${harvesters_and_fillers_satisfied}`);
 
 		if (spawns.length) {
 
@@ -374,7 +392,7 @@ export const legacySpawnManager = {
 
 						// Absolute timeout: clear pending spawn if it's been stuck for 100 ticks
 						if (timeSincePending >= 100) {
-							console.log(`${room.link()}${spawn.name}> TIMEOUT: Clearing pending spawn for ${pending.memory.role} (${pending.name}) after ${timeSincePending} ticks`);
+							spawn.log(`TIMEOUT: Clearing pending spawn for ${pending.memory.role} (${pending.name}) after ${timeSincePending} ticks`);
 							delete room.memory.data.pendingSpawn;
 						}
 						// Retry after 50 ticks
@@ -382,24 +400,23 @@ export const legacySpawnManager = {
 							const result = spawn.retryPending();
 							if (result !== OK && result !== ERR_NOT_ENOUGH_ENERGY) {
 								if (debugSpawn)
-									console.log(`${room.link()}${spawn.name}> Retry for pending ${pending.memory.role} failed: ${FUNC.getReturnCode(result)}`);
+									spawn.log(`Retry for pending ${pending.memory.role} failed: ${FUNC.getReturnCode(result)}`);
 							}
 							return; // Skip other spawn logic this tick
 						}
 						// Check if we have enough energy every tick
 						else if (room.energyAvailable >= pending.cost) {
 							const result = spawn.retryPending();
-							if (result === OK) {
-								console.log(`${room.link()}${spawn.name}> Resumed pending spawn for ${pending.memory.role} (${pending.name}) after ${timeSincePending} ticks`);
-							} else if (result !== ERR_NOT_ENOUGH_ENERGY) {
-								console.log(`${room.link()}${spawn.name}> Failed to resume pending ${pending.memory.role}: ${FUNC.getReturnCode(result)}`);
-							}
+							if (result === OK)
+								spawn.log(`Resumed pending spawn for ${pending.memory.role} (${pending.name}) after ${timeSincePending} ticks`);
+							else if (result !== ERR_NOT_ENOUGH_ENERGY)
+								spawn.log(`Failed to resume pending ${pending.memory.role}: ${FUNC.getReturnCode(result)}`);
 							return; // Skip other spawn logic this tick
 						}
 						// Pending spawn exists but not enough energy yet
 						else {
 							if (debugSpawn && timeSincePending % 10 === 0)
-								console.log(`${room.link()}${spawn.name}> Pending ${pending.memory.role} waiting for energy (${room.energyAvailable}/${pending.cost}, age: ${timeSincePending}t)`);
+								spawn.log(`Pending ${pending.memory.role} waiting for energy (${room.energyAvailable}/${pending.cost}, age: ${timeSincePending}t)`);
 							return; // Skip other spawn logic this tick
 						}
 					}
@@ -414,7 +431,7 @@ export const legacySpawnManager = {
 					);
 
 					if (nextRole) {
-						if (debugSpawn) console.log(`${room.link()}${spawn.name}: Attempting to spawn ${nextRole} via round-robin`);
+						if (debugSpawn) spawn.log(`Attempting to spawn ${nextRole} via round-robin`);
 
 						// Handle role-specific spawning logic
 						switch (nextRole) {
@@ -422,7 +439,7 @@ export const legacySpawnManager = {
 								const nextAssigned = (room.memory.data.indices.nextHarvesterAssigned % 2) + 1;
 								const sourceID = (nextAssigned === 1) ? room.sourceOne.id : room.sourceTwo.id;
 								let containerID = 'none';
-								if (!room.memory.data.flags.dropHarvestingEnabled && (room.containerOne || room.containerTwo))
+								if (!room.memory.data.flags.dropHarvestingEnabled && (room.containerOne && room.containerTwo))
 									containerID = (nextAssigned === 1) ? room.containerOne.id : room.containerTwo.id;
 								const sourceNum = (nextAssigned === 1) ? 1 : 2;
 								room.memory.data.indices.nextHarvesterAssigned++;
@@ -548,24 +565,32 @@ export const legacySpawnManager = {
 			// Display console information regarding creep counts and energy state
 			FUNC.DisplayConsolePrompt(room, creepCountsDisp, creepTargets);
 		}
+		} catch (e) {
+			console.log(`Execution Error In Function: legacySpawnManager.run() on Tick ${Game.time}. Error: ${e}`);
+		}
 	}
 }
 
 /** Helper method to determine if more harvesters are needed (from main.ts logic) */
 function needMoreHarvesters(room: Room, harvesters: Creep[]): boolean {
-	// Use cached source count instead of expensive room.find()
-	const numSources = room.memory.objects?.sources?.length || 0;
-	const harvesterQuota = _.get(room.memory, ['quotas', 'harvesters'], 2);
+	try {
+		// Use cached source count instead of expensive room.find()
+		const numSources = room.memory.objects?.sources?.length || 0;
+		const harvesterQuota = _.get(room.memory, ['quotas', 'harvesters'], 2);
 
-	// Check quota first - if we have enough harvesters by quota, don't spawn more
-	if (harvesters.length >= harvesterQuota) return false;
+		// Check quota first - if we have enough harvesters by quota, don't spawn more
+		if (harvesters.length >= harvesterQuota) return false;
 
-	let totalWorkParts = 0;
+		let totalWorkParts = 0;
 
-	for (const harvester of harvesters)
-		totalWorkParts += harvester.body.filter(part => part.type === WORK).length;
+		for (const harvester of harvesters)
+			totalWorkParts += harvester.body.filter(part => part.type === WORK).length;
 
-	// Each source can support 5 WORK parts (generates 10 energy/tick), need at least that many
-	const neededWorkParts = numSources * 5;
-	return totalWorkParts < neededWorkParts;
+		// Each source can support 5 WORK parts (generates 10 energy/tick), need at least that many
+		const neededWorkParts = numSources * 5;
+		return totalWorkParts < neededWorkParts;
+	} catch (e) {
+		console.log(`Execution Error In Function: needMoreHarvesters(${room.name}) on Tick ${Game.time}. Error: ${e}`);
+		return false;
+	}
 }

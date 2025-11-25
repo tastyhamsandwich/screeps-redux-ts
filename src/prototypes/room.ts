@@ -197,8 +197,12 @@ Object.defineProperty(Room.prototype, 'linkStorage', {
 });
 
 Room.prototype.log = function(message: string, critical: boolean = false): void {
-	if (!critical) return console.log(`${this.link()}${message}`);
-	else return console.log(`${this.link()}<span style="color: red;">${message}</span>`);
+	try {
+		if (!critical) return console.log(`${this.link()}${message}`);
+		else return console.log(`${this.link()}<span style="color: red;">${message}</span>`);
+	} catch (e) {
+		console.log(`Execution Error In Function: Room.log(message, critical) on Tick ${Game.time}. Room: ${this.name}. Error: ${e}`);
+	}
 }
 
 /** Gets all walkable positions around a source for optimal harvesting placement.
@@ -206,37 +210,46 @@ Room.prototype.log = function(message: string, critical: boolean = false): void 
  * @returns Array of RoomPositions that are walkable around the source
  */
 Room.prototype.getSourcePositions = function (sourceID: string): RoomPosition[] {
+	try {
+		const source = this.find(FIND_SOURCES, { filter: function(s) { return s.id === sourceID }})[0];
+		if (!source) return [];
+		const sourcePos: RoomPosition = source.pos;
 
-	const source = this.find(FIND_SOURCES, { filter: function(s) { return s.id === sourceID }})[0];
-	if (!source) return [];
-	const sourcePos: RoomPosition = source.pos;
+		if (sourcePos) {
+			const walkableSourcePos = sourcePos.getWalkablePositions();
+			const numberWalkablePositions = walkableSourcePos.length;
+			const minimumWorkPartsPerPosition = 5 / numberWalkablePositions;
 
-	if (sourcePos) {
-		const walkableSourcePos = sourcePos.getWalkablePositions();
-		const numberWalkablePositions = walkableSourcePos.length;
-		const minimumWorkPartsPerPosition = 5 / numberWalkablePositions;
+			const sourceHarvesters: Creep[] = [];
 
-		const sourceHarvesters: Creep[] = [];
+			for (const pos of walkableSourcePos) {
+				const creep: Creep[] = pos.lookFor(LOOK_CREEPS).filter((c) => c.my && c.memory.role === 'harvester');
+				if (creep.length) sourceHarvesters.push(creep[0]);
+			}
 
-		for (const pos of walkableSourcePos) {
-			const creep: Creep[] = pos.lookFor(LOOK_CREEPS).filter((c) => c.my && c.memory.role === 'harvester');
-			if (creep.length) sourceHarvesters.push(creep[0]);
+			let missingWorkParts = 5;
+
+			for (const creep of sourceHarvesters) {
+				const creepWorkParts = creep.getActiveBodyparts(WORK);
+				missingWorkParts -= creepWorkParts;
+			}
+			return walkableSourcePos || [];
 		}
-
-		let missingWorkParts = 5;
-
-		for (const creep of sourceHarvesters) {
-			const creepWorkParts = creep.getActiveBodyparts(WORK);
-			missingWorkParts -= creepWorkParts;
-		}
-		return walkableSourcePos || [];
+		return [];
+	} catch (e) {
+		console.log(`Execution Error In Function: Room.getSourcePositions(sourceID) on Tick ${Game.time}. Room: ${this.name}. Error: ${e}`);
+		return [];
 	}
-	return [];
 }
 
 /** Creates a clickable room link for console output */
 Room.prototype.link = function(): string {
-	return `<span color='red'>[<a href="#!/room/${Game.shard.name}/${this.name}">${this.name}</a></span>]: `;
+	//try {
+		return `[<a href="#!/room/${Game.shard.name}/${this.name}">${this.name}</a>]: `;
+	//} catch (e) {
+	//	console.log(`Execution Error In Function: Room.link() on Tick ${Game.time}. Room: ${this.name}. Error: ${e}`);
+	//	return `[${this.name}]: `;
+	//}
 }
 
 /** Caches all room objects (sources, minerals, structures, etc.) into memory for faster access. Organizes objects by type and updates relevant container assignments.
@@ -331,8 +344,12 @@ Room.prototype.cacheObjects = function () {
 			let assigned = false;
 			for (let i = 0; i < sourcePositions.length; i++) {
 				if (pos.inRangeTo(sourcePositions[i].pos, 1)) {
-					if (sourcePositions[i].id === this.memory.objects.sources?.[0])
+					if (sourcePositions[i].id === this.memory.objects.sources?.[0]) {
 						this.memory.containers.sourceOne = container.id;
+						if (this.memory.remoteOfRoom) {
+							Game.rooms[this.memory.remoteOfRoom].memory.remoteRooms[this.name].containers
+						}
+					}
 					else if (sourcePositions[i].id === this.memory.objects.sources?.[1])
 						this.memory.containers.sourceTwo = container.id;
 					assigned = true;
@@ -371,6 +388,8 @@ Room.prototype.cacheObjects = function () {
 			if (!orderedContainers.includes(id))
 				orderedContainers.push(id);
 		}
+		if (this.memory.remoteOfRoom)
+			Game.rooms[this.memory.remoteOfRoom].memory.remoteRooms[this.name].containers = orderedContainers;
 
 		this.memory.objects.containers = orderedContainers;
 
@@ -383,7 +402,6 @@ Room.prototype.cacheObjects = function () {
 
 	const ramparts = this.find(FIND_MY_STRUCTURES, { filter: { structureType: STRUCTURE_RAMPART }});
 	cacheObjectArray(ramparts, 'ramparts');
-
 	// Cache links with position-based assignment
 	const links = this.find(FIND_MY_STRUCTURES, { filter: { structureType: STRUCTURE_LINK }}) as StructureLink[];
 	if (links.length > 0) {

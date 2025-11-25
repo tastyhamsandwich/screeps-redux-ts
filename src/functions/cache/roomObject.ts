@@ -16,7 +16,12 @@ export type CachedObject<T extends CacheableObject> = Partial<T> & {
 export function isCachedObject<T extends CacheableObject>(
 	o: T | CachedObject<T>
 ): o is CachedObject<T> {
-	return o.room === undefined
+	try {
+		return o.room === undefined
+	} catch (e) {
+		console.log(`Execution Error In Function: isCachedObject(o) on Tick ${Game.time}. Error: ${e}`);
+		return false;
+	}
 }
 /**
  * Try to get real {@link RoomObject} from cached one.
@@ -26,7 +31,12 @@ export function isCachedObject<T extends CacheableObject>(
 export function restoreCachedObject<T extends CacheableObject>(
 	o: (CachedObject<T> & { id: Id<T> }) | T
 ) {
-	return Game.getObjectById(o.id) as T | null
+	try {
+		return Game.getObjectById(o.id) as T | null
+	} catch (e) {
+		console.log(`Execution Error In Function: restoreCachedObject(o) on Tick ${Game.time}. Error: ${e}`);
+		return null;
+	}
 }
 
 interface CacheOpts<C> {
@@ -69,30 +79,40 @@ export function findCached<
 		Partial<FilterOptions<K, V>> &
 		PartialIfExtends<{ map: (v: V) => Untag<C> }, CachedObject<V>, C>
 ): (name: RoomName, opts?: CacheOpts<C>) => readonly C[] {
-	const cache = new Map<RoomName, [at: number, value: readonly C[]]>()
-	const map = (defaultOpts.map ?? (({ id, pos }) => ({ id, pos }))) as (v: V) => C
-	return (name, opts) => {
-		const cached = cache.get(name)
-		// Return cached if fresh
-		const refresh = opts?.refresh ?? defaultOpts.refresh ?? 0
-		if (cached && Game.time <= cached[0] + refresh) return cached[1]
-		// Try to refresh
-		if (name in Game.rooms) {
-			const value = Game.rooms[name]
-				.find(type, defaultOpts.filter ? { filter: defaultOpts.filter } : undefined)
-				.map(map)
-			cache.set(name, [Game.time, value])
-			return value
+	try {
+		const cache = new Map<RoomName, [at: number, value: readonly C[]]>()
+		const map = (defaultOpts.map ?? (({ id, pos }) => ({ id, pos }))) as (v: V) => C
+		return (name, opts) => {
+			try {
+				const cached = cache.get(name)
+				// Return cached if fresh
+				const refresh = opts?.refresh ?? defaultOpts.refresh ?? 0
+				if (cached && Game.time <= cached[0] + refresh) return cached[1]
+				// Try to refresh
+				if (name in Game.rooms) {
+					const value = Game.rooms[name]
+						.find(type, defaultOpts.filter ? { filter: defaultOpts.filter } : undefined)
+						.map(map)
+					cache.set(name, [Game.time, value])
+					return value
+				}
+				// Return cached if still valid
+				const ttl = opts?.ttl ?? defaultOpts.ttl
+				if (cached && (ttl == undefined || Game.time <= cached[0] + ttl)) return cached[1]
+				// Return fallback empty array
+				const fallback = opts?.fallback ?? defaultOpts.fallback
+				if (!fallback) return []
+				const fallbackValue = fallback(name)
+				cache.set(name, [Number.NEGATIVE_INFINITY, fallbackValue])
+				return fallbackValue
+			} catch (e) {
+				console.log(`Execution Error In Function: findCached.inner(${name}, opts) on Tick ${Game.time}. Error: ${e}`);
+				return [];
+			}
 		}
-		// Return cached if still valid
-		const ttl = opts?.ttl ?? defaultOpts.ttl
-		if (cached && (ttl == undefined || Game.time <= cached[0] + ttl)) return cached[1]
-		// Return fallback empty array
-		const fallback = opts?.fallback ?? defaultOpts.fallback
-		if (!fallback) return []
-		const fallbackValue = fallback(name)
-		cache.set(name, [Number.NEGATIVE_INFINITY, fallbackValue])
-		return fallbackValue
+	} catch (e) {
+		console.log(`Execution Error In Function: findCached(type, defaultOpts) on Tick ${Game.time}. Error: ${e}`);
+		return () => [];
 	}
 }
 

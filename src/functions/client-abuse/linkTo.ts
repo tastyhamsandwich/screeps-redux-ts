@@ -6,9 +6,14 @@
  * @returns an html link string
  */
 export function getLinkToRoom(roomName: string, text: string, onClick = "") {
-	return `<a href="#!/room/${Game.shard.name}/${roomName}" onClick="${onClick}">${htmlEscape(
-		text
-	)}</a>`
+	try {
+		return `<a href="#!/room/${Game.shard.name}/${roomName}" onClick="${onClick}">${htmlEscape(
+			text
+		)}</a>`
+	} catch (e) {
+		console.log(`Execution Error In Function: getLinkToRoom(${roomName}) on Tick ${Game.time}. Error: ${e}`);
+		return "";
+	}
 }
 
 /**
@@ -23,11 +28,16 @@ export function getLinkToObject(
 	text: string,
 	memWatch?: string | undefined | false
 ) {
-	return getLinkToRoom(
-		it.pos.roomName,
-		text,
-		selectById(it.id) + (memWatch ? addWatch(memWatch) : "")
-	)
+	try {
+		return getLinkToRoom(
+			it.pos.roomName,
+			text,
+			selectById(it.id) + (memWatch ? addWatch(memWatch) : "")
+		)
+	} catch (e) {
+		console.log(`Execution Error In Function: getLinkToObject(${it.id}) on Tick ${Game.time}. Error: ${e}`);
+		return "";
+	}
 }
 const selectById = (id: string) =>
 	`angular.element('body').injector().get('RoomViewPendingSelector').set('${id}'):`
@@ -41,7 +51,12 @@ const addWatch = (memWatch: string) =>
  * @returns an html link string
  */
 export function getLinkToCreep(it: Creep, text?: string | undefined) {
-	return getLinkToObject(it, text ?? `[Creep ${it.name} #${it.id}]`, it.my && `creeps.${it.name}`)
+	try {
+		return getLinkToObject(it, text ?? `[Creep ${it.name} #${it.id}]`, it.my && `creeps.${it.name}`)
+	} catch (e) {
+		console.log(`Execution Error In Function: getLinkToCreep(${it.name}) on Tick ${Game.time}. Error: ${e}`);
+		return "";
+	}
 }
 
 /**
@@ -51,7 +66,12 @@ export function getLinkToCreep(it: Creep, text?: string | undefined) {
  * @returns an html link string
  */
 export function getLinkToSpawn(it: StructureSpawn, text?: string | undefined) {
-	return getLinkToObject(it, text ?? `[Spawn ${it.name} #${it.id}]`, it.my && `spawns.${it.name}`)
+	try {
+		return getLinkToObject(it, text ?? `[Spawn ${it.name} #${it.id}]`, it.my && `spawns.${it.name}`)
+	} catch (e) {
+		console.log(`Execution Error In Function: getLinkToSpawn(${it.name}) on Tick ${Game.time}. Error: ${e}`);
+		return "";
+	}
 }
 
 /**
@@ -61,11 +81,16 @@ export function getLinkToSpawn(it: StructureSpawn, text?: string | undefined) {
  * @returns an html link string
  */
 export function getLinkToFlag(it: Flag, text?: string | undefined) {
-	return getLinkToRoom(
-		it.pos.roomName,
-		text ?? `[Flag ${it.name}]`,
-		selectById(it.name) + addWatch(`flags.${it.name}`)
-	)
+	try {
+		return getLinkToRoom(
+			it.pos.roomName,
+			text ?? `[Flag ${it.name}]`,
+			selectById(it.name) + addWatch(`flags.${it.name}`)
+		)
+	} catch (e) {
+		console.log(`Execution Error In Function: getLinkToFlag(${it.name}) on Tick ${Game.time}. Error: ${e}`);
+		return "";
+	}
 }
 
 /**
@@ -74,12 +99,17 @@ export function getLinkToFlag(it: Flag, text?: string | undefined) {
  * @returns string without bad html characters
  */
 export function htmlEscape(s: string) {
-	const lookup: Record<string, string> = {
-		"&": "&amp;",
-		'"': "&quot;",
-		"'": "&apos;",
-		"<": "&lt;",
-		">": "&gt;",
+	try {
+		const lookup: Record<string, string> = {
+			"&": "&amp;",
+			'"': "&quot;",
+			"'": "&apos;",
+			"<": "&lt;",
+			">": "&gt;",
+		}
+		return s.replace(/[&"'<>]/g, (c) => lookup[c])
+	} catch (e) {
+		console.log(`Execution Error In Function: htmlEscape() on Tick ${Game.time}. Error: ${e}`);
+		return s;
 	}
-	return s.replace(/[&"'<>]/g, (c) => lookup[c])
 }

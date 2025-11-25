@@ -27,18 +27,23 @@ export function adjustedCPULimit(
 	limit = Game.cpu.limit,
 	bucket = Game.cpu.bucket
 ) {
-	let multiplier = 1
-	if (bucket < target) {
-		multiplier = Math.sin((Math.PI * bucket) / (2 * target))
-	}
-	if (bucket > target) {
-		// Thanks @Deign for support with the sine function below
-		multiplier =
-			2 + Math.sin((Math.PI * (bucket - CPU_BUCKET_MAX)) / (2 * (CPU_BUCKET_MAX - target)))
-		// take care of our 10 CPU folks, to dip into their bucket reserves more...
-		// help them burn through excess bucket above the target.
-		if (limit <= 20 && multiplier > 1.5) multiplier += 1
-	}
+	try {
+		let multiplier = 1
+		if (bucket < target) {
+			multiplier = Math.sin((Math.PI * bucket) / (2 * target))
+		}
+		if (bucket > target) {
+			// Thanks @Deign for support with the sine function below
+			multiplier =
+				2 + Math.sin((Math.PI * (bucket - CPU_BUCKET_MAX)) / (2 * (CPU_BUCKET_MAX - target)))
+			// take care of our 10 CPU folks, to dip into their bucket reserves more...
+			// help them burn through excess bucket above the target.
+			if (limit <= 20 && multiplier > 1.5) multiplier += 1
+		}
 
-	return clamp(Math.round(limit * 0.2), Math.round(limit * multiplier), maxCpuPerTick)
+		return clamp(Math.round(limit * 0.2), Math.round(limit * multiplier), maxCpuPerTick)
+	} catch (e) {
+		console.log(`Execution Error In Function: adjustedCPULimit() on Tick ${Game.time}. Error: ${e}`);
+		return limit;
+	}
 }

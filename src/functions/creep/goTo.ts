@@ -31,8 +31,13 @@ type GoToMemory = [
 	path: string
 ]
 function setMem(mem: GoToMemory | [], vals: GoToMemory) {
-	vals.forEach((v, i) => (mem[i] = v))
-	return mem as GoToMemory
+	try {
+		vals.forEach((v, i) => (mem[i] = v))
+		return mem as GoToMemory
+	} catch (e) {
+		console.log(`Execution Error In Function: setMem() on Tick ${Game.time}. Error: ${e}`);
+		return mem as GoToMemory;
+	}
 }
 
 export interface FindGoToPathOpts extends FindPathOpts, RoomMatrixOpts {
@@ -54,32 +59,47 @@ export interface GoToReturn {
 }
 
 function getPathNext(from: RoomPosition, path: RoomPosition[]) {
-	if (!path.length) return undefined
-	for (let i = 0; i < path.length; i++) if (from.isEqualTo(path[i])) return i + 1
-	for (let i = path.length; i >= 0; i--) if (from.isNearTo(path[i])) return i
-	return undefined
+	try {
+		if (!path.length) return undefined
+		for (let i = 0; i < path.length; i++) if (from.isEqualTo(path[i])) return i + 1
+		for (let i = path.length; i >= 0; i--) if (from.isNearTo(path[i])) return i
+		return undefined
+	} catch (e) {
+		console.log(`Execution Error In Function: getPathNext() on Tick ${Game.time}. Error: ${e}`);
+		return undefined;
+	}
 }
 function serializePath(from: RoomPosition, path: RoomPosition[]) {
-	let ret = "" //MAYBE: multi room path
-	let cur = { x: from.x, y: from.y }
-	for (const next of path) {
-		if (next.roomName != from.roomName) break
-		ret = getDirectionTo(cur, next).toString() + ret
-		cur = next
+	try {
+		let ret = "" //MAYBE: multi room path
+		let cur = { x: from.x, y: from.y }
+		for (const next of path) {
+			if (next.roomName != from.roomName) break
+			ret = getDirectionTo(cur, next).toString() + ret
+			cur = next
+		}
+		return ret
+	} catch (e) {
+		console.log(`Execution Error In Function: serializePath() on Tick ${Game.time}. Error: ${e}`);
+		return "";
 	}
-	return ret
 }
 function deserializePath(from: RoomPosition, path: string) {
-	const ret: RoomPosition[] = []
-	let cur = from
-	for (let i = path.length - 1; i >= 0; i--) {
-		const dir = Number(path[i]) as DirectionConstant
-		const next = getToDirection(cur, dir)
-		if (!next) break
-		ret.push(next)
-		cur = next
+	try {
+		const ret: RoomPosition[] = []
+		let cur = from
+		for (let i = path.length - 1; i >= 0; i--) {
+			const dir = Number(path[i]) as DirectionConstant
+			const next = getToDirection(cur, dir)
+			if (!next) break
+			ret.push(next)
+			cur = next
+		}
+		return ret
+	} catch (e) {
+		console.log(`Execution Error In Function: deserializePath() on Tick ${Game.time}. Error: ${e}`);
+		return [];
 	}
-	return ret
 }
 
 function go(
@@ -89,8 +109,9 @@ function go(
 	move: (o: Creep, to: RoomPosition, noPush?: boolean) => boolean,
 	noPush?: boolean
 ) {
-	const dest = getToDirection(c.pos, dir)
-	if (!dest) return c.move(dir)
+	try {
+		const dest = getToDirection(c.pos, dir)
+		if (!dest) return c.move(dir)
 
 	if (!isTerrainWalkableAt(dest)) return ERR_INVALID_TARGET
 	if (dest.lookFor(LOOK_STRUCTURES).some((l) => isObjectObstacle(l, true)))
@@ -135,7 +156,11 @@ function go(
 				return ERR_FULL
 		}
 	}
-	return c.move(dir)
+		return c.move(dir)
+	} catch (e) {
+		console.log(`Execution Error In Function: go(${c.name}) on Tick ${Game.time}. Error: ${e}`);
+		return ERR_NOT_FOUND;
+	}
 }
 function goAround(
 	c: Creep,
@@ -145,22 +170,27 @@ function goAround(
 	move: (o: Creep, to: RoomPosition, noPush?: boolean) => boolean,
 	noPush?: boolean
 ): [now: DirectionConstant, next: DirectionConstant] | ScreepsReturnCode {
-	const code = go(c, dir, getMemory, move, noPush)
-	if (code == OK) return OK
+	try {
+		const code = go(c, dir, getMemory, move, noPush)
+		if (code == OK) return OK
 
-	if (!nextDir) return code
-	const next = getToDirection(c.pos, dir)
-	if (!next) return code
-	const nextNext = getToDirection(next, nextDir)
-	if (!nextNext) return code
+		if (!nextDir) return code
+		const next = getToDirection(c.pos, dir)
+		if (!next) return code
+		const nextNext = getToDirection(next, nextDir)
+		if (!nextNext) return code
 
-	for (const dirBis of getDirectionsSorted(dir)) {
-		if (dirBis == nextDir) continue
-		const bis = getToDirection(c.pos, dirBis)
-		if (!bis?.isNearTo(nextNext)) continue
-		if (go(c, dirBis, getMemory, move, noPush) == OK) return [dirBis, getDirectionTo(bis, nextNext)]
+		for (const dirBis of getDirectionsSorted(dir)) {
+			if (dirBis == nextDir) continue
+			const bis = getToDirection(c.pos, dirBis)
+			if (!bis?.isNearTo(nextNext)) continue
+			if (go(c, dirBis, getMemory, move, noPush) == OK) return [dirBis, getDirectionTo(bis, nextNext)]
+		}
+		return code
+	} catch (e) {
+		console.log(`Execution Error In Function: goAround(${c.name}) on Tick ${Game.time}. Error: ${e}`);
+		return ERR_NOT_FOUND;
 	}
-	return code
 }
 
 /**
@@ -177,9 +207,10 @@ export function findGoToPath(
 	opts: FindGoToPathOpts & { efficiency: number },
 	roomMatrixCache = {}
 ) {
-	const { range = 1, efficiency } = opts
+	try {
+		const { range = 1, efficiency } = opts
 
-	if (!range && from.isNearTo(to)) return { path: [to] }
+		if (!range && from.isNearTo(to)) return { path: [to] }
 
 	//TODO: else if from.inRangeTo(to, range + 1)
 
@@ -223,8 +254,12 @@ export function findGoToPath(
 			heuristicWeight: opts.heuristicWeight ?? 1.1,
 		}
 	)
-	if (!ret.path.length || ret.path[0].roomName != fromRoom) ret.path = []
-	return ret
+		if (!ret.path.length || ret.path[0].roomName != fromRoom) ret.path = []
+		return ret
+	} catch (e) {
+		console.log(`Execution Error In Function: findGoToPath() on Tick ${Game.time}. Error: ${e}`);
+		return { path: [], ops: 0, cost: 0, incomplete: true };
+	}
 }
 /**
  * Read {@link goTo} cached path from creep memory
@@ -240,19 +275,24 @@ export function getGoToPath(
 	getMemory: (c: Creep) => GoToMemory | [],
 	limit?: number
 ) {
-	if (!c.my) return []
+	try {
+		if (!c.my) return []
 
-	const mem = getMemory(c)
-	if (!mem.length) return []
+		const mem = getMemory(c)
+		if (!mem.length) return []
 
-	const [mToRoom, mToX, mToY, , , , , mTime, mPath] = mem
-	if (to.x != mToX || to.y != mToY || to.roomName != mToRoom) return []
+		const [mToRoom, mToX, mToY, , , , , mTime, mPath] = mem
+		if (to.x != mToX || to.y != mToY || to.roomName != mToRoom) return []
 
-	const cut = Game.time == mTime
-	return deserializePath(
-		c.pos,
-		mPath.slice(limit ? mPath.length - Number(cut) - limit : 0, cut ? -1 : undefined)
-	)
+		const cut = Game.time == mTime
+		return deserializePath(
+			c.pos,
+			mPath.slice(limit ? mPath.length - Number(cut) - limit : 0, cut ? -1 : undefined)
+		)
+	} catch (e) {
+		console.log(`Execution Error In Function: getGoToPath(${c.name}) on Tick ${Game.time}. Error: ${e}`);
+		return [];
+	}
 }
 
 /**
@@ -271,8 +311,9 @@ export function goTo(
 	roomMatrixCache = {},
 	opts: GoToOpts = {}
 ): ScreepsReturnCode | IN_RANGE {
-	if (!c.my) return ERR_NOT_OWNER
-	if (c.spawning) return ERR_BUSY
+	try {
+		if (!c.my) return ERR_NOT_OWNER
+		if (c.spawning) return ERR_BUSY
 
 	const to = normalizePos(target) as RoomPosition | undefined
 	if (!to) return ERR_INVALID_TARGET
@@ -392,5 +433,9 @@ export function goTo(
 		return goTo(c, target, getMemory, roomMatrixCache, opts)
 	}
 
-	return ERR_NOT_IN_RANGE
+		return ERR_NOT_IN_RANGE
+	} catch (e) {
+		console.log(`Execution Error In Function: goTo(${c.name}) on Tick ${Game.time}. Error: ${e}`);
+		return ERR_NOT_FOUND;
+	}
 }

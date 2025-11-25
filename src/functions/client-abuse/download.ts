@@ -4,8 +4,9 @@
  * @param content downloaded file content
  */
 export function showFileDownloadPopup(filename: string, content: string) {
-	const id = `id${Math.random()}`
-	const download = `
+	try {
+		const id = `id${Math.random()}`
+		const download = `
 <script>
 var element = document.getElementById('${id}');
 if (!element) {
@@ -21,10 +22,13 @@ element.click();
 }
 </script>
   `
-	console.log(
-		download
-			.split("\n")
-			.map((s) => s.trim())
-			.join("")
-	)
+		console.log(
+			download
+				.split("\n")
+				.map((s) => s.trim())
+				.join("")
+		)
+	} catch (e) {
+		console.log(`Execution Error In Function: showFileDownloadPopup(${filename}) on Tick ${Game.time}. Error: ${e}`);
+	}
 }

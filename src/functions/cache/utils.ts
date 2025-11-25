@@ -9,7 +9,12 @@ export const Invalid = {} as Invalid
  * @returns whether v is found or not
  */
 export function isValid<V>(v: V | Invalid): v is V {
-	return v !== Invalid
+	try {
+		return v !== Invalid
+	} catch (e) {
+		console.log(`Execution Error In Function: isValid() on Tick ${Game.time}. Error: ${e}`);
+		return false;
+	}
 }
 
 /**
@@ -24,9 +29,14 @@ export function cache<Ts extends any[], V, K = Ts[0]>(
 	fn: (...ts: Ts) => V,
 	getK: ((...ts: Ts) => K) | (Ts extends [K] ? undefined : never)
 ) {
-	const cache = new Map<K, V>()
-	const k = getK ?? ((...ts) => ts[0] as K)
-	return (...ts: Ts) => getOrSetMap(cache, k(...ts), () => fn(...ts))
+	try {
+		const cache = new Map<K, V>()
+		const k = getK ?? ((...ts) => ts[0] as K)
+		return (...ts: Ts) => getOrSetMap(cache, k(...ts), () => fn(...ts))
+	} catch (e) {
+		console.log(`Execution Error In Function: cache() on Tick ${Game.time}. Error: ${e}`);
+		return (...ts: Ts) => fn(...ts);
+	}
 }
 
 /**
@@ -36,12 +46,17 @@ export function cache<Ts extends any[], V, K = Ts[0]>(
  * @returns cached function
  */
 export function cacheForTicks<K, V>(fn: (key: K) => V, ticks = 1) {
-	const cache = new Map<K, [at: number, value: V]>()
-	return (key: K) => {
-		const cached = cache.get(key)
-		if (cached && cached[0] + ticks >= Game.time) return cached[1]
-		const value = fn(key)
-		cache.set(key, [Game.time, value])
-		return value
+	try {
+		const cache = new Map<K, [at: number, value: V]>()
+		return (key: K) => {
+			const cached = cache.get(key)
+			if (cached && cached[0] + ticks >= Game.time) return cached[1]
+			const value = fn(key)
+			cache.set(key, [Game.time, value])
+			return value
+		}
+	} catch (e) {
+		console.log(`Execution Error In Function: cacheForTicks() on Tick ${Game.time}. Error: ${e}`);
+		return (key: K) => fn(key);
 	}
 }

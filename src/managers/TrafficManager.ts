@@ -56,49 +56,53 @@ if (!global.TrafficIntents) global.TrafficIntents = [];
  */
 export default class TrafficManager {
 	static run(): void {
-		const intents: MoveIntent[] = global.TrafficIntents;
-		if (!intents?.length) return;
+		try {
+			const intents: MoveIntent[] = global.TrafficIntents;
+			if (!intents?.length) return;
 
-		const byRoom: { [roomName: string]: MoveIntent[] } = {};
-		for (const intent of intents) (byRoom[intent.from.roomName] ||= []).push(intent);
+			const byRoom: { [roomName: string]: MoveIntent[] } = {};
+			for (const intent of intents) (byRoom[intent.from.roomName] ||= []).push(intent);
 
-		for (const roomName in byRoom) {
-			const roomIntents = byRoom[roomName];
-			const occupied: { [key: string]: Creep } = {};
+			for (const roomName in byRoom) {
+				const roomIntents = byRoom[roomName];
+				const occupied: { [key: string]: Creep } = {};
 
-			for (const intent of roomIntents) {
-				const key = intent.to.toString();
-				const blocker = occupied[key];
+				for (const intent of roomIntents) {
+					const key = intent.to.toString();
+					const blocker = occupied[key];
 
-				if (!blocker) {
-					intent.creep.move(intent.creep.pos.getDirectionTo(intent.to));
-					occupied[key] = intent.creep;
-					continue;
-				}
+					if (!blocker) {
+						intent.creep.move(intent.creep.pos.getDirectionTo(intent.to));
+						occupied[key] = intent.creep;
+						continue;
+					}
 
-				// Try swapping if both want each other's tile
-				if (blocker.memory?.moveIntent?.to?.x === intent.from.x &&
-					blocker.memory?.moveIntent?.to?.y === intent.from.y &&
-					blocker.memory?.moveIntent?.to?.roomName === intent.from.roomName) {
+					// Try swapping if both want each other's tile
+					if (blocker.memory?.moveIntent?.to?.x === intent.from.x &&
+						blocker.memory?.moveIntent?.to?.y === intent.from.y &&
+						blocker.memory?.moveIntent?.to?.roomName === intent.from.roomName) {
 
-					const dirA = intent.creep.pos.getDirectionTo(intent.to);
-					const dirB = blocker.pos.getDirectionTo(blocker.memory.moveIntent.to);
-					intent.creep.move(dirA);
-					blocker.move(dirB);
-					continue;
-				}
+						const dirA = intent.creep.pos.getDirectionTo(intent.to);
+						const dirB = blocker.pos.getDirectionTo(blocker.memory.moveIntent.to);
+						intent.creep.move(dirA);
+						blocker.move(dirB);
+						continue;
+					}
 
-				// Otherwise, try to push
-				const pushDir = blocker.pos.getDirectionTo(intent.to);
-				const pushed = blocker.move(pushDir);
-				if (pushed === OK) {
-					intent.creep.move(intent.creep.pos.getDirectionTo(intent.to));
-					continue;
+					// Otherwise, try to push
+					const pushDir = blocker.pos.getDirectionTo(intent.to);
+					const pushed = blocker.move(pushDir);
+					if (pushed === OK) {
+						intent.creep.move(intent.creep.pos.getDirectionTo(intent.to));
+						continue;
+					}
 				}
 			}
-		}
 
-		// Clear after processing
-		global.TrafficIntents = [];
+			// Clear after processing
+			global.TrafficIntents = [];
+		} catch (e) {
+			console.log(`Execution Error In Function: TrafficManager.run() on Tick ${Game.time}. Error: ${e}`);
+		}
 	}
 }

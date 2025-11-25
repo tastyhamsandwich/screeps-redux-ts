@@ -1,7 +1,8 @@
 "use strict";
 
 export default function DefenseManager(tower: StructureTower) {
-	const room = tower.room;
+	try {
+		const room = tower.room;
 
 	if (tower) {
 		const topLeft = new RoomPosition(tower.pos.x - 5, tower.pos.y - 5, room.name); // RoomPos for visual overlay
@@ -129,5 +130,8 @@ export default function DefenseManager(tower: StructureTower) {
 				}
 			}
 		}
+	}
+	} catch (e) {
+		console.log(`Execution Error In Function: DefenseManager(${tower.id}) on Tick ${Game.time}. Error: ${e}`);
 	}
 }

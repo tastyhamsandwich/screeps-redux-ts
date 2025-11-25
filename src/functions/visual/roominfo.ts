@@ -179,7 +179,7 @@
  */
 export function towerDamageOverlay(room: Room) {
 	//: TOWER DAMAGE BOX DISPLAYS
-	_.forEach(room.memory.objects.towers, function (towerID) {
+	_.forEach(room.memory.objects.towers!, function (towerID) {
 		const tower: StructureTower | null = Game.getObjectById(towerID)!;
 		tower.room.visual.rect(-0.5, -0.5, 51, 51, { fill: '#550000', opacity: 0.25, stroke: '#880000' });
 		tower.room.visual.rect(tower.pos.x - 19.5, tower.pos.y - 19.5, 39, 39, { fill: '#aa3e00', opacity: 0.15, stroke: '#ff8800' });
@@ -219,7 +219,7 @@ export function displayEnergyCapacity(room: Room) {
 		const alignment: alignment = rmVis.spawnInfo.alignment;
 		const spawnColor: string = rmVis.spawnInfo.color;
 		const spawnFont: number = rmVis.spawnInfo.fontSize || 0.5;
-		const spawn: StructureSpawn = Game.getObjectById(room.memory.objects.spawns[0])!;
+		const spawn: StructureSpawn = Game.getObjectById(room.memory.objects.spawns![0])!;
 		let spawnX = spawn.pos.x;
 		// Energy Available, Energy Capacity
 		/* room.visual.rect(

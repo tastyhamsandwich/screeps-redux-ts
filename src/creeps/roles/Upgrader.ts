@@ -13,71 +13,74 @@ import { pathing } from '@constants';
  */
 const Upgrader = {
 	run: (creep: Creep) => {
+		try {
+			const room: Room = creep.room;
+			const cMem: CreepMemory = creep.memory;
+			const rMem: RoomMemory = Game.rooms[cMem.home].memory;
+			const pos: RoomPosition = creep.pos;
 
-		const room: Room = creep.room;
-		const cMem: CreepMemory = creep.memory;
-		const rMem: RoomMemory = Game.rooms[cMem.home].memory;
-		const pos: RoomPosition = creep.pos;
+			cMem.disable ??= false;
+			cMem.rally ??= 'none';
+			cMem.working ??= false; // Initialize working flag if undefined
 
-		cMem.disable ??= false;
-		cMem.rally ??= 'none';
-		cMem.working ??= false; // Initialize working flag if undefined
+			// Initialize controller reference if needed
+			if (!cMem.controller && room.controller) {
+				cMem.controller = room.controller.id;
+			}
 
-		// Initialize controller reference if needed
-		if (!cMem.controller && room.controller) {
-			cMem.controller = room.controller.id;
-		}
+			if (cMem.disable === true) {
+				aiAlert(creep);
+			} else {
+				if (cMem.rally === 'none') {
+					// State transition logic: toggle working flag based on energy levels
+					if (creep.store.getUsedCapacity(RESOURCE_ENERGY) === 0) {
+						cMem.working = false;
+					}
+					if (creep.store.getUsedCapacity(RESOURCE_ENERGY) > 0) {
+						cMem.working = true;
+					}
 
-		if (cMem.disable === true) {
-			aiAlert(creep);
-		} else {
-			if (cMem.rally === 'none') {
-				// State transition logic: toggle working flag based on energy levels
-				if (creep.store.getUsedCapacity(RESOURCE_ENERGY) === 0) {
-					cMem.working = false;
-				}
-				if (creep.store.getFreeCapacity(RESOURCE_ENERGY) === 0) {
-					cMem.working = true;
-				}
+					// Harvest phase - collect energy
+					if (!cMem.working) {
+						const energySource = findEnergySource(creep);
 
-				// Harvest phase - collect energy
-				if (!cMem.working) {
-					const energySource = findEnergySource(creep);
+						if (energySource) {
+							const result = energySource instanceof Source
+								? creep.harvest(energySource)
+								: energySource instanceof Resource
+								? creep.pickup(energySource)
+								: creep.withdraw(energySource, RESOURCE_ENERGY);
 
-					if (energySource) {
-						const result = energySource instanceof Source
-							? creep.harvest(energySource)
-							: energySource instanceof Resource
-							? creep.pickup(energySource)
-							: creep.withdraw(energySource, RESOURCE_ENERGY);
-
-						if (result === ERR_NOT_IN_RANGE) {
-							creep.advMoveTo(energySource, pathing.upgraderPathing);
-						} else if (result === OK) {
-							// Successfully collected - check if we should transition to working
-							if (creep.store.getFreeCapacity(RESOURCE_ENERGY) === 0) {
-								cMem.working = true;
-								creep.say('🔋');
+							if (result === ERR_NOT_IN_RANGE) {
+								creep.advMoveTo(energySource, pathing.upgraderPathing);
+							} else if (result === OK) {
+								// Successfully collected - check if we should transition to working
+								if (creep.store.getFreeCapacity(RESOURCE_ENERGY) === 0) {
+									cMem.working = true;
+									creep.say('🔋');
+								}
 							}
 						}
 					}
-				}
-				// Work phase - upgrade controller
-				else if (cMem.working) {
-					if (cMem.controller) {
-						const controllerObject = Game.getObjectById(cMem.controller) as StructureController;
-						if (controllerObject) {
-							const result = creep.upgradeController(controllerObject);
-							if (result === ERR_NOT_IN_RANGE)
-								creep.advMoveTo(controllerObject, pathing.upgraderPathing);
-							else if (result === OK)
-								rMem.stats.controlPoints += (creep.getActiveBodyparts(WORK));
-						 	else if (result === ERR_NOT_ENOUGH_ENERGY)
-								cMem.working = false;
+					// Work phase - upgrade controller
+					else if (cMem.working) {
+						if (cMem.controller) {
+							const controllerObject = Game.getObjectById(cMem.controller) as StructureController;
+							if (controllerObject) {
+								const result = creep.upgradeController(controllerObject);
+								if (result === ERR_NOT_IN_RANGE)
+									creep.advMoveTo(controllerObject, pathing.upgraderPathing);
+								else if (result === OK)
+									rMem.stats.controlPoints += (creep.getActiveBodyparts(WORK));
+								else if (result === ERR_NOT_ENOUGH_ENERGY)
+									cMem.working = false;
+							}
 						}
 					}
-				}
-			} else navRallyPoint(creep);
+				} else navRallyPoint(creep);
+			}
+		} catch (e) {
+			console.log(`Execution Error In Function: Upgrader.run(creep) on Tick ${Game.time}. Error: ${e}`);
 		}
 	}
 }
@@ -87,65 +90,70 @@ const Upgrader = {
  * Priority: Controller container > Other containers > Dropped energy > Sources (RCL ≤ 2 only)
  */
 function findEnergySource(creep: Creep): StructureStorage | StructureLink | StructureContainer | Resource | Source | null {
-	const room = creep.room;
-	const pos = creep.pos;
-	const rMem = room.memory;
+	try {
+		const room = creep.room;
+		const pos = creep.pos;
+		const rMem = room.memory;
 
-	// Priority 0: Controller link
-	if (rMem?.links?.controller) {
-		const controllerLink = room.linkController;
-		if (controllerLink)
-			return controllerLink;
-	}
-	// Priority 1: Controller container (preferred for upgraders)
-	if (rMem?.containers?.controller) {
-		const controllerContainer = Game.getObjectById(rMem.containers.controller) as StructureContainer;
-		if (controllerContainer && controllerContainer.store.getUsedCapacity(RESOURCE_ENERGY) > 0) {
-			return controllerContainer;
+		// Priority 0: Controller link
+		if (rMem?.links?.controller) {
+			const controllerLink = room.linkController;
+			if (controllerLink && controllerLink.store.getUsedCapacity(RESOURCE_ENERGY) > 0)
+				return controllerLink;
 		}
-	}
-
-	// Room Storage
-	if (room.storage) {
-		const storage = room.storage;
-		return storage;
-	}
-
-	// Priority 2: Other containers with energy
-	const containers = room.find(FIND_STRUCTURES, {
-		filter: (s) => s.structureType === STRUCTURE_CONTAINER
-			&& (s as StructureContainer).store.getUsedCapacity(RESOURCE_ENERGY) > creep.store.getCapacity() / 2
-	}) as StructureContainer[];
-
-	if (containers.length > 0) {
-		const nearestContainer = pos.findClosestByRange(containers);
-		if (nearestContainer) {
-			return nearestContainer;
+		// Priority 1: Controller container (preferred for upgraders)
+		if (rMem?.containers?.controller) {
+			const controllerContainer = Game.getObjectById(rMem.containers.controller) as StructureContainer;
+			if (controllerContainer && controllerContainer.store.getUsedCapacity(RESOURCE_ENERGY) > 0) {
+				return controllerContainer;
+			}
 		}
-	}
 
-	// Priority 3: Dropped energy (minimum threshold)
-	const droppedEnergy = room.find(FIND_DROPPED_RESOURCES, {
-		filter: (r) => r.resourceType === RESOURCE_ENERGY
-			&& r.amount >= creep.store.getCapacity() / 2
-	});
-
-	if (droppedEnergy.length > 0) {
-		const closestPile = pos.findClosestByRange(droppedEnergy);
-		if (closestPile) {
-			return closestPile;
+		// Room Storage
+		if (room.storage && room.storage.store.getUsedCapacity(RESOURCE_ENERGY) > 1000) {
+			const storage = room.storage;
+			return storage;
 		}
-	}
 
-	// Priority 4: Sources (only at low RCL when infrastructure is limited)
-	if (room.controller && room.controller.level <= 2) {
-		const source = room.controller.pos.findClosestByRange(FIND_SOURCES_ACTIVE);
-		if (source) {
-			return source;
+		// Priority 2: Other containers with energy
+		const containers = room.find(FIND_STRUCTURES, {
+			filter: (s) => s.structureType === STRUCTURE_CONTAINER
+				&& (s as StructureContainer).store.getUsedCapacity(RESOURCE_ENERGY) > creep.store.getCapacity() / 2
+		}) as StructureContainer[];
+
+		if (containers.length > 0) {
+			const nearestContainer = pos.findClosestByRange(containers);
+			if (nearestContainer) {
+				return nearestContainer;
+			}
 		}
-	}
 
-	return null;
+		// Priority 3: Dropped energy (minimum threshold)
+		const droppedEnergy = room.find(FIND_DROPPED_RESOURCES, {
+			filter: (r) => r.resourceType === RESOURCE_ENERGY
+				&& r.amount >= creep.store.getCapacity() / 2
+		});
+
+		if (droppedEnergy.length > 0) {
+			const closestPile = pos.findClosestByRange(droppedEnergy);
+			if (closestPile) {
+				return closestPile;
+			}
+		}
+
+		// Priority 4: Sources (only at low RCL when infrastructure is limited)
+		if (room.controller && room.controller.level <= 2) {
+			const source = room.controller.pos.findClosestByRange(FIND_SOURCES_ACTIVE);
+			if (source) {
+				return source;
+			}
+		}
+
+		return null;
+	} catch (e) {
+		console.log(`Execution Error In Function: findEnergySource(creep) on Tick ${Game.time}. Error: ${e}`);
+		return null;
+	}
 }
 
 //profiler.registerObject(Upgrader, 'CreepUpgrader');

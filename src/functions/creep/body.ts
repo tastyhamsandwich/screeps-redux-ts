@@ -7,9 +7,14 @@ import { log, calcBodyCost } from '@globals';
  * @returns Energy cost of this body
  */
 export function getBodyCost(body: readonly (BodyPartDefinition | BodyPartConstant)[]) {
-	let sum = 0
-	for (const b of body) sum += BODYPART_COST[typeof b == "string" ? b : b.type]
-	return sum
+	try {
+		let sum = 0
+		for (const b of body) sum += BODYPART_COST[typeof b == "string" ? b : b.type]
+		return sum
+	} catch (e) {
+		console.log(`Execution Error In Function: getBodyCost() on Tick ${Game.time}. Error: ${e}`);
+		return 0;
+	}
 }
 
 /**
@@ -24,12 +29,17 @@ export function getBodyparts(
 	type: BodyPartConstant,
 	active = false
 ) {
-	let count = 0
-	for (let i = body.length; i-- > 0;) {
-		if (active && body[i].hits <= 0) break
-		if (body[i].type == type) count += 1
+	try {
+		let count = 0
+		for (let i = body.length; i-- > 0;) {
+			if (active && body[i].hits <= 0) break
+			if (body[i].type == type) count += 1
+		}
+		return count
+	} catch (e) {
+		console.log(`Execution Error In Function: getBodyparts() on Tick ${Game.time}. Error: ${e}`);
+		return 0;
 	}
-	return count
 }
 /**
  * Count the number of active bodyparts of a given type
@@ -52,23 +62,28 @@ export function getBodypartsBoostEquivalent(
 	action: ActionConstant,
 	active = false
 ) {
-	const type = ACTION_BODYPART[action]
-	let total = 0
-	for (let i = body.length; i-- > 0;) {
-		const x = body[i]
-		if (active && x.hits <= 0) {
-			break
-		}
-		if (x.type == type) {
-			if (x.boost !== undefined) {
-				const boost = (BOOSTS[type] as BoostsBodypartType)[x.boost][action]
-				total += boost > 1 ? boost : 2 - boost
-			} else {
-				total += 1
+	try {
+		const type = ACTION_BODYPART[action]
+		let total = 0
+		for (let i = body.length; i-- > 0;) {
+			const x = body[i]
+			if (active && x.hits <= 0) {
+				break
+			}
+			if (x.type == type) {
+				if (x.boost !== undefined) {
+					const boost = (BOOSTS[type] as BoostsBodypartType)[x.boost][action]
+					total += boost > 1 ? boost : 2 - boost
+				} else {
+					total += 1
+				}
 			}
 		}
+		return total
+	} catch (e) {
+		console.log(`Execution Error In Function: getBodypartsBoostEquivalent() on Tick ${Game.time}. Error: ${e}`);
+		return 0;
 	}
-	return total
 }
 /**
  * Compute the number of active bodyparts of a given action taking boosts into account
@@ -90,30 +105,35 @@ type BoostsBodypartType = Record<string, Record<ActionConstant, number>>
  * @returns the amount of terrain fatigue the creep can handle
  */
 export function getMoveEfficiency(creep: AnyCreep, usedCapacity = creep.store.getUsedCapacity()) {
-	if (!("body" in creep)) return Infinity // no fatigue! PowerCreep!
-	let activeMoveParts = 0
-	let nonMoveParts = 0
-	for (const b of creep.body) {
-		switch (b.type) {
-			case MOVE:
-				activeMoveParts += b.hits > 0 ? (b.boost ? BOOSTS[b.type][b.boost].fatigue : 1) : 0
-				break
-			case CARRY:
-				if (usedCapacity > 0 && b.hits > 0) {
-					usedCapacity -= b.boost
-						? BOOSTS[b.type][b.boost].capacity * CARRY_CAPACITY
-						: CARRY_CAPACITY
+	try {
+		if (!("body" in creep)) return Infinity // no fatigue! PowerCreep!
+		let activeMoveParts = 0
+		let nonMoveParts = 0
+		for (const b of creep.body) {
+			switch (b.type) {
+				case MOVE:
+					activeMoveParts += b.hits > 0 ? (b.boost ? BOOSTS[b.type][b.boost].fatigue : 1) : 0
+					break
+				case CARRY:
+					if (usedCapacity > 0 && b.hits > 0) {
+						usedCapacity -= b.boost
+							? BOOSTS[b.type][b.boost].capacity * CARRY_CAPACITY
+							: CARRY_CAPACITY
+						nonMoveParts += 1
+					}
+					break
+				default:
 					nonMoveParts += 1
-				}
-				break
-			default:
-				nonMoveParts += 1
-				break
+					break
+			}
 		}
+		if (nonMoveParts) return (activeMoveParts * MOVE_FATIGUE_POWER) / nonMoveParts
+		if (activeMoveParts) return Infinity
+		return 0
+	} catch (e) {
+		console.log(`Execution Error In Function: getMoveEfficiency(${creep.name}) on Tick ${Game.time}. Error: ${e}`);
+		return 0;
 	}
-	if (nonMoveParts) return (activeMoveParts * MOVE_FATIGUE_POWER) / nonMoveParts
-	if (activeMoveParts) return Infinity
-	return 0
 }
 
 /**
@@ -126,34 +146,75 @@ export function getBodypartsPower(
 	body: readonly BodyPartDefinition[],
 	action: keyof typeof ACTION_POWER
 ) {
-	return getActiveBodypartsBoostEquivalent(body, action) * ACTION_POWER[action]
+	try {
+		return getActiveBodypartsBoostEquivalent(body, action) * ACTION_POWER[action]
+	} catch (e) {
+		console.log(`Execution Error In Function: getBodypartsPower() on Tick ${Game.time}. Error: ${e}`);
+		return 0;
+	}
 }
 
 export function determineBodyParts(role: string, maxEnergy: number, room: Room, extras?: { [key: string]: any }): BodyPartConstant[] {
+	try {
+		const bodyPartSegment: BodyPartConstant[] = [];
+		const totalBodyParts: BodyPartConstant[] = [];
 
-	const bodyPartSegment: BodyPartConstant[] = [];
-	const totalBodyParts: BodyPartConstant[] = [];
+		switch (role) {
+			case 'harvester':
+				if (room.memory.data.flags.dropHarvestingEnabled) {
+					if (maxEnergy >= 600) {
+						totalBodyParts.push(WORK, WORK, WORK, WORK, WORK, MOVE, MOVE);
+						return totalBodyParts;
+					} else {
+						let remainingCost = maxEnergy;
 
-	switch (role) {
-		case 'harvester':
+						const moveParts = [MOVE];
+						remainingCost -= 50;
+						const workParts: BodyPartConstant[] = []
+						while (remainingCost >= 100) {
+							workParts.push(WORK);
+							remainingCost -= 100;
+						}
+						if (remainingCost >= 50)
+							moveParts.push(MOVE);
 
-			if (maxEnergy >= 650)
-				totalBodyParts.push(WORK, WORK, WORK, WORK, WORK, CARRY, MOVE, MOVE);
-			else if (maxEnergy === 300) {
-				return [WORK, WORK, MOVE, CARRY];
-			} else {
-				let remainingCost = maxEnergy;
+						const totalBodyParts = workParts.concat(moveParts);
 
-				totalBodyParts.push(MOVE);
-				totalBodyParts.push(CARRY);
-				remainingCost -= 100;
+						return totalBodyParts;
+					}
+				} else {
+					if (maxEnergy >= 650)
+						totalBodyParts.push(WORK, WORK, WORK, WORK, WORK, CARRY, MOVE, MOVE);
+					else {
+						let remainingCost = maxEnergy;
 
-				while (remainingCost >= 100) {
-					totalBodyParts.push(WORK);
-					remainingCost -= 100;
+						totalBodyParts.push(MOVE);
+						totalBodyParts.push(CARRY);
+						remainingCost -= 100;
+
+						while (remainingCost >= 100) {
+							totalBodyParts.push(WORK);
+							remainingCost -= 100;
+						}
+					}
+					return totalBodyParts;
 				}
-			}
-			return totalBodyParts;
+			case 'remoteharvester':
+				if (maxEnergy >= 700)
+					totalBodyParts.push(WORK, WORK, WORK, WORK, WORK, CARRY, MOVE, MOVE, MOVE);
+				else {
+					let remainingCost = maxEnergy;
+
+					totalBodyParts.push(MOVE);
+					totalBodyParts.push(CARRY);
+					remainingCost -= 100;
+
+					while (remainingCost >= 100) {
+						totalBodyParts.push(WORK);
+						remainingCost -= 100;
+					}
+				}
+				return totalBodyParts;
 		case 'upgrader':
 		case 'builder':
 		case 'repairer':
@@ -307,6 +368,54 @@ export function determineBodyParts(role: string, maxEnergy: number, room: Room, 
 
 			return bodyArray;
 		}
+		case 'worker':
+		case 'worker-mixed': {
+			// Balanced worker for all task types (1200 cap)
+			const workerMax = Math.min(maxEnergy, 1200);
+			const workBudget = Math.floor(workerMax * 0.40);   // 40% work
+			const carryBudget = Math.floor(workerMax * 0.35);  // 35% carry
+			const moveBudget = Math.floor(workerMax * 0.25);   // 25% move
+
+			const mixedBody: BodyPartConstant[] = [];
+			for (let i = 0; i < workBudget / 100; i++) mixedBody.push(WORK);
+			for (let i = 0; i < carryBudget / 50; i++) mixedBody.push(CARRY);
+			for (let i = 0; i < moveBudget / 50; i++) mixedBody.push(MOVE);
+
+			log(`Cost for '${role}' with ${mixedBody} is ${calcBodyCost(mixedBody)}`);
+			return mixedBody;
+		}
+		case 'worker-hauler': {
+			// Logistics-focused: Max CARRY and MOVE, minimal WORK
+			// Cap at 1100 to stay efficient for hauling
+			const haulerMax = Math.min(maxEnergy, 1100);
+			const haulerWorkBudget = Math.floor(haulerMax * 0.10);   // 10% work (just one WORK part for utility)
+			const haulerCarryBudget = Math.floor(haulerMax * 0.50);  // 50% carry (prioritize cargo)
+			const haulerMoveBudget = Math.floor(haulerMax * 0.40);   // 40% move (speed for logistics)
+
+			const haulerBody: BodyPartConstant[] = [];
+			for (let i = 0; i < haulerWorkBudget / 100; i++) haulerBody.push(WORK);
+			for (let i = 0; i < haulerCarryBudget / 50; i++) haulerBody.push(CARRY);
+			for (let i = 0; i < haulerMoveBudget / 50; i++) haulerBody.push(MOVE);
+
+			log(`Cost for '${role}' with ${haulerBody} is ${calcBodyCost(haulerBody)}`);
+			return haulerBody;
+		}
+		case 'worker-builder': {
+			// Construction-focused: High WORK and CARRY, moderate MOVE
+			// Cap at 1400 for extended work sessions
+			const builderMax = Math.min(maxEnergy, 1400);
+			const builderWorkBudget = Math.floor(builderMax * 0.45);   // 45% work (strong building power)
+			const builderCarryBudget = Math.floor(builderMax * 0.35);  // 35% carry (good energy supply)
+			const builderMoveBudget = Math.floor(builderMax * 0.20);   // 20% move (less mobility needed)
+
+			const builderBody: BodyPartConstant[] = [];
+			for (let i = 0; i < builderWorkBudget / 100; i++) builderBody.push(WORK);
+			for (let i = 0; i < builderCarryBudget / 50; i++) builderBody.push(CARRY);
+			for (let i = 0; i < builderMoveBudget / 50; i++) builderBody.push(MOVE);
+
+			log(`Cost for '${role}' with ${builderBody} is ${calcBodyCost(builderBody)}`);
+			return builderBody;
+		}
 		case 'reserver':
 			if (maxEnergy >= 1300)
 				return [CLAIM, CLAIM, MOVE, MOVE];
@@ -318,6 +427,9 @@ export function determineBodyParts(role: string, maxEnergy: number, room: Room, 
 			return [MOVE, MOVE, MOVE];
 		default:
 			throw new Error("Invalid parameters passed.");
+		}
+	} catch (e) {
+		console.log(`Execution Error In Function: determineBodyParts(${role}) on Tick ${Game.time}. Error: ${e}`);
+		return [];
 	}
-
 }

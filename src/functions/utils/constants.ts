@@ -33,7 +33,7 @@ export const pathing: { [key: string]: MoveToOpts } = {
 	remoteBuilderPathing: {
 		visualizePathStyle: { stroke: "#ffff00", opacity: 0.3, lineStyle: "dotted" },
 		reusePath: cSet.builder.reusePathValue || 3,
-		ignoreCreeps: cSet.remotebuilder.ignoreCreeps ?? false
+		ignoreCreeps: cSet.builder.ignoreCreeps ?? false
 	},
 	remoteHarvesterPathing: {
 		visualizePathStyle: { stroke: "#98dd44", opacity: 0.5, lineStyle: "dashed" },
@@ -110,6 +110,9 @@ export const PART_COST: Record<BodyPartConstant, number> = {
 	[TOUGH]: 10
 };
 
+/** How many ticks between checks by the Legacy Spawn Management System */
+export const LEGACY_SPAWN_CHECK_RATE = 3;
+
 /** Is game running in single room simulation */
 export const IS_SIM = !!Game.rooms.sim as boolean || !!Game.rooms['sim'];
 /** Is game running on the official server */
@@ -160,7 +163,7 @@ export const MULT_CREEP_FATIGUE_REDUCTION = -2;
 export const MAX_BUCKET = 10000;
 export const CREEP_HITS_PER_PART = 100;
 export const CONSTRUCTION_SITE_STOMP_RATIO = 0.5;
-export const RANGED_MASS_ATTACK_POWER = { 1: 10, 2: 4, 3: 1 };
+//export const RANGED_MASS_ATTACK_POWER = { 1: 10, 2: 4, 3: 1 };
 export const MAX_CPU_PER_TICK = 500;
 export const CREEP_ACTION_RANGES = {
 	attack: 1,
@@ -186,7 +189,7 @@ export const MEMORY_SIZE = 2097152;
 export const MEMORY_INTERSHARD_SIZE = 1024;
 export const MEMORY_RAW_SEGMENT_SIZE = 100 * 1024;
 export const MEMORY_RAW_TOTAL_SIZE = 10240;
-export const POWER_CREEP_HITS_PER_LEVEL = 1000;
+//export const POWER_CREEP_HITS_PER_LEVEL = 1000;
 export const TERRAIN_MASK_PLAIN = 0;
 export const CREEP_BUILD_RANGE = 3;
 export const CREEP_RANGED_ATTACK_RANGE = 3;
@@ -196,9 +199,9 @@ export const CREEP_RANGED_HEAL_RANGE = 3;
 export const CREEP_HARVEST_RANGE = 1;
 export const CREEP_WITHDRAW_RANGE = 1;
 export const CONST_COST = 0.2;
-export const LAB_REACT_RANGE = 2;
-export const LAB_BOOST_RANGE = 1;
-export const MARKET_MAX_DEALS_PER_TICK = 10;
+//export const LAB_REACT_RANGE = 2;
+//export const LAB_BOOST_RANGE = 1;
+//export const MARKET_MAX_DEALS_PER_TICK = 10;
 export const CONTROLLER_SIGN_MAX_LENGTH = 100;
 export const CREEP_NAME_MAX_LENGTH = 100;
 export const POWER_CREEP_NAME_MAX_LENGTH = 100;
