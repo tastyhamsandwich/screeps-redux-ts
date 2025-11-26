@@ -500,6 +500,71 @@ export default class BasePlanner {
 	private allocateExtensionsByRCLGroup(): void {
 		if (!this.startPos) return;
 
+		const extensionsPerRCL: { [key: number]: number } = {
+			2: 5, 3: 5, 4: 10, 5: 10, 6: 10, 7: 10, 8: 10
+		};
+
+		const startCorner = this.findExtensionStartCorner();
+		if (!startCorner) {
+			console.log(`${this.room.link()} Warning: Could not find suitable starting corner for extensions`);
+			return;
+		}
+
+		const used = new Set<string>();
+		let placedTotal = 0;
+
+		// For each RCL, place the requested number of extensions using pattern packs.
+		for (const rcl of [2, 3, 4, 5, 6, 7, 8]) {
+			let remaining = extensionsPerRCL[rcl];
+			if (remaining <= 0) continue;
+
+			// Prefer larger patterns first to keep clusters compact
+			const sizeOrderedPatterns = this.extensionPatterns
+				.map(p => ({ p, size: p.coords.length }))
+				.sort((a, b) => b.size - a.size)
+				.map(x => x.p);
+
+			// Try to pack the 'remaining' number using pattern instances
+			// Strategy: greedy pick largest pattern that fits leftover count.
+			let failCount = 0;
+			while (remaining > 0 && failCount < 40) {
+				// pick pattern whose size <= remaining, prefer largest
+				let chosenPattern = sizeOrderedPatterns.find(p => p.coords.length <= remaining);
+				if (!chosenPattern) {
+					// fallback to single
+					chosenPattern = this.extensionPatterns.find(p => p.name === 'single')!;
+				}
+
+				// find an origin near the core corner
+				const origin = this.findClusterOrigin(startCorner, used);
+				if (!origin) {
+					// no origin found; expand fallback search by searching outward from startCorner manually
+					failCount++;
+					break;
+				}
+
+				// attempt to place pattern with rotation/mirror search
+				const placed = this.placeExtensionPattern(origin, chosenPattern, rcl, used);
+				if (placed > 0) {
+					remaining -= placed;
+					placedTotal += placed;
+					failCount = 0;
+				} else {
+					// couldn't place this pattern at this origin, mark this origin used for a while and try next
+					failCount++;
+					used.add(`${origin.x},${origin.y}`);
+				}
+			}
+			if (remaining > 0) {
+				console.log(`${this.room.link()} Warning: could not place ${extensionsPerRCL[rcl] - remaining} / ${extensionsPerRCL[rcl]} extensions for RCL${rcl}`);
+			}
+		}
+
+		console.log(`${this.room.link()} Placed ${placedTotal} extensions in RCL-grouped clusters`);
+	}
+	/* private allocateExtensionsByRCLGroup(): void {
+		if (!this.startPos) return;
+
 		// Extensions per RCL level (how many to build at each RCL)
 		const extensionsPerRCL: { [key: number]: number } = {
 			2: 5,
@@ -541,6 +606,128 @@ export default class BasePlanner {
 		}
 
 		console.log(`${this.room.link()} Placed ${placed} extensions in RCL-grouped clusters`);
+	} */
+
+	private placeExtensionPattern(
+		origin: RoomPosition,
+		pattern: { name: string; coords: { dx: number; dy: number }[] },
+		rcl: number,
+		used: Set<string>
+	): number {
+		if (!this.startPos) return 0;
+
+		// Helpers: rotate/mirror transforms
+		const transforms = [
+			{ rot: 0, mirror: false },
+			{ rot: 90, mirror: false },
+			{ rot: 180, mirror: false },
+			{ rot: 270, mirror: false },
+			{ rot: 0, mirror: true },
+			{ rot: 90, mirror: true },
+			{ rot: 180, mirror: true },
+			{ rot: 270, mirror: true }
+		];
+
+		// Check pattern fit for each transform and small offsets around origin (to make clusters adapt)
+		for (const t of transforms) {
+			for (let ox = -1; ox <= 1; ox++) {
+				for (let oy = -1; oy <= 1; oy++) {
+					const candidatePositions: { x: number; y: number }[] = [];
+
+					let ok = true;
+					for (const rc of pattern.coords) {
+						let dx = rc.dx;
+						let dy = rc.dy;
+
+						// mirror horizontally if requested
+						if (t.mirror) dx = -dx;
+
+						// rotate
+						let rx = dx;
+						let ry = dy;
+						const deg = t.rot;
+						if (deg === 90) { rx = -dy; ry = dx; }
+						else if (deg === 180) { rx = -dx; ry = -dy; }
+						else if (deg === 270) { rx = dy; ry = -dx; }
+
+						const x = origin.x + ox + rx;
+						const y = origin.y + oy + ry;
+
+						// bounds check & terrain check
+						if (x < 1 || x > 48 || y < 1 || y > 48) { ok = false; break; }
+						if (this.terrain.get(x, y) === TERRAIN_MASK_WALL) { ok = false; break; }
+
+						const key = `${x},${y}`;
+						if (this.structurePlacements.has(key) || used.has(key)) {
+							ok = false; break;
+						}
+
+						// floodGrid check - prefer finite reachable positions (lower numeric cost is better)
+						const floodVal = this.floodGrid?.[x]?.[y];
+						const dtVal = this.dtGrid?.[x]?.[y];
+
+						// accept if floodVal is defined and below a threshold OR dtVal >= 2 (enough open space)
+						if ((floodVal === undefined || floodVal === 0 || floodVal >= 255) && (dtVal === undefined || dtVal < 2)) {
+							// unreachable or cramped
+							ok = false; break;
+						}
+
+						candidatePositions.push({ x, y });
+					}
+
+					if (!ok || candidatePositions.length === 0) continue;
+
+					// Commit placements: extensions
+					for (const pos of candidatePositions) {
+						const key = `${pos.x},${pos.y}`;
+						this.structurePlacements.set(key, {
+							pos: { x: pos.x, y: pos.y },
+							structure: STRUCTURE_EXTENSION,
+							priority: 3,
+							meta: { minRCL: rcl }
+						});
+						used.add(key);
+					}
+
+					// Place road ring: place roads on any adjacent walkable tiles around the cluster
+					for (const pos of candidatePositions) {
+						const adj = [
+							{ x: pos.x + 1, y: pos.y },
+							{ x: pos.x - 1, y: pos.y },
+							{ x: pos.x, y: pos.y + 1 },
+							{ x: pos.x, y: pos.y - 1 },
+							// diagonals optional
+							{ x: pos.x + 1, y: pos.y + 1 },
+							{ x: pos.x - 1, y: pos.y + 1 },
+							{ x: pos.x + 1, y: pos.y - 1 },
+							{ x: pos.x - 1, y: pos.y - 1 }
+						];
+
+						for (const a of adj) {
+							if (a.x < 1 || a.x > 48 || a.y < 1 || a.y > 48) continue;
+							if (this.terrain.get(a.x, a.y) === TERRAIN_MASK_WALL) continue;
+
+							const roadKey = `${a.x},${a.y}`;
+							// don't overwrite higher-priority planned structures (spawns/storage)
+							if (this.structurePlacements.has(roadKey)) continue;
+
+							// Use lower build priority for roads tied to extension's RCL
+							this.structurePlacements.set(roadKey + '_road', {
+								pos: { x: a.x, y: a.y },
+								structure: STRUCTURE_ROAD,
+								priority: Math.max(9, 11 - rcl), // early roads get higher priority
+								meta: { minRCL: rcl }
+							});
+						}
+					}
+
+					return candidatePositions.length;
+				}
+			}
+		}
+
+		// nothing placed
+		return 0;
 	}
 
 	/**
@@ -1498,6 +1685,84 @@ export default class BasePlanner {
 		return colors[structure] ?? '#999';
 	}
 
+
+
+	private extensionPatterns: { name: string; coords: { dx: number; dy: number }[] }[] = [
+		// single
+		{ name: 'single', coords: [{ dx: 0, dy: 0 }] },
+
+		// plus (center + four cardinal neighbors) => size 5
+		{
+			name: 'plus5',
+			coords: [
+				{ dx: 0, dy: 0 },
+				{ dx: 0, dy: -1 },
+				{ dx: 0, dy: 1 },
+				{ dx: -1, dy: 0 },
+				{ dx: 1, dy: 0 }
+			]
+		},
+
+		// small line of three (vertical)
+		{
+			name: 'line3',
+			coords: [
+				{ dx: 0, dy: -1 },
+				{ dx: 0, dy: 0 },
+				{ dx: 0, dy: 1 }
+			]
+		},
+
+		// zigzag 3 (L-ish)
+		{
+			name: 'zig3',
+			coords: [
+				{ dx: 0, dy: 0 },
+				{ dx: 1, dy: 0 },
+				{ dx: 1, dy: 1 }
+			]
+		},
+
+		// small pent (approx compact 5)
+		{
+			name: 'compact5',
+			coords: [
+				{ dx: 0, dy: 0 },
+				{ dx: 1, dy: 0 },
+				{ dx: -1, dy: 0 },
+				{ dx: 0, dy: 1 },
+				{ dx: 0, dy: -1 }
+			]
+		},
+
+		// size 6 (plus + one extra)
+		{
+			name: 'plus6',
+			coords: [
+				{ dx: 0, dy: 0 },
+				{ dx: 0, dy: -1 },
+				{ dx: 0, dy: 1 },
+				{ dx: -1, dy: 0 },
+				{ dx: 1, dy: 0 },
+				{ dx: 1, dy: -1 }
+			]
+		},
+
+		// size 7 (bigger compact group)
+		{
+			name: 'cluster7',
+			coords: [
+				{ dx: 0, dy: 0 },
+				{ dx: 1, dy: 0 },
+				{ dx: -1, dy: 0 },
+				{ dx: 0, dy: 1 },
+				{ dx: 0, dy: -1 },
+				{ dx: 1, dy: -1 },
+				{ dx: -1, dy: 1 }
+			]
+		}
+	];
+
 	/**
 	 * Get symbol for structure type
 	 * @param structure - Structure type
@@ -1546,6 +1811,8 @@ export function computePlanChecksum(plan: PlanResult): string {
 
 	return hash.toString(16);
 }
+
+
 
 // Type definitions
 
