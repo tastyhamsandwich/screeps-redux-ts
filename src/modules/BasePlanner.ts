@@ -482,30 +482,8 @@ export default class BasePlanner {
 	private allocateTiles(): void {
 		if (!this.startPos) return;
 
-		// Get available tiles sorted by flood fill distance
-		const availableTiles: { pos: RoomPosition; distance: number }[] = [];
-
-		for (let x = 1; x < 49; x++) {
-			for (let y = 1; y < 49; y++) {
-				const key = `${x},${y}`;
-				if (this.structurePlacements.has(key)) continue;
-				if (this.terrain.get(x, y) === TERRAIN_MASK_WALL) continue;
-
-				const distance = this.floodGrid[x][y];
-				if (distance > 0 && distance < 255) {
-					availableTiles.push({
-						pos: new RoomPosition(x, y, this.room.name),
-						distance
-					});
-				}
-			}
-		}
-
-		// Sort by distance (closer to core first)
-		availableTiles.sort((a, b) => a.distance - b.distance);
-
-		// Allocate extensions (60 total at RCL 8)
-		const extensionPositions = this.allocateExtensions(availableTiles);
+		// Allocate extensions in RCL-grouped clusters
+		this.allocateExtensionsByRCLGroup();
 
 		// Reserve space for labs (will be positioned in step 7)
 		// Reserve space for towers (will be positioned in step 10)
@@ -513,256 +491,227 @@ export default class BasePlanner {
 	}
 
 	/**
-	 * Allocate extension positions using diagonal zigzag spine pattern
-	 * Creates a primary diagonal spine with alternating extensions on both sides
-	 * This allows creeps to navigate through extensions with 5-6 adjacent extensions per position
-	 * Pattern: Diagonal spine with E extensions on left/right, creating a weaving path
-	 * @param availableTiles - Available tiles sorted by distance
-	 * @returns Positions allocated for extensions
+	 * Allocate extensions grouped by RCL level
+	 * Places extensions in organized clusters that grow outward from the core
+	 * Each RCL level gets a cohesive group positioned together
+	 * RCL 2: 5, RCL 3: 5, RCL 4: 10, RCL 5: 10, RCL 6: 10, RCL 7: 10, RCL 8: 10 (total 60)
 	 * @author randomencounter
 	 */
-	private allocateExtensions(
-		availableTiles: { pos: RoomPosition; distance: number }[]
-	): RoomPosition[] {
-		const extensionPositions: RoomPosition[] = [];
-		const extensionCount = 60; // RCL 8 max
+	private allocateExtensionsByRCLGroup(): void {
+		if (!this.startPos) return;
+
+		// Extensions per RCL level (how many to build at each RCL)
+		const extensionsPerRCL: { [key: number]: number } = {
+			2: 5,
+			3: 5,
+			4: 10,
+			5: 10,
+			6: 10,
+			7: 10,
+			8: 10
+		};
+
+		// Find a corner of the core stamp to start placing extensions
+		// Prefer a corner that doesn't conflict with labs or other structures
+		const startCorner = this.findExtensionStartCorner();
+		if (!startCorner) {
+			console.log(`${this.room.link()} Warning: Could not find suitable starting corner for extensions`);
+			return;
+		}
+
 		const used = new Set<string>();
+		let placed = 0;
 
-		// Build the primary diagonal spine starting from storage location
-		const storage = this.getPlacementByType(STRUCTURE_STORAGE);
-		if (!storage || !this.startPos) return extensionPositions;
+		// Place extensions in RCL-grouped clusters
+		for (const rcl of [2, 3, 4, 5, 6, 7, 8]) {
+			const extensionsForThisRCL = extensionsPerRCL[rcl];
 
-		const storagePos = new RoomPosition(storage.pos.x, storage.pos.y, this.room.name);
+			if (extensionsForThisRCL <= 0) continue;
 
-		// Generate primary diagonal spine (expanding outward from storage)
-		// Use diagonal directions for an organic weaving pattern
-		const spine: RoomPosition[] = [];
-		this.generateDiagonalSpine(storagePos, spine, used);
-
-		// Place extensions along and perpendicular to the spine
-		for (let i = 0; i < spine.length && extensionPositions.length < extensionCount; i++) {
-			const spinePos = spine[i];
-			const key = `${spinePos.x},${spinePos.y}`;
-
-			// Alternate between left and right sides of the spine
-			const side = i % 2 === 0 ? 1 : -1; // Alternate +1, -1
-
-			// Get the direction of the spine segment for perpendicular placement
-			const prevPos = i > 0 ? spine[i - 1] : spinePos;
-			const nextPos = i < spine.length - 1 ? spine[i + 1] : spinePos;
-
-			// Place extensions perpendicular to the spine direction
-			const extensionsHere = this.placePerpendicularExtensions(
-				spinePos,
-				prevPos,
-				nextPos,
-				side,
-				extensionCount - extensionPositions.length,
+			// Create a new cluster expanding outward from the core
+			const clusterOrigin = this.findClusterOrigin(startCorner, used);
+			const extensionsPlaced = this.placeExtensionCluster(
+				clusterOrigin,
+				extensionsForThisRCL,
+				rcl,
 				used
 			);
 
-			for (const ext of extensionsHere) {
-				if (extensionPositions.length < extensionCount) {
-					extensionPositions.push(ext);
-					const k = `${ext.x},${ext.y}`;
-					this.structurePlacements.set(k, {
-						pos: { x: ext.x, y: ext.y },
-						structure: STRUCTURE_EXTENSION,
-						priority: 3
-					});
-					used.add(k);
-				}
-			}
-
-			// Place road on the spine for creep navigation
-			if (!this.structurePlacements.has(key)) {
-				this.structurePlacements.set(key + '_ext_spine', {
-					pos: { x: spinePos.x, y: spinePos.y },
-					structure: STRUCTURE_ROAD,
-					priority: 11
-				});
-			}
+			placed += extensionsPlaced;
 		}
 
-		// Fill remaining extension slots with a secondary grid pattern
-		if (extensionPositions.length < extensionCount) {
-			const remaining = this.fillRemainingExtensions(
-				availableTiles,
-				extensionCount - extensionPositions.length,
-				used
-			);
-			for (const ext of remaining) {
-				if (extensionPositions.length < extensionCount) {
-					extensionPositions.push(ext);
-					const k = `${ext.x},${ext.y}`;
-					this.structurePlacements.set(k, {
-						pos: { x: ext.x, y: ext.y },
-						structure: STRUCTURE_EXTENSION,
-						priority: 3
-					});
-					used.add(k);
-				}
-			}
-		}
-
-		return extensionPositions;
+		console.log(`${this.room.link()} Placed ${placed} extensions in RCL-grouped clusters`);
 	}
 
 	/**
-	 * Generate a primary diagonal spine expanding from storage location
-	 * The spine creates a weaving pattern that guides extension placement
-	 * @param start - Starting position (storage)
-	 * @param spine - Array to populate with spine positions
-	 * @param used - Set to track used positions
+	 * Find a suitable corner of the core stamp to start extension placement
+	 * Avoids areas reserved for labs
+	 * @returns Starting corner position or null
 	 * @author randomencounter
 	 */
-	private generateDiagonalSpine(start: RoomPosition, spine: RoomPosition[], used: Set<string>): void {
-		const maxSpineLength = 40; // Limit spine length
-		const visited = new Set<string>();
+	private findExtensionStartCorner(): RoomPosition | null {
+		if (!this.startPos) return null;
 
-		// Diagonal directions: NE, SE, SW, NW creates a weaving pattern
-		const diagonals = [
-			{ dx: 1, dy: -1 },  // NE
-			{ dx: 1, dy: 1 },   // SE
-			{ dx: -1, dy: 1 },  // SW
-			{ dx: -1, dy: -1 }  // NW
+		// Try different corners relative to the core center
+		// Prefer lower-right or lower-left to keep extensions away from lab areas
+		const corners = [
+			{ dx: 4, dy: 4 },   // Lower-right
+			{ dx: -4, dy: 4 },  // Lower-left
+			{ dx: 4, dy: -4 },  // Upper-right
+			{ dx: -4, dy: -4 }  // Upper-left
 		];
 
-		let current = start;
-		let directionIndex = 0;
+		for (const corner of corners) {
+			const x = this.startPos.x + corner.dx;
+			const y = this.startPos.y + corner.dy;
 
-		for (let i = 0; i < maxSpineLength; i++) {
-			const key = `${current.x},${current.y}`;
-			if (visited.has(key)) break;
-
-			// Check bounds
-			if (current.x < 2 || current.x > 47 || current.y < 2 || current.y > 47) break;
-			if (this.terrain.get(current.x, current.y) === TERRAIN_MASK_WALL) break;
-
-			spine.push(current);
-			visited.add(key);
-			used.add(key);
-
-			// Move in the current diagonal direction, switching every 3-4 steps for variety
-			const shouldSwitch = i % 4 === 3;
-			if (shouldSwitch && i < maxSpineLength - 1) {
-				directionIndex = (directionIndex + 1) % diagonals.length;
-			}
-
-			const dir = diagonals[directionIndex];
-			const nextX = current.x + dir.dx;
-			const nextY = current.y + dir.dy;
-
-			current = new RoomPosition(nextX, nextY, this.room.name);
-		}
-	}
-
-	/**
-	 * Place extensions perpendicular to the spine direction
-	 * Creates the weaving pattern with extensions on both sides of the spine
-	 * @param spinePos - Current spine position
-	 * @param prevPos - Previous spine position (for direction calculation)
-	 * @param nextPos - Next spine position (for direction calculation)
-	 * @param side - Which side to place (-1 or +1)
-	 * @param count - Maximum extensions to place
-	 * @param used - Set of already used positions
-	 * @returns Array of valid extension positions
-	 * @author randomencounter
-	 */
-	private placePerpendicularExtensions(
-		spinePos: RoomPosition,
-		prevPos: RoomPosition,
-		nextPos: RoomPosition,
-		side: number,
-		count: number,
-		used: Set<string>
-	): RoomPosition[] {
-		const extensions: RoomPosition[] = [];
-
-		// Calculate the spine direction vector
-		const dx = nextPos.x - prevPos.x;
-		const dy = nextPos.y - prevPos.y;
-
-		// Calculate perpendicular direction (rotate 90 degrees)
-		const perpDx = -dy * side;
-		const perpDy = dx * side;
-
-		// Normalize perpendicular direction
-		const perpLen = Math.sqrt(perpDx * perpDx + perpDy * perpDy);
-		const normPerpDx = perpLen > 0 ? perpDx / perpLen : 0;
-		const normPerpDy = perpLen > 0 ? perpDy / perpLen : 0;
-
-		// Place 2-3 extensions perpendicular to the spine
-		for (let dist = 1; dist <= 3 && extensions.length < count; dist++) {
-			const x = Math.round(spinePos.x + normPerpDx * dist);
-			const y = Math.round(spinePos.y + normPerpDy * dist);
-
-			if (x < 1 || x > 48 || y < 1 || y > 48) continue;
+			if (x < 2 || x > 47 || y < 2 || y > 47) continue;
 			if (this.terrain.get(x, y) === TERRAIN_MASK_WALL) continue;
 
 			const key = `${x},${y}`;
-			if (!used.has(key) && !this.structurePlacements.has(key)) {
-				extensions.push(new RoomPosition(x, y, this.room.name));
-				used.add(key);
+			if (!this.structurePlacements.has(key)) {
+				return new RoomPosition(x, y, this.room.name);
 			}
 		}
 
-		return extensions;
+		return null;
 	}
 
 	/**
-	 * Fill remaining extension slots using secondary placement patterns
-	 * Covers areas not reached by the primary diagonal spine
-	 * @param availableTiles - Available tiles sorted by distance
-	 * @param count - Number of extensions still needed
+	 * Find the origin position for a new extension cluster
+	 * Keeps all clusters close to the core, near the starting corner
+	 * Searches nearby spaces to find available positions for the next cluster
+	 * @param initialCorner - Initial starting corner
 	 * @param used - Set of already used positions
-	 * @returns Array of extension positions
+	 * @returns Origin position for the cluster
 	 * @author randomencounter
 	 */
-	private fillRemainingExtensions(
-		availableTiles: { pos: RoomPosition; distance: number }[],
-		count: number,
+	private findClusterOrigin(
+		initialCorner: RoomPosition,
 		used: Set<string>
-	): RoomPosition[] {
-		const extensions: RoomPosition[] = [];
+	): RoomPosition | null {
+		if (!this.startPos) return null;
 
-		// Use a simple grid pattern for remaining extensions
-		// Spacing of 2 creates a distributed layout
-		for (const tile of availableTiles) {
-			if (extensions.length >= count) break;
+		// Keep all extension clusters close to core, within 3-8 tiles
+		// Search in expanding rings around the initial corner
+		for (let searchRadius = 0; searchRadius <= 8; searchRadius++) {
+			for (let dx = -searchRadius; dx <= searchRadius; dx++) {
+				for (let dy = -searchRadius; dy <= searchRadius; dy++) {
+					// Only check perimeter of current search radius
+					if (searchRadius > 0 && Math.abs(dx) !== searchRadius && Math.abs(dy) !== searchRadius) {
+						continue;
+					}
 
-			const key = `${tile.pos.x},${tile.pos.y}`;
-			if (used.has(key) || this.structurePlacements.has(key)) continue;
+					const x = initialCorner.x + dx;
+					const y = initialCorner.y + dy;
 
-			extensions.push(tile.pos);
-			used.add(key);
+					if (x < 2 || x > 47 || y < 2 || y > 47) continue;
+					if (this.terrain.get(x, y) === TERRAIN_MASK_WALL) continue;
 
-			// Also add adjacent extensions at distance 2 for spacing
-			for (const offset of [
-				{ dx: 2, dy: 0 },
-				{ dx: 0, dy: 2 },
-				{ dx: 2, dy: 2 },
-				{ dx: -2, dy: 0 },
-				{ dx: 0, dy: -2 }
-			]) {
-				if (extensions.length >= count) break;
-
-				const x = tile.pos.x + offset.dx;
-				const y = tile.pos.y + offset.dy;
-
-				if (x < 1 || x > 48 || y < 1 || y > 48) continue;
-				if (this.terrain.get(x, y) === TERRAIN_MASK_WALL) continue;
-
-				const adjacentKey = `${x},${y}`;
-				if (!used.has(adjacentKey) && !this.structurePlacements.has(adjacentKey)) {
-					extensions.push(new RoomPosition(x, y, this.room.name));
-					used.add(adjacentKey);
+					const key = `${x},${y}`;
+					if (!this.structurePlacements.has(key) && !used.has(key)) {
+						return new RoomPosition(x, y, this.room.name);
+					}
 				}
 			}
 		}
 
-		return extensions;
+		return null;
 	}
+
+	/**
+	 * Place a cluster of extensions in a zigzag pattern
+	 * Creates organized groups of 2-3 extensions placed vertically, then offset
+	 * @param origin - Starting position for the cluster
+	 * @param count - Number of extensions to place in this cluster
+	 * @param rcl - RCL level for priority assignment
+	 * @param used - Set of already used positions
+	 * @returns Number of extensions actually placed
+	 * @author randomencounter
+	 */
+	private placeExtensionCluster(
+		origin: RoomPosition | null,
+		count: number,
+		rcl: number,
+		used: Set<string>
+	): number {
+		if (!origin) return 0;
+
+		let placed = 0;
+		let current = origin;
+
+		// Create a zigzag pattern: 2 vertical, offset right, 2 vertical, offset down, repeat
+		let columnCount = 0;
+
+		while (placed < count && columnCount < 30) {
+			// Try to place 2-3 extensions in a vertical column
+			const columnSize = placed % 2 === 0 ? 2 : 3; // Alternate 2 and 3 per column
+			let columnPlaced = 0;
+
+			for (let i = 0; i < columnSize && placed < count; i++) {
+				const checkPos = new RoomPosition(current.x, current.y + i, this.room.name);
+
+				if (
+					checkPos.x < 1 || checkPos.x > 48 ||
+					checkPos.y < 1 || checkPos.y > 48 ||
+					this.terrain.get(checkPos.x, checkPos.y) === TERRAIN_MASK_WALL
+				) {
+					continue;
+				}
+
+				const key = `${checkPos.x},${checkPos.y}`;
+				if (!this.structurePlacements.has(key) && !used.has(key)) {
+					// Place extension with RCL-based priority
+					this.structurePlacements.set(key, {
+						pos: { x: checkPos.x, y: checkPos.y },
+						structure: STRUCTURE_EXTENSION,
+						priority: 3,
+						meta: { minRCL: rcl }
+					});
+					used.add(key);
+					placed++;
+					columnPlaced++;
+				}
+			}
+
+			// Move to next column position (offset to the right and down slightly)
+			if (columnPlaced > 0) {
+				current = new RoomPosition(current.x + 2, current.y + 1, this.room.name);
+			} else {
+				// If we couldn't place anything, try searching around
+				let found = false;
+				for (let searchDist = 1; searchDist <= 3 && !found; searchDist++) {
+					for (let dx = -searchDist; dx <= searchDist; dx++) {
+						for (let dy = -searchDist; dy <= searchDist; dy++) {
+							const newPos = new RoomPosition(current.x + dx, current.y + dy, this.room.name);
+							if (
+								newPos.x < 1 || newPos.x > 48 ||
+								newPos.y < 1 || newPos.y > 48 ||
+								this.terrain.get(newPos.x, newPos.y) === TERRAIN_MASK_WALL
+							) {
+								continue;
+							}
+
+							const key = `${newPos.x},${newPos.y}`;
+							if (!this.structurePlacements.has(key) && !used.has(key)) {
+								current = newPos;
+								found = true;
+								break;
+							}
+						}
+						if (found) break;
+					}
+				}
+
+				if (!found) break; // No more space available
+			}
+
+			columnCount++;
+		}
+
+		return placed;
+	}
+
 
 	/**
 	 * Step 7: Position labs for optimal reaction capabilities
