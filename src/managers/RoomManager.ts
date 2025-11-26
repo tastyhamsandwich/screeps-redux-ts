@@ -30,6 +30,9 @@ export default class RoomManager {
 
 		// Initialize all required room memory structures
 		this.initializeMemory(); // Partial initialization - other settings added as needed
+		if (!room.memory.data?.flags?.initialized) {
+			this.room.initRoom();
+		}
 		this.room.cacheObjects();
 		this.resources = this.scanResources();
 		this.stats = this.gatherStats();
@@ -41,6 +44,10 @@ export default class RoomManager {
 		this._spawns = this.room.find(FIND_MY_SPAWNS).map((s) => s.id);
 		this._creeps = Game.creeps;
 		this._towers = this.room.memory.objects.towers;
+
+		Memory.globalData.numColonies++;
+		this.room.memory.data.flags.initialized = true;
+		this.room.log(`First Time Room Initialization Complete!`);
 
 	}
 
@@ -93,9 +100,22 @@ export default class RoomManager {
 
 	private initializeMemory() {
 		try {
-			if (!this.room.memory.data) this.room.memory.data = {};
-			if (!this.room.memory.data.flags) this.room.memory.data.flags = {};
-			if (!this.room.memory.data.indices) this.room.memory.data.indices = {};
+			if (!this.room.memory.data)
+				this.room.memory.data = {
+					flags: {
+						dropHarvestingEnabled: false,
+						basePlanGeneratde: false,
+						bootstrappingMode: false,
+						initialized: false,
+						advSpawnSystem: false
+					},
+					indices: {
+						nextHarvesterAssigned: 0,
+						haulerIndex: 0,
+						lastBootstrapRoleIndex: 0,
+						lastNormalRoleIndex: 0
+					},
+				};
 			if (!this.room.memory.visuals)
 				this.room.memory.visuals = {
 					settings: {},
@@ -131,14 +151,6 @@ export default class RoomManager {
 		roomMem.data ??= { flags: {}, indices: {} };
 		const rmData = roomMem.data;
 
-		if (!rmData.flags.initialized) {
-			rmData.flags.advSpawnSystem = false;
-			Memory.globalData.numColonies++;
-			room.initRoom();
-			rmData.flags.initialized ??= true;
-			room.log(`First Time Room Initialization Complete!`);
-		}
-
 		// Assess creep needs and submit spawn requests if using advanced spawn manager
 		if (rmData.flags.advSpawnSystem === false && rmData.pendingSpawn && room.energyAvailable === room.energyCapacityAvailable) {
 			const spawns = room.find(FIND_MY_SPAWNS, { filter: i => !i.spawning });
@@ -156,13 +168,26 @@ export default class RoomManager {
 			this.LegacySpawnManager.run(this.room);
 		}
 
-		if (room.controller && room.controller.level !== room.memory.data.controllerLevel) {
+		const update_controller_level = room.controller!.level !== room.memory.data.controllerLevel;
+		const update_controller_stats_level = room.controller!.level > room.memory.stats.controllerLevelReached;
+
+		if (Memory.globalSettings.debug.dataDebug)
+			room.log(`Update C.Level: ${update_controller_level} | Update C.StatsLevel: ${update_controller_stats_level}`);
+		if (update_controller_level) {
+			room.memory.data.controllerLevel = room.controller!.level;
+			room.log(`Updated Controller Level! (was ${room.controller!.level - 1}, now ${room.controller!.level})`);
+		}
+		if (update_controller_stats_level) {
+			room.memory.stats.controllerLevelReached = room.controller!.level;
+			room.log(`New highest controller for the room reached!`);
+		}
+		/* if (room.controller && room.controller.level !== room.memory.data.controllerLevel) {
 			const newLevel = room.controller.level;
 			room.memory.data.controllerLevel = newLevel;
 			this.stats.controllerLevel = newLevel;
 			if (newLevel > room.memory.stats.controllerLevelReached)
 				room.memory.stats.controllerLevelReached = newLevel;
-		}
+		} */
 
 		if (room.memory?.visuals?.settings?.displayTowerRanges) FUNC.towerDamageOverlay(room);
 

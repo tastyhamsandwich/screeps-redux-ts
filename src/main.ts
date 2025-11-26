@@ -230,19 +230,6 @@ module.exports.loop = function() {
 						FUNC.displayEnergyCapacity(room);
 						FUNC.displayEnergyStorage(room);
 
-						const update_controller_level = room.controller.level !== room.memory.data.controllerLevel;
-						const update_controller_stats_level = room.controller.level > room.memory.stats.controllerLevelReached;
-
-						if (Memory.globalSettings.debug.dataDebug)
-							room.log(`Update C.Level: ${update_controller_level} | Update C.StatsLevel: ${update_controller_stats_level}`);
-						if (update_controller_level) {
-							room.memory.data.controllerLevel = room.controller.level;
-							room.log(`Updated Controller Level! (was ${room.controller.level - 1}, now ${room.controller.level})`);
-						}
-						if (update_controller_stats_level) {
-							room.memory.stats.controllerLevelReached = room.controller.level;
-							room.log(`New highest controller for the room reached!`);
-						}
 					} catch (e) {
 						console.log(`Execution Error In Function: RoomManager.run(${roomName}) on Tick ${Game.time}. Error: ${e}`);
 					}
