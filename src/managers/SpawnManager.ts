@@ -325,6 +325,7 @@ export default class SpawnManager {
 
 			if (result === OK) {
 				console.log(`[SpawnManager] ${spawn.name}: Spawning ${request.role} ${name} (cost: ${request.energyCost}, time: ${request.estimatedSpawnTime})`);
+				this.room.memory.stats.energySpentOnSpawns = (this.room.memory.stats.energySpentOnSpawns ?? 0) + (request.energyCost ?? 0);
 
 				// Handle post-spawn logic
 				this.handlePostSpawn(request, name);

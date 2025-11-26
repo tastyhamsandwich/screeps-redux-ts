@@ -1,5 +1,6 @@
 import RoomDefense from './DefenseManager';
 import SpawnManager from './SpawnManager';
+import EnergyManager from './EnergyManager';
 //import TaskManager from '../../unused/TaskManager';
 import BasePlanner, { computePlanChecksum } from '../modules/BasePlanner';
 import { STRUCTURE_PRIORITY, PLAYER_USERNAME } from '../functions/utils/constants';
@@ -15,6 +16,7 @@ export default class RoomManager {
 	private resources: RoomResources;
 	private stats: RoomStats;
 	private spawnManager: SpawnManager;
+	private energyManager: EnergyManager;
 	//private TaskManager: TaskManager;
 	private LegacySpawnManager;
 	private BasePlanner: BasePlanner | null;
@@ -37,6 +39,7 @@ export default class RoomManager {
 		this.resources = this.scanResources();
 		this.stats = this.gatherStats();
 		this.spawnManager = new SpawnManager(room);
+		this.energyManager = new EnergyManager(room);
 		//this.TaskManager = new TaskManager(room);
 		this.LegacySpawnManager = legacySpawnManager;
 		this.BasePlanner = null; // Only create when regeneration is needed
@@ -150,6 +153,9 @@ export default class RoomManager {
 		const roomMem = room.memory;
 		roomMem.data ??= { flags: {}, indices: {} };
 		const rmData = roomMem.data;
+
+		// Update energy management metrics
+		this.energyManager.run();
 
 		// Assess creep needs and submit spawn requests if using advanced spawn manager
 		if (rmData.flags.advSpawnSystem === false && rmData.pendingSpawn && room.energyAvailable === room.energyCapacityAvailable) {
@@ -910,6 +916,11 @@ export default class RoomManager {
 	/** Gets the SpawnManager instance (for external access) */
 	getSpawnManager(): SpawnManager {
 		return this.spawnManager;
+	}
+
+	/** Gets the EnergyManager instance (for external access) */
+	getEnergyManager(): EnergyManager {
+		return this.energyManager;
 	}
 
 	/** Sets what tasks need to be prioritized based on new RCL */

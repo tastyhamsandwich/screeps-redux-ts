@@ -86,6 +86,7 @@ namespace NodeJS {
 		settings: RoomSettings;
 		data: { [key: string]: any };
 		stats: ColonyStats;
+		energyManagement?: EnergyManagementData;
 		availableCreeps: string[];
 		remoteRooms: {
 			[key: string]: RemoteRoom
@@ -252,6 +253,7 @@ namespace NodeJS {
 		constructionPoints: number,
 		creepsSpawned: number,
 		creepPartsSpawned: number,
+		energySpentOnSpawns?: number,
 		mineralsHarvested?: MineralStats,
 		controllerLevelReached: number,
 		npcInvadersKilled: number,
@@ -320,6 +322,38 @@ namespace NodeJS {
 		pathToStorage: PathFinderPath | false,
 		creepAssigned: string | false,
 		creepDeathTick: number | false
+	}
+
+	//# ENERGY MANAGEMENT INTERFACES
+	interface EnergyMetrics {
+		expectedIncome: number;
+		realizedIncome: number;
+		upgradeExpenditure: number;
+		constructionExpenditure: number;
+		spawnExpenditure: number;
+		totalExpenditure: number;
+		netIncome: number;
+		harvestWorkParts: number;
+		localHarvestWorkParts: number;
+		remoteHarvestWorkParts: number;
+	}
+
+	interface AmortizedEnergyMetrics {
+		periodTicks: number;
+		avgIncomePerTick: number;
+		avgExpenditurePerTick: number;
+		avgNetPerTick: number;
+		isRunningDeficit: boolean;
+		energyBalance: number;
+	}
+
+	interface EnergyManagementData {
+		lastStorageEnergy: number;
+		lastPrestoragEnergy: number;
+		lastRecalculation: number;
+		currentMetrics: EnergyMetrics;
+		amortized1500: AmortizedEnergyMetrics;
+		amortized3000: AmortizedEnergyMetrics;
 	}
 
 	//# LOGISTICS INTERACES

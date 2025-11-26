@@ -507,11 +507,13 @@ Spawn.prototype.spawnFiller = function(maxEnergy: number): ScreepsReturnCode {
 		console.log(`${this.room.link()}${this.name}> Cost for 'filler' with ${bodyParts} is ${calcBodyCost(bodyParts)}`);
 	let counter = 1;
 	let name = `Filler${counter}`
+	const bodyCost = calcBodyCost(bodyParts);
 	const result = this.spawnCreep(bodyParts, name, { memory: { role: 'filler', RFQ: 'filler', home: this.room.name, room: this.room.name, working: false, disable: false, rally: 'none' }})
 	switch (result) {
 		case OK:
 			this.room.memory.stats.creepsSpawned++;
 			this.room.memory.stats.creepPartsSpawned += bodyParts.length;
+			this.room.memory.stats.energySpentOnSpawns = (this.room.memory.stats.energySpentOnSpawns ?? 0) + bodyCost;
 			console.log(`${this.room.link()}${this.name}> Spawning emergency filler, ${name}`);
 			break;
 		case ERR_NAME_EXISTS:
@@ -519,6 +521,7 @@ Spawn.prototype.spawnFiller = function(maxEnergy: number): ScreepsReturnCode {
 				if (secondResult === OK) {
 					this.room.memory.stats.creepsSpawned++;
 					this.room.memory.stats.creepPartsSpawned += bodyParts.length;
+					this.room.memory.stats.energySpentOnSpawns = (this.room.memory.stats.energySpentOnSpawns ?? 0) + bodyCost;
 					console.log(`${this.room.link()}${this.name}> Spawning emergency filler, ${name}`);
 					return secondResult;
 				}

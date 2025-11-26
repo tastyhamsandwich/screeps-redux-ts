@@ -102,6 +102,7 @@ function trySpawnCreep(spawn: StructureSpawn,	role: string,	memory: CreepMemory,
 				delete room.memory.data.pendingSpawn;
 				room.memory.stats.creepsSpawned++;
 				room.memory.stats.creepPartsSpawned += pending.body.length;  // Use pending.body.length, not current body
+				room.memory.stats.energySpentOnSpawns = (room.memory.stats.energySpentOnSpawns ?? 0) + pending.cost;
 				return OK;
 			}
 			if (room.memory.data.debugSpawn)
@@ -128,6 +129,7 @@ function trySpawnCreep(spawn: StructureSpawn,	role: string,	memory: CreepMemory,
 			spawn.log(`Spawning ${role} ${name} in ${room.name}`);
 			room.memory.stats.creepsSpawned++;
 			room.memory.stats.creepPartsSpawned += body.length;
+			room.memory.stats.energySpentOnSpawns = (room.memory.stats.energySpentOnSpawns ?? 0) + cost;
 			return OK;
 		} else if (result === ERR_NOT_ENOUGH_ENERGY) {
 			const time = Game.time;
