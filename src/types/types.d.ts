@@ -244,6 +244,7 @@ namespace NodeJS {
 		controllerOwner?: string;
 		controllerId?: Id<StructureController>;
 		scoutAssigned?: string
+		cSites?: Id<ConstructionSite>[];
 	}
 
 	//# STATISTICS INTERFACES
@@ -349,7 +350,7 @@ namespace NodeJS {
 
 	interface EnergyManagementData {
 		lastStorageEnergy: number;
-		lastPrestoragEnergy: number;
+		lastPrestorageEnergy: number;
 		lastRecalculation: number;
 		currentMetrics: EnergyMetrics;
 		amortized1500: AmortizedEnergyMetrics;

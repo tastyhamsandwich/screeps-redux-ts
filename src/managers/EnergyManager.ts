@@ -19,7 +19,7 @@ export default class EnergyManager {
 		if (!this.room.memory.energyManagement) {
 			this.room.memory.energyManagement = {
 				lastStorageEnergy: 0,
-				lastPrestoragEnergy: 0,
+				lastPrestorageEnergy: 0,
 				lastRecalculation: Game.time,
 				currentMetrics: {
 					expectedIncome: 0,
@@ -85,12 +85,12 @@ export default class EnergyManager {
 
 			// Calculate energy deposited this tick
 			const storageChange = storageEnergy - mem.lastStorageEnergy;
-			const prestorageChange = prestorageEnergy - mem.lastPrestoragEnergy;
+			const prestorageChange = prestorageEnergy - mem.lastPrestorageEnergy;
 			const realizedIncome = Math.max(0, storageChange + prestorageChange);
 
 			// Update storage tracking
 			mem.lastStorageEnergy = storageEnergy;
-			mem.lastPrestoragEnergy = prestorageEnergy;
+			mem.lastPrestorageEnergy = prestorageEnergy;
 
 			// Calculate expenditures
 			const upgradeExpenditure = this.calculateUpgradeExpenditure(stats);
