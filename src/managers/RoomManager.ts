@@ -174,19 +174,7 @@ export default class RoomManager {
 			this.LegacySpawnManager.run(this.room);
 		}
 
-		const update_controller_level = room.controller!.level !== room.memory.data.controllerLevel;
-		const update_controller_stats_level = room.controller!.level > room.memory.stats.controllerLevelReached;
 
-		if (Memory.globalSettings.debug.dataDebug)
-			room.log(`Update C.Level: ${update_controller_level} | Update C.StatsLevel: ${update_controller_stats_level}`);
-		if (update_controller_level) {
-			room.memory.data.controllerLevel = room.controller!.level;
-			room.log(`Updated Controller Level! (was ${room.controller!.level - 1}, now ${room.controller!.level})`);
-		}
-		if (update_controller_stats_level) {
-			room.memory.stats.controllerLevelReached = room.controller!.level;
-			room.log(`New highest controller for the room reached!`);
-		}
 		/* if (room.controller && room.controller.level !== room.memory.data.controllerLevel) {
 			const newLevel = room.controller.level;
 			room.memory.data.controllerLevel = newLevel;

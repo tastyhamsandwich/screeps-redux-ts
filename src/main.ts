@@ -47,7 +47,7 @@ let tickCount = 0;
 
 module.exports.loop = function() {
 	try {
-		if (Object.keys(Game.spawns).length === 0)
+		if (Object.keys(Game.spawns).length === 0 && Object.keys(Game.creeps).length === 0)
 			FUNC.initGlobal(true);
 		else if (Memory.globalData.onBirthInitComplete === undefined || Memory?.globalData?.onBirthInitComplete === false)
 			FUNC.initGlobal();
@@ -148,6 +148,22 @@ module.exports.loop = function() {
 				if (room.memory.objects === undefined) 	room.cacheObjects();
 				if (numCSites < numCSitesPrevious) 			room.cacheObjects();
 
+				if (room.memory.remoteOfRoom) {
+					const remoteBuildSites: Id<ConstructionSite<BuildableStructureConstant>>[] = Game.rooms[room.memory.remoteOfRoom].memory.remoteRooms[room.name].cSites ?? [];
+					for (const site of cSites) {
+						if (!remoteBuildSites.includes(site.id))
+							remoteBuildSites.push(site.id);
+					}
+					const cSiteIDs = cSites.map(c => c.id);
+					for (const siteID of remoteBuildSites) {
+						if (!cSiteIDs.includes(siteID)) {
+							const index = remoteBuildSites.indexOf(siteID);
+							delete remoteBuildSites[index];
+						}
+					}
+
+
+				}
 				_.forEach(cSites, function (cSite: ConstructionSite) {
 					try {
 						if (cSite.progress > 0) FUNC.buildProgress(cSite, room);
@@ -229,6 +245,22 @@ module.exports.loop = function() {
 
 						FUNC.displayEnergyCapacity(room);
 						FUNC.displayEnergyStorage(room);
+
+						if (room.controller && room.controller.level) {
+							const controllerLevel = room.controller.level;
+							const storedLevel = room.memory.data.controllerLevel;
+
+							if (Memory.globalSettings.debug.dataDebug)
+								room.log(`Update C.Level: ${room.controller!.level !== room.memory.data.controllerLevel} | Update C.StatsLevel: ${room.controller!.level > room.memory.stats.controllerLevelReached}`);
+							if (storedLevel !== controllerLevel) {
+								room.memory.data.controllerLevel = room.controller.level;
+								room.log(`Updated Controller Level! (was ${room.controller!.level - 1}, now ${room.controller!.level})`);
+							}
+							if (controllerLevel > storedLevel) {
+								room.memory.stats.controllerLevelReached = room.controller.level;
+								room.log(`New highest controller for the room reached!`);
+							}
+						}
 
 					} catch (e) {
 						console.log(`Execution Error In Function: RoomManager.run(${roomName}) on Tick ${Game.time}. Error: ${e}`);
