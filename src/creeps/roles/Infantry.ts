@@ -94,6 +94,16 @@ const Infantry = {
 									creep.advMoveTo(nearestHostile.pos, pathing.defenderPathing, true);
 							}
 						}
+					} else {
+						const hostileBuildings = room.find(FIND_HOSTILE_STRUCTURES);
+						if (hostileBuildings.length) {
+							const nearestHostileBuilding = pos.findClosestByRange(hostileBuildings);
+							if (nearestHostileBuilding) {
+								if (creep.attack(nearestHostileBuilding) === ERR_NOT_IN_RANGE) {
+									creep.advMoveTo(nearestHostileBuilding, pathing.defenderPathing, true);
+								}
+							}
+						}
 					}
 				}
 			}
