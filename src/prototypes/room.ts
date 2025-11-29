@@ -117,6 +117,10 @@ Object.defineProperty(Room.prototype, 'containerController', {
 Object.defineProperty(Room.prototype, 'prestorage', {
 	get: function () {
 		if (!this._prestorage) {
+			if (this.storage) {
+				this._prestorage = this.storage;
+				return Game.getObjectById(this._prestorage);
+			}
 			if (!this.memory.containers.prestorage)
 				return this._prestorage = null;
 			else this._prestorage = this.memory.containers.prestorage;
@@ -259,8 +263,22 @@ Room.prototype.cacheObjects = function () {
 
 	// Initialize memory structures
 	if (!this.memory.objects) this.memory.objects = {};
-	if (!this.memory.containers) this.memory.containers = { sourceOne: '', sourceTwo: '', controller: '', mineral: '', prestorage: '' };
-	if (!this.memory.links) this.memory.links = { sourceOne: '', sourceTwo: '', controller: '', storage: '' };
+	if (!this.memory.containers)
+		this.memory.containers = {
+			sourceOne: '' as Id<StructureContainer>,
+			sourceTwo: '' as Id<StructureContainer>,
+			controller: '' as Id<StructureContainer>,
+			mineral: '' as Id<StructureContainer>,
+			prestorage: '' as Id<StructureContainer>
+		};
+	if (!this.memory.links)
+		this.memory.links = {
+			sourceOne: '' as Id<StructureLink>,
+			sourceTwo: '' as Id<StructureLink>,
+			controller: '' as Id<StructureLink>,
+			storage: '' as Id<StructureLink>,
+			remotes: []
+		};
 
 	log('Caching room objects...', this);
 
@@ -324,7 +342,13 @@ Room.prototype.cacheObjects = function () {
 	const containers = this.find(FIND_STRUCTURES, { filter: { structureType: STRUCTURE_CONTAINER }}) as StructureContainer[];
 	if (containers.length > 0) {
 		// Reset container memory
-		this.memory.containers = { sourceOne: '', sourceTwo: '', controller: '', mineral: '', prestorage: '' };
+		this.memory.containers = {
+			sourceOne: '' as Id<StructureContainer>,
+			sourceTwo: '' as Id<StructureContainer>,
+			controller: '' as Id<StructureContainer>,
+			mineral: '' as Id<StructureContainer>,
+			prestorage: '' as Id<StructureContainer>
+		};
 
 		// Pre-cache positions for efficient lookup
 		const sourcePositions = sources.length > 0 ? sources.map(s => ({ id: s.id, pos: s.pos })) : [];
@@ -406,7 +430,13 @@ Room.prototype.cacheObjects = function () {
 	const links = this.find(FIND_MY_STRUCTURES, { filter: { structureType: STRUCTURE_LINK }}) as StructureLink[];
 	if (links.length > 0) {
 		// Reset link memory
-		this.memory.links = { sourceOne: '', sourceTwo: '', controller: '', storage: '' };
+		this.memory.links = {
+			sourceOne: '' as Id<StructureLink>,
+			sourceTwo: '' as Id<StructureLink>,
+			controller: '' as Id<StructureLink>,
+			storage: '' as Id<StructureLink>,
+			remotes: []
+		};
 
 		// Pre-cache positions for efficient lookup
 		const sourcePositions = sources.length > 0 ? sources.map(s => ({ id: s.id, pos: s.pos })) : [];
@@ -515,7 +545,6 @@ Room.prototype.initQuotas = function (roleQuotaObject?): void {
 		reservers: roleQuotaObject?.reserver || 0,
 		scouts: roleQuotaObject?.scout || 0,
 		remoteharvesters: roleQuotaObject?.remoteharvester || 0,
-
 	}
 
 	log(`Quotas initialized: Harvesters (2), Upgraders (2), Fillers (2), Haulers (0), Builders (1), Defenders (0), Reservers (0), Scouts (0), Remote Harvesters (0)`);
@@ -542,19 +571,23 @@ Room.prototype.initRoom = function () {
 		catalyzedZynthiumAlkalide: 0, catalyzedGhodiumAcid: 0, catalyzedGhodiumAlkalide: 0 };
 	const labStats: LabStats = { compoundsMade: compoundStats, creepsBoosted: 0, boostsUsed: compoundStats, energySpentBoosting: 0 };
 
-	this.memory.containers = {
-		sourceOne: '',
-		sourceTwo: '',
-		controller: '',
-		mineral: '',
-		prestorage: ''
-	};
-	this.memory.links = {
-		sourceOne: '',
-		sourceTwo: '',
-		controller: '',
-		storage: ''
-	};
+	if (!this.memory.containers)
+		this.memory.containers = {
+			sourceOne: '' as Id<StructureContainer>,
+			sourceTwo: '' as Id<StructureContainer>,
+			controller: '' as Id<StructureContainer>,
+			mineral: '' as Id<StructureContainer>,
+			prestorage: '' as Id<StructureContainer>
+		};
+	if (!this.memory.links)
+		this.memory.links = {
+			sourceOne: '' as Id<StructureLink>,
+			sourceTwo: '' as Id<StructureLink>,
+			controller: '' as Id<StructureLink>,
+			storage: '' as Id<StructureLink>,
+			remotes: []
+		};
+
 	this.memory.data = {
 		flags: {
 			dropHarvestingEnabled: false
@@ -579,6 +612,7 @@ Room.prototype.initRoom = function () {
 	};
 	this.memory.stats = {
 		energyHarvested: 0,
+		energyDeposited: 0,
 		controlPoints: 0,
 		constructionPoints: 0,
 		creepsSpawned: 0,
@@ -610,7 +644,6 @@ Room.prototype.initRoom = function () {
 	this.memory.remoteRooms = {};
 	this.cacheObjects();
 }
-
 
 /** Disables all BasePlanner room visuals */
 Room.prototype.toggleBasePlannerVisuals = function (): void {

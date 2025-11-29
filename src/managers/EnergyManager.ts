@@ -1,4 +1,12 @@
 import { calcBodyCost } from '@globals';
+import {
+	RAMPART_UPKEEP,
+	ROAD_UPKEEP,
+	ROAD_UPKEEP_SWAMP,
+	ROAD_UPKEEP_TUNNEL,
+	CONTAINER_UPKEEP,
+	REMOTE_CONTAINER_UPKEEP
+} from '@constants';
 
 /**
  * Manages energy income and expenditure tracking for a room.
@@ -27,11 +35,18 @@ export default class EnergyManager {
 					upgradeExpenditure: 0,
 					constructionExpenditure: 0,
 					spawnExpenditure: 0,
+					structureUpkeepExpenditure: 0,
 					totalExpenditure: 0,
 					netIncome: 0,
 					harvestWorkParts: 0,
 					localHarvestWorkParts: 0,
-					remoteHarvestWorkParts: 0
+					remoteHarvestWorkParts: 0,
+					roadCount: 0,
+					swampRoadCount: 0,
+					tunnelCount: 0,
+					rampartCount: 0,
+					containerCount: 0,
+					remoteContainerCount: 0
 				},
 				amortized1500: {
 					periodTicks: 1500,
@@ -96,7 +111,8 @@ export default class EnergyManager {
 			const upgradeExpenditure = this.calculateUpgradeExpenditure(stats);
 			const constructionExpenditure = this.calculateConstructionExpenditure(stats);
 			const spawnExpenditure = this.calculateSpawnExpenditure(stats);
-			const totalExpenditure = upgradeExpenditure + constructionExpenditure + spawnExpenditure;
+			const { structureUpkeepExpenditure, roadCount, swampRoadCount, tunnelCount, rampartCount, containerCount, remoteContainerCount } = this.calculateStructureUpkeepExpenditure();
+			const totalExpenditure = upgradeExpenditure + constructionExpenditure + spawnExpenditure + structureUpkeepExpenditure;
 
 			// Calculate net income
 			const netIncome = expectedIncome - totalExpenditure;
@@ -108,11 +124,18 @@ export default class EnergyManager {
 				upgradeExpenditure,
 				constructionExpenditure,
 				spawnExpenditure,
+				structureUpkeepExpenditure,
 				totalExpenditure,
 				netIncome,
 				harvestWorkParts,
 				localHarvestWorkParts,
-				remoteHarvestWorkParts
+				remoteHarvestWorkParts,
+				roadCount,
+				swampRoadCount,
+				tunnelCount,
+				rampartCount,
+				containerCount,
+				remoteContainerCount
 			};
 		} catch (e) {
 			console.log(`Execution Error In Function: EnergyManager.updateMetrics(${this.room.name}) on Tick ${Game.time}. Error: ${e}`);
@@ -234,6 +257,112 @@ export default class EnergyManager {
 	}
 
 	/**
+	 * Calculate energy expenditure on structure upkeep
+	 * Includes roads, ramparts, and containers
+	 */
+	private calculateStructureUpkeepExpenditure(): { structureUpkeepExpenditure: number; roadCount: number; swampRoadCount: number; tunnelCount: number; rampartCount: number; containerCount: number; remoteContainerCount: number } {
+		try {
+			// Count structures by type
+			const { roadCount, swampRoadCount, tunnelCount, rampartCount, containerCount, remoteContainerCount } = this.countStructures();
+
+			// Calculate upkeep costs
+			// Plain roads
+			const roadUpkeep = roadCount * ROAD_UPKEEP;
+			// Swamp roads (more expensive to maintain)
+			const swampRoadUpkeep = swampRoadCount * ROAD_UPKEEP_SWAMP;
+			// Tunnel roads (most expensive to maintain)
+			const tunnelUpkeep = tunnelCount * ROAD_UPKEEP_TUNNEL;
+			// Ramparts
+			const rampartUpkeep = rampartCount * RAMPART_UPKEEP;
+			// Containers (owned - we maintain these)
+			const containerUpkeep = containerCount * CONTAINER_UPKEEP;
+			// Remote containers (decay faster, different upkeep rate)
+			const remoteContainerUpkeep = remoteContainerCount * REMOTE_CONTAINER_UPKEEP;
+
+			const structureUpkeepExpenditure = roadUpkeep + swampRoadUpkeep + tunnelUpkeep + rampartUpkeep + containerUpkeep + remoteContainerUpkeep;
+
+			return {
+				structureUpkeepExpenditure,
+				roadCount,
+				swampRoadCount,
+				tunnelCount,
+				rampartCount,
+				containerCount,
+				remoteContainerCount
+			};
+		} catch (e) {
+			console.log(`Execution Error In Function: EnergyManager.calculateStructureUpkeepExpenditure(${this.room.name}) on Tick ${Game.time}. Error: ${e}`);
+			return {
+				structureUpkeepExpenditure: 0,
+				roadCount: 0,
+				swampRoadCount: 0,
+				tunnelCount: 0,
+				rampartCount: 0,
+				containerCount: 0,
+				remoteContainerCount: 0
+			};
+		}
+	}
+
+	/**
+	 * Count structures by type in the room
+	 */
+	private countStructures(): { roadCount: number; swampRoadCount: number; tunnelCount: number; rampartCount: number; containerCount: number; remoteContainerCount: number } {
+		try {
+			const structures = this.room.find(FIND_STRUCTURES);
+			let roadCount = 0;
+			let swampRoadCount = 0;
+			let tunnelCount = 0;
+			let rampartCount = 0;
+			let containerCount = 0;
+			let remoteContainerCount = 0;
+
+			for (const struct of structures) {
+				if (struct.structureType === STRUCTURE_ROAD) {
+					// Determine road type by terrain
+					const terrain = this.room.getTerrain();
+					const terrainType = terrain.get(struct.pos.x, struct.pos.y);
+					if (terrainType === TERRAIN_MASK_WALL) {
+						tunnelCount++;
+					} else if (terrainType === TERRAIN_MASK_SWAMP) {
+						swampRoadCount++;
+					} else {
+						roadCount++;
+					}
+				} else if (struct.structureType === STRUCTURE_RAMPART) {
+					rampartCount++;
+				} else if (struct.structureType === STRUCTURE_CONTAINER) {
+					// Check if container is in a remote room
+					if (struct.room.name !== this.room.name) {
+						remoteContainerCount++;
+					} else {
+						containerCount++;
+					}
+				}
+			}
+
+			return {
+				roadCount,
+				swampRoadCount,
+				tunnelCount,
+				rampartCount,
+				containerCount,
+				remoteContainerCount
+			};
+		} catch (e) {
+			console.log(`Execution Error In Function: EnergyManager.countStructures(${this.room.name}) on Tick ${Game.time}. Error: ${e}`);
+			return {
+				roadCount: 0,
+				swampRoadCount: 0,
+				tunnelCount: 0,
+				rampartCount: 0,
+				containerCount: 0,
+				remoteContainerCount: 0
+			};
+		}
+	}
+
+	/**
 	 * Calculate amortized energy metrics over given time periods
 	 */
 	private calculateAmortization(): void {
@@ -257,7 +386,8 @@ export default class EnergyManager {
 			const amort1500Upgrade = this.calculateUpgradeExpenditure(stats) * 1500;
 			const amort1500Construction = this.calculateConstructionExpenditure(stats) * 1500;
 			const amort1500Spawn = this.calculateSpawnExpenditure(stats) * 1500;
-			const amort1500Expenditure = amort1500Upgrade + amort1500Construction + amort1500Spawn;
+			const amort1500Upkeep = metrics.structureUpkeepExpenditure * 1500;
+			const amort1500Expenditure = amort1500Upgrade + amort1500Construction + amort1500Spawn + amort1500Upkeep;
 
 			mem.amortized1500 = {
 				periodTicks: 1500,
@@ -273,7 +403,8 @@ export default class EnergyManager {
 			const amort3000Upgrade = this.calculateUpgradeExpenditure(stats) * 3000;
 			const amort3000Construction = this.calculateConstructionExpenditure(stats) * 3000;
 			const amort3000Spawn = this.calculateSpawnExpenditure(stats) * 3000;
-			const amort3000Expenditure = amort3000Upgrade + amort3000Construction + amort3000Spawn;
+			const amort3000Upkeep = metrics.structureUpkeepExpenditure * 3000;
+			const amort3000Expenditure = amort3000Upgrade + amort3000Construction + amort3000Spawn + amort3000Upkeep;
 
 			mem.amortized3000 = {
 				periodTicks: 3000,
@@ -300,11 +431,18 @@ export default class EnergyManager {
 			upgradeExpenditure: 0,
 			constructionExpenditure: 0,
 			spawnExpenditure: 0,
+			structureUpkeepExpenditure: 0,
 			totalExpenditure: 0,
 			netIncome: 0,
 			harvestWorkParts: 0,
 			localHarvestWorkParts: 0,
-			remoteHarvestWorkParts: 0
+			remoteHarvestWorkParts: 0,
+			roadCount: 0,
+			swampRoadCount: 0,
+			tunnelCount: 0,
+			rampartCount: 0,
+			containerCount: 0,
+			remoteContainerCount: 0
 		};
 	}
 
@@ -362,5 +500,168 @@ export default class EnergyManager {
 	 */
 	public getEnergyBalance3000(): number {
 		return this.getAmortized3000().energyBalance;
+	}
+
+	/**
+	 * Visualize energy management statistics as a box in the room
+	 * Displays in the top right corner with key metrics and color coding
+	 */
+	public visualizeEnergyStats(visual: RoomVisual, opts?: { x?: number; y?: number }): void {
+		try {
+			const x = opts?.x ?? 45;
+			const y = opts?.y ?? 1;
+			const metrics = this.getMetrics();
+			const amort1500 = this.getAmortized1500();
+			const amort3000 = this.getAmortized3000();
+
+			// Box dimensions
+			const boxWidth = 4;
+			const lineHeight = 0.3;
+			const padding = 0.15;
+			const boxHeight = 4.5;
+
+			// Draw background box
+			visual.rect(x - boxWidth, y, boxWidth, boxHeight, {
+				fill: '#1a1a1a',
+				stroke: '#444',
+				opacity: 0.85
+			});
+
+			let currentY = y + padding + 0.35;
+
+			// Title
+			visual.text('⚡ ENERGY', x - boxWidth + padding, currentY, {
+				color: '#ffff00',
+				font: 0.6,
+				align: 'left',
+				backgroundColor: '#000',
+				backgroundPadding: 0.05
+			});
+			currentY += 0.5;
+
+			// Income section
+			const incomeColor = metrics.expectedIncome > 0 ? '#4eff4e' : '#ffaa00';
+			visual.text(`Income: ${metrics.expectedIncome.toFixed(1)}/t`, x - boxWidth + padding, currentY, {
+				color: incomeColor,
+				font: 0.35,
+				align: 'left'
+			});
+			currentY += lineHeight;
+
+			// Expenditure breakdown
+			const expendColor = metrics.totalExpenditure > metrics.expectedIncome ? '#ff4444' : '#88ff88';
+			visual.text(`Expend: ${metrics.totalExpenditure.toFixed(1)}/t`, x - boxWidth + padding, currentY, {
+				color: expendColor,
+				font: 0.35,
+				align: 'left'
+			});
+			currentY += lineHeight + 0.05;
+
+			// Detailed expenditures (smaller text)
+			const detailColor = '#aaa';
+			const detailSize = 0.25;
+
+			if (metrics.spawnExpenditure > 0) {
+				visual.text(`Spawn: ${metrics.spawnExpenditure.toFixed(1)}`, x - boxWidth + padding + 0.2, currentY, {
+					color: detailColor,
+					font: detailSize,
+					align: 'left'
+				});
+				currentY += lineHeight * 0.8;
+			}
+
+			if (metrics.constructionExpenditure > 0) {
+				visual.text(`Build: ${metrics.constructionExpenditure.toFixed(1)}`, x - boxWidth + padding + 0.2, currentY, {
+					color: detailColor,
+					font: detailSize,
+					align: 'left'
+				});
+				currentY += lineHeight * 0.8;
+			}
+
+			if (metrics.upgradeExpenditure > 0) {
+				visual.text(`Upgrade: ${metrics.upgradeExpenditure.toFixed(1)}`, x - boxWidth + padding + 0.2, currentY, {
+					color: detailColor,
+					font: detailSize,
+					align: 'left'
+				});
+				currentY += lineHeight * 0.8;
+			}
+
+			if (metrics.structureUpkeepExpenditure > 0) {
+				visual.text(`Upkeep: ${metrics.structureUpkeepExpenditure.toFixed(1)}`, x - boxWidth + padding + 0.2, currentY, {
+					color: detailColor,
+					font: detailSize,
+					align: 'left'
+				});
+				currentY += lineHeight * 0.8;
+			}
+
+			currentY += 0.05;
+
+			// Net income (prominently displayed)
+			const netColor = metrics.netIncome >= 0 ? '#4eff4e' : '#ff4444';
+			visual.text(`Net: ${metrics.netIncome.toFixed(1)}/t`, x - boxWidth + padding, currentY, {
+				color: netColor,
+				font: 0.4,
+				align: 'left',
+				backgroundColor: '#000',
+				backgroundPadding: 0.05
+			});
+			currentY += 0.5;
+
+			// Amortized metrics
+			const status1500 = amort1500.isRunningDeficit ? '⚠ DEF' : '✓ SUR';
+			const status1500Color = amort1500.isRunningDeficit ? '#ff6666' : '#66ff66';
+			visual.text(`1500t: ${status1500}`, x - boxWidth + padding, currentY, {
+				color: status1500Color,
+				font: 0.32,
+				align: 'left'
+			});
+			visual.text(`${amort1500.avgNetPerTick.toFixed(2)}/t`, x - boxWidth + padding + 5, currentY, {
+				color: status1500Color,
+				font: 0.32,
+				align: 'left'
+			});
+			currentY += lineHeight;
+
+			const status3000 = amort3000.isRunningDeficit ? '⚠ DEF' : '✓ SUR';
+			const status3000Color = amort3000.isRunningDeficit ? '#ff6666' : '#66ff66';
+			visual.text(`3000t: ${status3000}`, x - boxWidth + padding, currentY, {
+				color: status3000Color,
+				font: 0.32,
+				align: 'left'
+			});
+			visual.text(`${amort3000.avgNetPerTick.toFixed(2)}/t`, x - boxWidth + padding + 5, currentY, {
+				color: status3000Color,
+				font: 0.32,
+				align: 'left'
+			});
+			currentY += lineHeight;
+
+			// Structure counts (if significant)
+			if (metrics.roadCount + metrics.swampRoadCount + metrics.tunnelCount > 0) {
+				currentY += 0.05;
+				const roadText = `R:${metrics.roadCount} S:${metrics.swampRoadCount} T:${metrics.tunnelCount}`;
+				visual.text(roadText, x - boxWidth + padding, currentY, {
+					color: '#888',
+					font: 0.25,
+					align: 'left'
+				});
+				currentY += lineHeight * 0.8;
+			}
+
+			if (metrics.rampartCount > 0) {
+				visual.text(`Ramparts: ${metrics.rampartCount}`, x - boxWidth + padding, currentY, {
+					color: '#888',
+					font: 0.25,
+					align: 'left'
+				});
+				currentY += lineHeight * 0.8;
+			}
+
+		} catch (e) {
+			console.log(`Execution Error In Function: EnergyManager.visualizeEnergyStats(${this.room.name}) on Tick ${Game.time}. Error: ${e}`);
+		}
 	}
 }

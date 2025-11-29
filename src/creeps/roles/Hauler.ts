@@ -45,6 +45,11 @@ const Hauler = {
 				const pickupPos = pickupTarget?.pos || (cMem.pickupPos? new RoomPosition(cMem.pickupPos.x, cMem.pickupPos.y, cMem.pickupPos.roomName): null);
 				const dropoffPos = dropoffTarget?.pos || (cMem.dropoffPos? new RoomPosition(cMem.dropoffPos.x, cMem.dropoffPos.y, cMem.dropoffPos.roomName): null);
 
+				if (room.storage && cMem.dropoff === room.storage.id)
+					cMem.depositingStorage = true;
+				else if (room.prestorage && cMem.dropoff === room.prestorage.id)
+					cMem.depositingPrestorage = true;
+
 				if (creep.store.getFreeCapacity(RESOURCE_ENERGY) > 0 || creep.store[cMem.cargo] == 0) {
 					if (pickupPos) {
 						if (pickupTarget && pos.isNearTo(pickupTarget)) {
@@ -53,16 +58,21 @@ const Hauler = {
 								const closestPile = pos.findClosestByRange(piles);
 								if (closestPile) creep.pickup(closestPile);
 							} else creep.withdraw(pickupTarget, cMem.cargo);
-						} else creep.advMoveTo(pickupPos, pathing.haulerPathing, false);
+						} else creep.advMoveTo(pickupPos, pathing.haulerPathing, true);
 					}
 				} else {
 					if (dropoffPos) {
 						if (dropoffTarget && pos.isNearTo(dropoffTarget)) {
 							if (dropoffTarget.store.getFreeCapacity(RESOURCE_ENERGY) > 0) {
+								const xferAmount = (creep.store.getUsedCapacity(RESOURCE_ENERGY) <= dropoffTarget.store.getFreeCapacity()) ?
+									creep.store.getUsedCapacity(RESOURCE_ENERGY) : dropoffTarget.store.getFreeCapacity();
 								const result = creep.transfer(dropoffTarget, RESOURCE_ENERGY);
-								if (result === OK) creep.advMoveTo(pickupPos, pathing.haulerPathing, false);
+								if (result === OK) {
+									creep.advMoveTo(pickupPos, pathing.haulerPathing, true);
+									rMem.stats.energyDeposited += xferAmount;
+								}
 							}
-						}	else creep.advMoveTo(dropoffPos, pathing.haulerPathing, false);
+						}	else creep.advMoveTo(dropoffPos, pathing.haulerPathing, true);
 					}
 				}
 			} else navRallyPoint(creep);

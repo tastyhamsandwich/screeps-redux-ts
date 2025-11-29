@@ -45,67 +45,54 @@ const Conveyor = {
 				const linkOne = room.linkOne;
 				const linkTwo = room.linkTwo;
 
-				if (cMem.loadingLink) {
-					controllerXfer(creep);
-					return;
-				}
-
-				if (cMem.sourceXfer) {
-					if (linkOne && linkOne.store.getUsedCapacity(RESOURCE_ENERGY) > 100)
-						linkSourceXfer(creep, linkOne);
-					if (linkTwo && linkTwo.store.getUsedCapacity(RESOURCE_ENERGY) > 100)
-						linkSourceXfer(creep, linkTwo);
-					return;
-				}
-
-				if (cMem.fillingSpawns) {
-					const spawns = pos.findInRange(FIND_MY_SPAWNS, 1, { filter: (s) => s.store.getFreeCapacity(RESOURCE_ENERGY) > 0 });
-					if (spawns.length) {
-						const result = creep.transfer(spawns[0], RESOURCE_ENERGY);
-						if (result === OK)
-							delete cMem.fillingSpawns;
-						else
-							creep.log(`Error filling spawn! Reason: ${getReturnCode(result)}`);
-					}
-					return;
-				}
-
-				if (linkStorage && linkOne && room.storage) {
-					if (linkOne.store.getUsedCapacity(RESOURCE_ENERGY) > 100)
-						cMem.sourceXfer = true;
-					return;
-				}
-
-				if (linkStorage && linkTwo && room.storage) {
-					if (linkTwo.store.getUsedCapacity(RESOURCE_ENERGY) > 100)
-						cMem.sourceXfer = true;
-					return;
-				}
-
-				if (linkStorage && linkController && room.storage) {
-					if (linkController.store.getUsedCapacity(RESOURCE_ENERGY) < 100) {
-						if (room.storage.store.getUsedCapacity(RESOURCE_ENERGY) >= 2000) {
-							cMem.loadingLink = true;
-							return;
+				//: Moving Energy from Storage Link to Storage
+				if (rMem.data.storageLinkFilled > 0) {
+					if (cMem.unloadingStorageLink && creep.store.getUsedCapacity(RESOURCE_ENERGY) > 0) {
+						if (room.storage) {
+							rMem.data.storageLinkFilled -= creep.store.getUsedCapacity(RESOURCE_ENERGY);
+							creep.transfer(room.storage, RESOURCE_ENERGY);
+							if (rMem.data.storageLinkFilled <= 0) {
+								delete rMem.data.storageLinkFilled;
+								delete cMem.unloadingStorageLink;
+							}
 						}
 					}
-				}
-
-				const spawns = pos.findInRange(FIND_MY_SPAWNS, 1, { filter: (s) => s.store.getFreeCapacity(RESOURCE_ENERGY) > 0 });
-				if (spawns.length) {
-					if (creep.store.getUsedCapacity(RESOURCE_ENERGY) < spawns[0].store.getFreeCapacity(RESOURCE_ENERGY)) {
-						const energyNeeded = spawns[0].store.getFreeCapacity(RESOURCE_ENERGY);
-						const amountToWithdraw = energyNeeded - creep.store[RESOURCE_ENERGY];
-						if (room.storage && room.storage.store[RESOURCE_ENERGY] >= amountToWithdraw) {
-							creep.withdraw(room.storage!, RESOURCE_ENERGY, amountToWithdraw);
-							cMem.fillingSpawns = true;
-						}
-						return;
+					if (cMem.unloadingStorageLink && creep.store.getUsedCapacity() === 0) {
+						creep.withdraw(room.linkStorage, RESOURCE_ENERGY);
 					}
 				}
 
-				if (creep.store.getUsedCapacity(RESOURCE_ENERGY) > 0)
-					creep.transfer(room.storage!, RESOURCE_ENERGY);
+				//: Transferring Energy from Storage Link to Controller Link
+				if (linkController && linkStorage) {
+					if (cMem.controllerXfer) {
+						if (linkStorage.store.getFreeCapacity(RESOURCE_ENERGY) > 0) {
+							if (creep.store.getUsedCapacity(RESOURCE_ENERGY) > 0)
+								if (room.storage)
+									creep.withdraw(room.storage, RESOURCE_ENERGY);
+						} else {
+							if (linkStorage.cooldown === 0) {
+								const result = linkStorage.transferEnergy(linkController);
+								if (result === OK) {
+									delete cMem.controllerXfer;
+								} else {
+									creep.log(`Error initiating energy transfer from linkStorage to linkController: ${getReturnCode(result)}`)
+								}
+							}
+						}
+					}
+					if (linkController.store.getUsedCapacity(RESOURCE_ENERGY) <= 100) {
+						cMem.controllerXfer = true;
+						if (creep.store.getFreeCapacity(RESOURCE_ENERGY) > 0)
+							if (room.storage)
+								creep.withdraw(room.storage, RESOURCE_ENERGY);
+					}
+				}
+				if (creep.store.getFreeCapacity() > 0 && linkStorage.store.getUsedCapacity(RESOURCE_ENERGY) > 0) {
+					const result = creep.withdraw(linkStorage, RESOURCE_ENERGY);
+					if (result === OK) {
+						cMem.unloadingStorageLink = true;
+					}
+				}
 			}
 		} catch (e) {
 			console.log(`Execution Error In Function: Conveyor.run(creep) on Tick ${Game.time}. Error: ${e}`);
