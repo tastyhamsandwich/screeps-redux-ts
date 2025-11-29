@@ -137,19 +137,19 @@ module.exports.loop = function() {
 			try {
 				const roomName = room.name;
 				const rMem = room.memory;
-
 				rMem.data ??= { numCSites: 0 };
 
 				const cSites: Array<ConstructionSite> = room.find(FIND_CONSTRUCTION_SITES, { filter: (i) => i.structureType !== STRUCTURE_ROAD });
 				const numCSitesPrevious: number = rMem.data.numCSites ?? 0;
 				rMem.data.numCSites = cSites.length;
 				const numCSites: number = rMem.data.numCSites ?? 0;
+				const remoteOfRoom = room.memory.remoteOfRoom;
 
 				if (room.memory.objects === undefined) 	room.cacheObjects();
 				if (numCSites < numCSitesPrevious) 			room.cacheObjects();
 
-				if (room.memory.remoteOfRoom) {
-					const remoteBuildSites: Id<ConstructionSite<BuildableStructureConstant>>[] = Game.rooms[room.memory.remoteOfRoom].memory.remoteRooms[room.name].cSites ?? [];
+				if (remoteOfRoom) {
+					const remoteBuildSites: Id<ConstructionSite<BuildableStructureConstant>>[] = Game.rooms[remoteOfRoom].memory.remoteRooms[room.name].cSites ?? [];
 					for (const site of cSites) {
 						if (!remoteBuildSites.includes(site.id))
 							remoteBuildSites.push(site.id);
@@ -158,11 +158,10 @@ module.exports.loop = function() {
 					for (const siteID of remoteBuildSites) {
 						if (!cSiteIDs.includes(siteID)) {
 							const index = remoteBuildSites.indexOf(siteID);
-							delete remoteBuildSites[index];
+							if (index >= 0)
+								delete Game.rooms[remoteOfRoom].memory.remoteRooms[room.name].cSites![index];
 						}
 					}
-
-
 				}
 				_.forEach(cSites, function (cSite: ConstructionSite) {
 					try {
