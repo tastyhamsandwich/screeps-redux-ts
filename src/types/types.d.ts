@@ -22,6 +22,7 @@ namespace NodeJS {
 		calcBodyCost(body: BodyPartConstant[] | undefined | null): number;
 		capitalize(string: string): string;
 		log(): void;
+		zeroWrap(index: number, wrapLimit: number): number;
 		PART_COST: Record<BodyPartConstant, number>;
 		pathing: { [key: string]: any };
 		roomManagers: { [roomName: string]: RoomManager };
@@ -71,17 +72,18 @@ namespace NodeJS {
 		 };
 		sources: { [key: string]: string[] };
 		containers: {
-			sourceOne: string;
-			sourceTwo: string;
-			mineral: string;
-			controller: string;
-			prestorage: string;
+			sourceOne: Id<StructureContainer>;
+			sourceTwo: Id<StructureContainer>;
+			mineral: Id<StructureContainer>;
+			controller: Id<StructureContainer>;
+			prestorage: Id<StructureContainer>;
 		};
 		links: {
-			sourceOne: string;
-			sourceTwo: string;
-			controller: string;
-			storage: string;
+			sourceOne: Id<StructureLink>;
+			sourceTwo: Id<StructureLink>;
+			controller: Id<StructureLink>;
+			storage: Id<StructureLink>;
+			remotes?: Id<StructureLink>[];
 		};
 		settings: RoomSettings;
 		data: { [key: string]: any };
@@ -114,6 +116,11 @@ namespace NodeJS {
 			rclAtGeneration: number;
 			checksum: string;
 			data: PlanResult;
+			placedStructures?: {
+				struct: BuildableStructureConstant;
+				x: number;
+				y: number;
+			}[]
 		};
 		visuals: {
 			settings?: { [key: string]: any };
@@ -250,6 +257,7 @@ namespace NodeJS {
 	//# STATISTICS INTERFACES
 	interface ColonyStats {
 		energyHarvested: number,
+		energyDeposited: number,
 		controlPoints: number,
 		constructionPoints: number,
 		creepsSpawned: number,
@@ -332,11 +340,18 @@ namespace NodeJS {
 		upgradeExpenditure: number;
 		constructionExpenditure: number;
 		spawnExpenditure: number;
+		structureUpkeepExpenditure: number;
 		totalExpenditure: number;
 		netIncome: number;
 		harvestWorkParts: number;
 		localHarvestWorkParts: number;
 		remoteHarvestWorkParts: number;
+		roadCount: number;
+		swampRoadCount: number;
+		tunnelCount: number;
+		rampartCount: number;
+		containerCount: number;
+		remoteContainerCount: number;
 	}
 
 	interface AmortizedEnergyMetrics {

@@ -756,3 +756,13 @@ export function getReturnCode(code: number): string {
 			return 'UNKNOWN';
 	}
 }
+
+/** Returns an incremented index value that wraps to zero based on an upper limit value.
+ * @param index The index value to increment, typically also what you're calling the function against
+ * @param wrapLimit The value that, once reached, causes the index to wrap back to zero
+ * @returns The new index value, either index+1 or 0, typically
+ * @example arrayIndex = zeroWrap(arrayIndex, array.length) // [a,b,c,d], before index = 3, after index = 0
+ */
+export function zeroWrap(index: number, wrapLimit: number): number {
+	return (index + 1) % wrapLimit;
+}
