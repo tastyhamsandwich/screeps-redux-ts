@@ -5,7 +5,7 @@ import LinkManager from './LinkManager';
 //import TaskManager from '../../unused/TaskManager';
 import BasePlanner, { computePlanChecksum } from '../modules/BasePlanner';
 import { STRUCTURE_PRIORITY, PLAYER_USERNAME } from '../functions/utils/constants';
-import { legacySpawnManager } from './room/utils';
+import { legacySpawnManager } from '../modules/LegacySpawnSystem';
 import { calcPathLength, log, getReturnCode, calcPath } from '../functions/utils/globals';
 import { determineBodyParts } from '../functions/creep/body';
 import RoomPlanningVisualizer from '@modules/PlanVisualizer';
@@ -1145,62 +1145,76 @@ export default class RoomManager {
 	/** Create/update hauler route pairs. */
 	public manageContainers(): void {
 
-		const pairArray: { start: string, end: string, length: number }[] = [];
-		if (this.room.memory.containers.sourceOne && (this.room.memory.containers.prestorage || this.room.storage)) {
-			const sourceOneContainer: StructureContainer | null = Game.getObjectById(this.room.memory.containers.sourceOne)!;
+		const locality = 'local';
+		const pairArray: { start: Id<StructureStorage | StructureContainer>, end: Id<StructureContainer | StructureStorage>, length: number, room: string, dropoffRoom: string, locality: string }[] = [];
+
+		//: Local ContainerOne -> Storage/Prestorage Pair
+		if (this.room.containerOne && (this.room.prestorage || this.room.storage)) {
+			const sourceOneContainer: StructureContainer = this.room.containerOne;
 			const storageCont = (this.room.storage) ? this.room.storage : (this.room.prestorage) ? this.room.prestorage : null;
 			if (storageCont) {
-				const pathLength = calcPathLength(sourceOneContainer.pos, storageCont.pos);
-				const pair = { start: this.room.memory.containers.sourceOne, end: storageCont.id, length: pathLength, room: this.room.name, dropoffRoom: this.room.name };
+				const start = this.room.memory.containers.sourceOne;
+				const end = storageCont.id;
+				const length = calcPathLength(sourceOneContainer.pos, storageCont.pos);
+				const room = this.room.name;
+				const dropoffRoom = this.room.name;
+				const pair = { start, end, length, room, dropoffRoom, locality };
 				pairArray.push(pair);
 			}
 		}
-		if (this.room.memory.containers.sourceTwo && (this.room.memory.containers.prestorage || this.room.storage)) {
-			const sourceTwoContainer: StructureContainer = Game.getObjectById(this.room.memory.containers.sourceTwo)!;
-			let storageCont;
-			if (this.room.storage)
-				storageCont = this.room.storage;
-			else if (this.room.prestorage)
-				storageCont = this.room.prestorage;
-
-			const pathLength = calcPathLength(sourceTwoContainer.pos, storageCont.pos);
-			const pair = { start: this.room.memory.containers.sourceTwo, end: storageCont.id, length: pathLength, room: this.room.name, dropoffRoom: this.room.name };
-			pairArray.push(pair);
+		//: Local ContainerTwo -> Storage/Prestorage Pair
+		if (this.room.containerTwo && (this.room.prestorage || this.room.storage)) {
+			const sourceTwoContainer: StructureContainer = this.room.containerTwo;
+			const storageCont = (this.room.storage) ? this.room.storage : this.room.prestorage;
+			if (storageCont) {
+				const start = this.room.memory.containers.sourceTwo;
+				const end = storageCont.id;
+				const length = calcPathLength(sourceTwoContainer.pos, storageCont.pos);
+				const room = this.room.name;
+				const dropoffRoom = room;
+				const pair = { start, end, length, room, dropoffRoom, locality };
+				pairArray.push(pair);
+			}
 		}
-		if (this.room.storage && this.room.memory.containers.controller) {
-			const controllerContainer: StructureContainer = Game.getObjectById(this.room.memory.containers.controller)!;
-			const storage: StructureStorage = this.room.storage;
+		//: Local Storage/Prestorage -> Controller Pair
+		if ((this.room.storage || this.room.prestorage) && this.room.memory.containers.controller) {
+			const controllerContainer: StructureContainer = this.room.containerController;
+			const storage: StructureStorage | StructureContainer = (this.room.storage) ? this.room.storage : this.room.prestorage;
 			const pathLength = calcPathLength(storage.pos, controllerContainer.pos);
-			const pair = { start: storage.id, end: this.room.memory.containers.controller, length: pathLength, room: this.room.name, dropoffRoom: this.room.name };
+			const pair = { start: storage.id, end: this.room.memory.containers.controller, length: pathLength, room: this.room.name, dropoffRoom: this.room.name, locality };
 			pairArray.push(pair);
-		} else if (this.room.memory.containers.controller && this.room.memory.containers.prestorage) {
+		}/* else if (this.room.memory.containers.controller && this.room.memory.containers.prestorage) {
 			const controllerContainer: StructureContainer = Game.getObjectById(this.room.memory.containers.controller)!;
 			const prestorageContainer: StructureContainer = Game.getObjectById(this.room.memory.containers.prestorage)!;
 			const pathLength = calcPathLength(prestorageContainer.pos, controllerContainer.pos);
-			const pair = { start: this.room.memory.containers.prestorage, end: this.room.memory.containers.controller, length: pathLength, room: this.room.name, dropoffRoom: this.room.name };
+			const pair = { start: this.room.memory.containers.prestorage, end: this.room.memory.containers.controller, length: pathLength, room: this.room.name, dropoffRoom: this.room.name, locality };
 			pairArray.push(pair);
-		}
+		}*/
 
-		if (this.room.memory.remoteRooms && Object.keys(this.room.memory.remoteRooms).length && this.room.storage) {
+		//: Remote Rooms hauling pairs
+		if (this.room.memory.remoteRooms && Object.keys(this.room.memory.remoteRooms).length && (this.room.storage || this.room.prestorage)) {
 			const remoteRooms = this.room.memory.remoteRooms;
+			const storageCont = (this.room.storage) ? this.room.storage : this.room.prestorage;
 			for (const room in remoteRooms) {
 				if (Game.rooms[room]) {
 					Game.rooms[room].cacheObjects();
 					if (Game.rooms[room].memory.containers) {
 						if (Game.rooms[room].memory.containers.sourceOne) {
 							const start = Game.rooms[room].containerOne.id;
-							const end = this.room.storage?.id;
-							const length = calcPathLength(Game.rooms[room].containerOne.pos, this.room.storage.pos);
+							const end = storageCont.id;
+							const length = calcPathLength(Game.rooms[room].containerOne.pos, storageCont.pos);
 							const dropoffRoom = this.room.name;
-							const pair = { start, end, length, room, dropoffRoom };
+							const locality = 'remote';
+							const pair = { start, end, length, room, dropoffRoom, locality };
 							pairArray.push(pair);
 						}
 						if (Game.rooms[room].memory.containers.sourceTwo) {
 							const start = Game.rooms[room].containerTwo.id;
-							const end = this.room.storage?.id;
-							const length = calcPathLength(Game.rooms[room].containerTwo.pos, this.room.storage.pos);
+							const end = storageCont.id;
+							const length = calcPathLength(Game.rooms[room].containerTwo.pos, storageCont.pos);
 							const dropoffRoom = this.room.name;
-							const pair = { start, end, length, room, dropoffRoom };
+							const locality = 'remote';
+							const pair = { start, end, length, room, dropoffRoom, locality };
 							pairArray.push(pair);
 						}
 					}
@@ -1254,6 +1268,11 @@ export default class RoomManager {
 					username: remoteRoom.controller!.reservation!.username,
 					ticksToEnd: remoteRoom.controller!.reservation!.ticksToEnd
 				} : null;
+				remoteRooms[rName].creepAssignments = { sourceOne: '', haulerOne: '', reserver: '', guard: '' };
+				if (remoteRooms[rName].sources.length > 1) {
+					remoteRooms[rName].creepAssignments.sourceTwo = '';
+					remoteRooms[rName].creepAssignments.haulerTwo = '';
+				}
 			} else {
 				// No visibility - ensure we have a scout enqueued to get visibility
 				// Attempt to create a small scout body (most rooms support a tiny scout)

@@ -25,7 +25,7 @@ import { creepRoleCounts } from "@main";
 import { PLAYER_USERNAME, LEGACY_SPAWN_CHECK_RATE } from '@functions/utils/constants';
 import * as FUNC from '@functions/index';
 
-// Helper function to generate name suffix with current counter
+/** Helper function to generate name suffix with current counter. */
 const getNameSuffix = (role: string, counter: number): string => {
 	try {
 		switch (role) {
@@ -146,7 +146,7 @@ function trySpawnCreep(spawn: StructureSpawn,	role: string,	memory: CreepMemory,
 	}
 }
 
-/** Get the next role to spawn using round-robin scheduling
+/** Get the next role to spawn using round-robin scheduling.
  * Switches between bootstrap phase (harvesters/fillers) and normal phase (other roles)
  * Returns the next role that needs spawning, or null if none are needed */
 function getNextRoleToSpawn(
@@ -331,7 +331,7 @@ export const legacySpawnManager = {
 		}
 
 		if (debugSpawn) room.log(`Legacy Spawn Manager: Sources cached (${room.memory.objects.sources.length}), spawns found (${spawns.length})`);
-		const harvesters_and_fillers_satisfied = ((totalWorkParts >= (room.memory.objects.sources.length * 5) || harvesters.length >= harvesterTarget) && fillers.length >= fillerTarget);
+		const harvesters_and_fillers_satisfied = Boolean(((totalWorkParts >= (room.memory.objects.sources.length * 5) || harvesters.length >= harvesterTarget) && fillers.length >= fillerTarget));
 
 		if (harvesters_and_fillers_satisfied)
 			new RoomVisual(roomName).text('✅', 1,1,{color: 'green', align: 'left', });
@@ -570,6 +570,34 @@ export const legacySpawnManager = {
 		} catch (e) {
 			console.log(`Execution Error In Function: legacySpawnManager.run() on Tick ${Game.time}. Error: ${e}`);
 		}
+	},
+	insertPending: (role: CreepRole, body: BodyPartConstant[], room: Room, memory) => {
+
+		const cost = calculateCreepCost(body);
+		const colName = 'Col1';
+
+		let counter = 0;
+		let name = `${colName}${getNameSuffix(role, counter)}`;
+		let result = room.spawns[0].spawnCreep(body, name, { dryRun: true, memory: memory });
+
+		while (result === ERR_NAME_EXISTS) {
+			counter++;
+			name = `${colName}${getNameSuffix(role, counter)}`;
+			result = room.spawns[0].spawnCreep(body, name, { dryRun: true, memory: memory });
+		}
+
+		const newPending: PendingSpawn = {
+			role,
+			body,
+			name,
+			memory,
+			cost,
+			time: Game.time
+		}
+
+		if (room.memory.data.pendingSpawn) delete room.memory.data.pendingSpawn;
+
+		room.memory.data.pendingSpawn = newPending;
 	}
 }
 

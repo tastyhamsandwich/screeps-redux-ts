@@ -46,7 +46,10 @@ export default class SpawnManager {
 		'remoteharvester': 50,
 		'remotebodyguard': 45,
 		'remotehauler': 40,
-		'scout': 30
+		'scout': 30,
+		'worker': 65,
+		'conveyor': 50,
+		'infantry': 35,
 	};
 
 	// Roles that should have predictive spawning (spawn replacement before death)
