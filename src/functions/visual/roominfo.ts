@@ -177,7 +177,9 @@
 }
 
  */
-export function towerDamageOverlay(room: Room) {
+export function towerDamageOverlay(room: Room): void {
+	if (!room.memory?.visuals?.settings?.displayTowerRanges) return;
+
 	//: TOWER DAMAGE BOX DISPLAYS
 	_.forEach(room.memory.objects.towers!, function (towerID) {
 		const tower: StructureTower | null = Game.getObjectById(towerID)!;
