@@ -155,53 +155,39 @@ export function getBodypartsPower(
 }
 
 export function determineBodyParts(role: string, maxEnergy: number, room: Room, extras?: { [key: string]: any }): BodyPartConstant[] {
-	try {
-		const bodyPartSegment: BodyPartConstant[] = [];
-		const totalBodyParts: BodyPartConstant[] = [];
 
-		switch (role) {
-			case 'harvester':
-				if (room.memory.data.flags.dropHarvestingEnabled) {
-					if (maxEnergy >= 600) {
-						totalBodyParts.push(WORK, WORK, WORK, WORK, WORK, MOVE, MOVE);
-						return totalBodyParts;
-					} else {
-						let remainingCost = maxEnergy;
+	const bodyPartSegment: BodyPartConstant[] = [];
+	const totalBodyParts: BodyPartConstant[] = [];
 
-						const moveParts = [MOVE];
-						remainingCost -= 50;
-						const workParts: BodyPartConstant[] = []
-						while (remainingCost >= 100) {
-							workParts.push(WORK);
-							remainingCost -= 100;
-						}
-						if (remainingCost >= 50)
-							moveParts.push(MOVE);
-
-						const totalBodyParts = workParts.concat(moveParts);
-
-						return totalBodyParts;
-					}
+	switch (role) {
+		case 'harvester':
+			if (room.memory.data.flags.dropHarvestingEnabled) {
+				if (maxEnergy >= 600) {
+					totalBodyParts.push(WORK, WORK, WORK, WORK, WORK, MOVE, MOVE);
+					return totalBodyParts;
+				} else if (maxEnergy >= 550 && maxEnergy < 600) {
+					totalBodyParts.push(WORK, WORK, WORK, WORK, WORK, MOVE);
+					return totalBodyParts;
 				} else {
-					if (maxEnergy >= 650)
-						totalBodyParts.push(WORK, WORK, WORK, WORK, WORK, CARRY, MOVE, MOVE);
-					else {
-						let remainingCost = maxEnergy;
+					let remainingCost = maxEnergy;
 
-						totalBodyParts.push(MOVE);
-						totalBodyParts.push(CARRY);
+					const moveParts = [MOVE];
+					remainingCost -= 50;
+					const workParts: BodyPartConstant[] = []
+					while (remainingCost >= 100) {
+						workParts.push(WORK);
 						remainingCost -= 100;
-
-						while (remainingCost >= 100) {
-							totalBodyParts.push(WORK);
-							remainingCost -= 100;
-						}
 					}
+					if (remainingCost >= 50)
+						moveParts.push(MOVE);
+
+					const totalBodyParts = workParts.concat(moveParts);
+
 					return totalBodyParts;
 				}
-			case 'remoteharvester':
-				if (maxEnergy >= 700)
-					totalBodyParts.push(WORK, WORK, WORK, WORK, WORK, CARRY, MOVE, MOVE, MOVE);
+			} else {
+				if (maxEnergy >= 650)
+					totalBodyParts.push(WORK, WORK, WORK, WORK, WORK, CARRY, MOVE, MOVE);
 				else {
 					let remainingCost = maxEnergy;
 
@@ -215,6 +201,37 @@ export function determineBodyParts(role: string, maxEnergy: number, room: Room, 
 					}
 				}
 				return totalBodyParts;
+			}
+		case 'remoteharvester':
+			if (maxEnergy >= 600) {
+				let workingTotal = maxEnergy - 600;
+				if (workingTotal > 150) workingTotal = 150;
+				const workParts: BodyPartConstant[] = [WORK, WORK, WORK, WORK, WORK];
+				const carryPart: BodyPartConstant[] = [CARRY];
+				const moveParts: BodyPartConstant[] = [MOVE];
+
+				while (workingTotal >= 50) {
+					moveParts.push(MOVE);
+					workingTotal -= 50;
+				}
+
+				const intermediate = carryPart.concat(moveParts);
+				const totalBodyParts = intermediate.concat(workParts);
+				return totalBodyParts;
+			}
+			else {
+				let remainingCost = maxEnergy;
+
+				totalBodyParts.push(MOVE);
+				totalBodyParts.push(CARRY);
+				remainingCost -= 100;
+
+				while (remainingCost >= 100) {
+					totalBodyParts.push(WORK);
+					remainingCost -= 100;
+				}
+			}
+			return totalBodyParts;
 		case 'upgrader':
 		case 'builder':
 		case 'repairer':
@@ -227,8 +244,8 @@ export function determineBodyParts(role: string, maxEnergy: number, room: Room, 
 			if (remainingEnergy >= 1400) remainingEnergy = 1400;
 
 			// Budget out remaining energy, 50% for WORK, 25% for CARRY/MOVE
-			let remainingWorkBudget  = (remainingEnergy / 2);
-			let remainingMoveBudget  = (remainingEnergy / 4);
+			let remainingWorkBudget = (remainingEnergy / 2);
+			let remainingMoveBudget = (remainingEnergy / 4);
 			let remainingCarryBudget = (remainingEnergy / 4);
 
 			// Add WORK parts to array while there is still energy in the WORK budget
@@ -260,11 +277,37 @@ export function determineBodyParts(role: string, maxEnergy: number, room: Room, 
 			const bodyParts = partialParts.concat(moveParts);
 
 			// Log cost & return array
-			log(`Cost for '${role}' with ${bodyParts} is ${calcBodyCost(bodyParts)}`);
+			if (room.memory.data.debugSpawn)
+				room.log(`Cost for '${role}' with ${bodyParts} is ${calcBodyCost(bodyParts)}`);
 			return bodyParts;
 
-		case 'defender':
-			return [];
+		case 'defender': {
+
+			let remainingEnergy = maxEnergy;
+
+			let attackParts: BodyPartConstant[] = [];
+			let moveParts: BodyPartConstant[] = [];
+			let toughParts: BodyPartConstant[] = [];
+
+			while (remainingEnergy >= 150) {
+				attackParts.push(ATTACK);
+				moveParts.push(MOVE);
+				toughParts.push(TOUGH);
+				toughParts.push(TOUGH);
+			}
+
+			if (remainingEnergy >= 100) {
+				moveParts.push(MOVE);
+				moveParts.push(MOVE);
+			}
+			if (remainingEnergy >= 50)
+				moveParts.push(MOVE);
+
+			const intermedParts: BodyPartConstant[] = moveParts.concat(toughParts);
+			const bodyParts: BodyPartConstant[] = intermedParts.concat(attackParts);
+
+			return bodyParts;
+		}
 		case 'filler': {
 
 			// Limit fillers to max cost of 300, effectively 4 CARRY and 2 MOVE parts
@@ -291,9 +334,10 @@ export function determineBodyParts(role: string, maxEnergy: number, room: Room, 
 			const bodyParts: BodyPartConstant[] = carryParts.concat(moveParts);
 
 			// Log cost & return
-			log(`Cost for '${role}' with ${bodyParts} is ${calcBodyCost(bodyParts)}`);
-				return bodyParts;
-			}
+			if (room.memory.data.debugSpawn)
+				room.log(`Cost for '${role}' with ${bodyParts} is ${calcBodyCost(bodyParts)}`);
+			return bodyParts;
+		}
 		case 'hauler': {
 
 			const maxCarryCost: number = Math.round((maxEnergy / 3) * 2 / 50) * 50;
@@ -301,8 +345,17 @@ export function determineBodyParts(role: string, maxEnergy: number, room: Room, 
 			let maxCarryParts: number = Math.floor(maxCarryCost / 50);
 			let maxMoveParts: number = Math.floor(maxMoveCost / 50);
 
-			const locality: string = room.memory.data.logisticalPairs[room.memory.data.pairCounter].locality;
-			const pathLen: number = room.memory.data.logisticalPairs[room.memory.data.pairCounter].distance;
+			let locality: string = 'local';
+			let pathLen: number = 15;
+
+			if (room.memory?.data?.logisticalPairs) {
+				locality = room.memory?.data?.logisticalPairs[room.memory.data.pairCounter]?.locality;
+				pathLen = room.memory?.data?.logisticalPairs[room.memory.data.pairCounter]?.distance;
+			} else if (room.memory?.data?.haulerPairs) {
+				if (room.memory?.data?.indices.haulerIndex === undefined) room.memory.data.indices.haulerIndex = 0;
+				pathLen = room.memory?.data?.haulerPairs[room.memory.data.indices.haulerIndex].length;
+			}
+
 			const carryParts: number = Math.ceil(pathLen / 5) * 2;
 			const moveParts: number = Math.ceil(carryParts / 2);
 			let carryArray: BodyPartConstant[] = [];
@@ -312,7 +365,7 @@ export function determineBodyParts(role: string, maxEnergy: number, room: Room, 
 			if (maxMoveParts > moveParts) maxMoveParts = moveParts;
 
 			for (let i = 0; i < maxCarryParts; i++) carryArray.push(CARRY);
-			for (let i = 0; i < maxMoveParts; i++) moveArray.push(MOVE);
+			for (let i = 0; i < maxMoveParts; i++) 	moveArray.push(MOVE);
 
 			let currCarryCost: number = carryArray.length * 50;
 			let currMoveCost: number = moveArray.length * 50;
@@ -334,11 +387,11 @@ export function determineBodyParts(role: string, maxEnergy: number, room: Room, 
 					if (maxEnergy - partCost >= 150) {
 						bodyArray.push(WORK);
 						bodyArray.push(MOVE);
-						finalCost += 150
+						finalCost += 150;
 					} else if (maxEnergy - partCost >= 50) {
 						bodyArray.shift();
 						bodyArray.push(WORK);
-						finalCost += 50
+						finalCost += 50;
 					} else {
 						bodyArray.pop();
 						bodyArray.shift();
@@ -368,6 +421,15 @@ export function determineBodyParts(role: string, maxEnergy: number, room: Room, 
 
 			return bodyArray;
 		}
+		case 'reserver':
+			if (maxEnergy >= 1300) return [CLAIM, CLAIM, MOVE, MOVE];
+			else if (maxEnergy >= 650) return [CLAIM, MOVE];
+			else return [];
+		case 'scout':
+			return [MOVE, MOVE, MOVE];
+		case 'conveyor':
+			return [CARRY, CARRY, CARRY, CARRY, CARRY, CARRY, CARRY, CARRY, MOVE];
+		case 'worker':
 		case 'worker':
 		case 'worker-mixed': {
 			// Balanced worker for all task types (1200 cap)
@@ -381,7 +443,7 @@ export function determineBodyParts(role: string, maxEnergy: number, room: Room, 
 			for (let i = 0; i < carryBudget / 50; i++) mixedBody.push(CARRY);
 			for (let i = 0; i < moveBudget / 50; i++) mixedBody.push(MOVE);
 
-			log(`Cost for '${role}' with ${mixedBody} is ${calcBodyCost(mixedBody)}`);
+			room.log(`Cost for '${role}' with ${mixedBody} is ${calcBodyCost(mixedBody)}`);
 			return mixedBody;
 		}
 		case 'worker-hauler': {
@@ -397,7 +459,7 @@ export function determineBodyParts(role: string, maxEnergy: number, room: Room, 
 			for (let i = 0; i < haulerCarryBudget / 50; i++) haulerBody.push(CARRY);
 			for (let i = 0; i < haulerMoveBudget / 50; i++) haulerBody.push(MOVE);
 
-			log(`Cost for '${role}' with ${haulerBody} is ${calcBodyCost(haulerBody)}`);
+			room.log(`Cost for '${role}' with ${haulerBody} is ${calcBodyCost(haulerBody)}`);
 			return haulerBody;
 		}
 		case 'worker-builder': {
@@ -413,23 +475,43 @@ export function determineBodyParts(role: string, maxEnergy: number, room: Room, 
 			for (let i = 0; i < builderCarryBudget / 50; i++) builderBody.push(CARRY);
 			for (let i = 0; i < builderMoveBudget / 50; i++) builderBody.push(MOVE);
 
-			log(`Cost for '${role}' with ${builderBody} is ${calcBodyCost(builderBody)}`);
+			room.log(`Cost for '${role}' with ${builderBody} is ${calcBodyCost(builderBody)}`);
 			return builderBody;
 		}
-		case 'reserver':
-			if (maxEnergy >= 1300)
-				return [CLAIM, CLAIM, MOVE, MOVE];
-			else if (maxEnergy >= 650)
-				return [CLAIM, MOVE];
-			else
-				return [];
-		case 'scout':
-			return [MOVE, MOVE, MOVE];
+		case 'infantry': {
+			const attackParts: BodyPartConstant[] = [];
+			const moveParts: BodyPartConstant[] = [];
+			const toughParts: BodyPartConstant[] = [];
+
+			let attackBudget = maxEnergy / 3;
+			let moveBudget = maxEnergy / 3;
+
+			while (attackBudget >= 80) {
+				attackParts.push(ATTACK);
+				attackBudget -= 80;
+			}
+
+			while (moveBudget >= 50) {
+				moveParts.push(MOVE);
+				moveBudget -= 50;
+			}
+
+			let numToughParts = attackParts.length;
+
+			while (numToughParts > 0) {
+				toughParts.push(TOUGH);
+				numToughParts--;
+			}
+
+			const intermediateParts = attackParts.concat(moveParts);
+			const finalBodyParts = intermediateParts.concat(toughParts);
+
+			room.log(`Spawning Infantry with ${attackParts.length} ATTACK, ${moveParts.length} MOVE, and ${toughParts.length} TOUGH parts.`);
+
+			return finalBodyParts;
+		}
 		default:
 			throw new Error("Invalid parameters passed.");
-		}
-	} catch (e) {
-		console.log(`Execution Error In Function: determineBodyParts(${role}) on Tick ${Game.time}. Error: ${e}`);
-		return [];
 	}
+
 }

@@ -1,5 +1,6 @@
 import { calcBodyCost, getReturnCode, log } from "functions/utils/globals";
 import { PART_COST } from 'functions/utils/constants';
+import { determineBodyParts } from "@funcs/creep";
 
 const PART = {
 	MOVE: 50,
@@ -26,8 +27,10 @@ StructureSpawn.prototype.log = function (logMsg: string): void {
  * @param extras An object including anthing additional that might be needed (currently unused)
  * @returns An array of BodyPartConstants that can be used as the input in a spawnCreep() function
  */
-StructureSpawn.prototype.determineBodyParts = function (role: string, maxEnergy?: number, extras?: { [key: string]: any }): BodyPartConstant[] {
+StructureSpawn.prototype.determineBodyParts = function (role: string, maxEnergy: number, extras?: { [key: string]: any }): BodyPartConstant[] {
 
+	return determineBodyParts(role, maxEnergy, this.room, extras);
+/*
 	if (maxEnergy ===  undefined) maxEnergy = this.room.energyCapacityAvailable;
 
 	const bodyPartSegment: BodyPartConstant[] = [];
@@ -338,7 +341,7 @@ StructureSpawn.prototype.determineBodyParts = function (role: string, maxEnergy?
 		default:
 			throw new Error("Invalid parameters passed.");
 	}
-
+*/
 }
 
 /**
