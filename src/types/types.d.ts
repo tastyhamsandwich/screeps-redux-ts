@@ -1,4 +1,5 @@
 import RoomManager from '@managers/RoomManager';
+import { EventMap } from '@modules/EventSystem';
 
 declare global {
 namespace NodeJS {
@@ -39,6 +40,7 @@ namespace NodeJS {
 
 	//# MEMORY INTERFACES
 	interface Memory {
+		__onceEvents: { [K in keyof EventMap]?: boolean; };
 		uuid: number;
 		log: any;
 		stats: { [key: string]: number | string };

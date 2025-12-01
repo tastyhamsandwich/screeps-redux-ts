@@ -453,7 +453,7 @@ Creep.prototype.harvestEnergy = function (): void {
 		if (this.memory.source === undefined)
 			this.memory.source = this.assignHarvestSource(locality, true, true);
 
-		this.room.memory.stats ??= { energyHarvested: 0, constructionPoints: 0, controlPoints: 0, controllerLevelReached: 0, creepsSpawned: 0, creepPartsSpawned: 0, npcInvadersKilled: 0, hostilePlayerCreepsKilled: 0 };
+		this.room.memory.stats ??= { energyHarvested: 0, energyDeposited: 0, constructionPoints: 0, controlPoints: 0, controllerLevelReached: 0, creepsSpawned: 0, creepPartsSpawned: 0, npcInvadersKilled: 0, hostilePlayerCreepsKilled: 0 };
 		const sourceId: Id<Source> = this.memory.source;
 		const storedSource: Source | null = Game.getObjectById(sourceId);
 

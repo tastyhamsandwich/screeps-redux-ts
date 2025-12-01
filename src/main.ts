@@ -3,6 +3,8 @@
 import * as FUNC from '@functions/index';
 import { log } from '@globals';
 
+// Import Event Bus Module
+import Events, { initializeDecoratedListeners } from '@modules/EventSystem';
 
 // Import Manager Daemons
 import RoomManager 					from "@managers/RoomManager";
@@ -24,6 +26,8 @@ if (!(Array.prototype as any).flat) {
 		return arr;
 	};
 }
+
+initializeDecoratedListeners();
 
 //! GLOBAL HEAP VARIABLES
 
@@ -47,7 +51,7 @@ let tickCount = 0;
 
 module.exports.loop = function() {
 	try {
-		if (Object.keys(Game.spawns).length === 0 && Object.keys(Game.creeps).length === 0)
+		if (Object.keys(Game.spawns).length === 1 && Object.keys(Game.creeps).length === 0)
 			FUNC.initGlobal(true);
 		else if (Memory.globalData.onBirthInitComplete === undefined || Memory?.globalData?.onBirthInitComplete === false)
 			FUNC.initGlobal();
@@ -245,7 +249,7 @@ module.exports.loop = function() {
 						FUNC.displayEnergyCapacity(room);
 						FUNC.displayEnergyStorage(room);
 
-						if (room.controller && room.controller.level) {
+						if (room.controller) {
 							const controllerLevel = room.controller.level;
 							const storedLevel = room.memory.data.controllerLevel;
 
@@ -253,6 +257,7 @@ module.exports.loop = function() {
 								room.log(`Update C.Level: ${room.controller!.level !== room.memory.data.controllerLevel} | Update C.StatsLevel: ${room.controller!.level > room.memory.stats.controllerLevelReached}`);
 							if (storedLevel !== controllerLevel) {
 								room.memory.data.controllerLevel = room.controller.level;
+								room.manager?.regenerateBasePlan();
 								room.log(`Updated Controller Level! (was ${room.controller!.level - 1}, now ${room.controller!.level})`);
 							}
 							if (controllerLevel > storedLevel) {
