@@ -7,6 +7,7 @@ export interface EventMap {
 	invaderCorePresent: { roomName: string; roomPos: RoomPosition };
 	controllerLevelUpgraded: { roomName: string; newLevel: number };
 	storageBuilt: { roomName: string, roomPos: RoomPosition };
+	remoteRoomCached: { roomName: string, hostRoom: string };
 }
 
 export type Priority = "low" | "normal" | "high";

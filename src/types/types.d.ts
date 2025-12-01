@@ -180,6 +180,7 @@ namespace NodeJS {
 		linkTwo: StructureLink;
 		linkController: StructureLink;
 		linkStorage: StructureLink;
+		spawns: StructureSpawn[];
 	}
 
 	interface Creep {
@@ -234,6 +235,14 @@ namespace NodeJS {
 		energyCost?: number;
 	}
 
+	interface PendingSpawn {
+		role: CreepRole;
+		body: BodyPartConstant[];
+		name: string;
+		memory: { [key: string]: any };
+		cost: number;
+		time: number;
+	}
 	interface ScheduledSpawn {
 		role: string;
 		scheduledTick: number;
@@ -254,6 +263,14 @@ namespace NodeJS {
 		controllerId?: Id<StructureController>;
 		scoutAssigned?: string
 		cSites?: Id<ConstructionSite>[];
+		creepAssignments?: {
+			sourceOne?: string;
+			sourceTwo?: string;
+			reserver?: string;
+			haulerOne?: string;
+			haulerTwo?: string;
+			guard?: string;
+		}
 	}
 
 	//# STATISTICS INTERFACES
@@ -455,7 +472,7 @@ namespace NodeJS {
 
 	//# OTHER/GENERAL TYPEDEFS
 	type alignment = 'left' | 'right' | 'center';
-	type CreepRole = "harvester" | "upgrader" | "builder" | "repairer" | "defender" | "filler" | "hauler" | "remoteharvester" | "reserver" | "scout" | "conveyor" | "worker"
+	type CreepRole = "harvester" | "upgrader" | "builder" | "repairer" | "defender" | "filler" | "hauler" | "remoteharvester" | "reserver" | "scout" | "conveyor" | "worker" | "infantry"
 	type RoomName = `${'W' | 'E'}${number}${'N' | 'S'}${number}`;
 
 	//# ROOM MANAGER INTERFACES
