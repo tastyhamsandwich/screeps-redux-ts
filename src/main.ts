@@ -150,7 +150,11 @@ module.exports.loop = function() {
 				const remoteOfRoom = room.memory.remoteOfRoom;
 
 				if (room.memory.objects === undefined) 	room.cacheObjects();
-				if (numCSites < numCSitesPrevious) 			room.cacheObjects();
+				if (numCSites < numCSitesPrevious) {
+					room.cacheObjects();
+					if (room.memory.remoteOfRoom)
+						Events.emit('remoteRoomCached', { roomName: room.name, hostRoom: room.memory.remoteOfRoom });
+				}
 
 				if (remoteOfRoom) {
 					const remoteBuildSites: Id<ConstructionSite<BuildableStructureConstant>>[] = Game.rooms[remoteOfRoom].memory.remoteRooms[room.name].cSites ?? [];

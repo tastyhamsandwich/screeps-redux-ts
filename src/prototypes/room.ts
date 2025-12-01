@@ -200,6 +200,12 @@ Object.defineProperty(Room.prototype, 'linkStorage', {
 	configurable: true
 });
 
+Object.defineProperty(Room.prototype, 'spawns', {
+	get: function () {
+		return this.find(FIND_MY_SPAWNS);
+	}
+})
+
 Room.prototype.log = function(message: string, critical: boolean = false): void {
 	try {
 		if (!critical) return console.log(`${this.link()}${message}`);
