@@ -1,6 +1,6 @@
 //const profiler = require('screeps-profiler');
 
-import { aiAlert, navRallyPoint, upgraderBehavior } from '../common';
+import { aiAlert, navRallyPoint, upgraderBehavior, builderBehavior } from '../common';
 import { pathing } from '@constants';
 import { repairProgress } from '@funcs/visual';
 
@@ -92,7 +92,7 @@ const Repairer = {
 									else if (result === ERR_NOT_ENOUGH_ENERGY) cMem.working = false;
 									else console.log(`${creep.name}: Repair result - ${result}`);
 								}
-							} else upgraderBehavior(creep);
+							} else builderBehavior(creep);
 						}
 					}
 				} else navRallyPoint(creep);

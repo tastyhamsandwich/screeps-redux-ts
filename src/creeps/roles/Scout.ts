@@ -34,6 +34,20 @@ const Scout = {
 								targetRoom.cacheObjects();
 								Game.rooms[cMem.home].memory.remoteRooms[cMem.targetRoom].scouted = true;
 							}
+							if (room.controller) {
+								if (!pos.isNearTo(room.controller)) {
+									creep.advMoveTo(room.controller, pathing.builderPathing, false);
+								}
+							} else {
+								if (pos.x <= 1)
+									creep.move(RIGHT);
+								if (pos.x >= 48)
+									creep.move(LEFT);
+								if (pos.y <= 1)
+									creep.move(BOTTOM);
+								if (pos.y >= 48)
+									creep.move(TOP);
+							}
 						}
 					} else {
 						if (Scout.tickCount % 5) creep.say('🥱');

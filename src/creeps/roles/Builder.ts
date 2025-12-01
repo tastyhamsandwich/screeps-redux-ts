@@ -1,6 +1,6 @@
 //const profiler = require('screeps-profiler');
 
-import { aiAlert, navRallyPoint, upgraderBehavior } from "../common";
+import { aiAlert, navRallyPoint, upgraderBehavior, findEnergySource } from "../common";
 import { pathing } from "@constants";
 
 /**
@@ -102,47 +102,6 @@ const Builder = {
 		} catch (e) {
 			console.log(`Execution Error In Function: Builder.runremote(creep) on Tick ${Game.time}. Error: ${e}`);
 		}
-	}
-}
-
-/**
- * Finds the best energy source for the builder creep.
- * Priority: Storage (if sufficient) > Containers
- */
-function findEnergySource(creep: Creep): StructureStorage | StructureContainer | null | Ruin {
-	try {
-		const room = creep.room;
-		const pos = creep.pos;
-
-		const ruins = pos.findInRange(FIND_RUINS, 3, { filter: (s) => { s.store[RESOURCE_ENERGY] > 0 }});
-		if (ruins.length) {
-			const nearestRuin = pos.findClosestByRange(ruins);
-			if (nearestRuin)
-				return nearestRuin;
-		}
-		// Priority 1: Storage (if it has enough energy to justify using it)
-		if (room.storage && room.storage.store.getUsedCapacity(RESOURCE_ENERGY) > (creep.store.getCapacity() + 1000)) {
-			return room.storage;
-		}
-
-		// Priority 2: Containers with energy
-		const containers = room.find(FIND_STRUCTURES, {
-			filter: (s) => s.structureType === STRUCTURE_CONTAINER
-				&& (s as StructureContainer).store.getUsedCapacity(RESOURCE_ENERGY) >= creep.store.getCapacity()
-		}) as StructureContainer[];
-
-		if (containers.length > 0) {
-			// Find closest container with energy
-			const nearestContainer = pos.findClosestByRange(containers);
-			if (nearestContainer) {
-				return nearestContainer;
-			}
-		}
-
-		return null;
-	} catch (e) {
-		console.log(`Execution Error In Function: findEnergySource(creep) on Tick ${Game.time}. Error: ${e}`);
-		return null;
 	}
 }
 

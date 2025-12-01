@@ -27,6 +27,14 @@ const Filler = {
 			if (cMem.disable) aiAlert(creep);
 			else if (cMem.rally !== 'none') navRallyPoint(creep);
 			else {
+
+				const empty_prestorage: boolean = Boolean(creep.room.prestorage && creep.room.prestorage.store.getUsedCapacity(RESOURCE_ENERGY) > 0 && creep.room.storage);
+				if (empty_prestorage) {
+					console.log(`empty prestorage`);
+					emptyPrestorage(creep);
+				}
+
+
 				// Withdraw phase - when empty, find resources
 				if (creep.store.getUsedCapacity() === 0) {
 					const target = findEnergySource(creep);
@@ -213,6 +221,26 @@ function withdrawFromTarget(creep: Creep, target: Tombstone | Resource | Ruin | 
 	}
 }
 
+function emptyPrestorage(creep: Creep): void {
+
+	if (creep.store.getUsedCapacity() > 0)
+		if (creep.room.storage) {
+			const result = creep.transfer(creep.room.storage, RESOURCE_ENERGY);
+			if (result === ERR_NOT_IN_RANGE)
+				creep.advMoveTo(creep.room.storage);
+			if (result === OK)
+				creep.log(`Transferring to storage`);
+		}
+	if (creep.store.getUsedCapacity() === 0)
+		if (creep.room.prestorage) {
+			const result = creep.withdraw(creep.room.prestorage, RESOURCE_ENERGY);
+			if (result === ERR_NOT_IN_RANGE)
+				creep.advMoveTo(creep.room.prestorage);
+			if (result === OK)
+				creep.log(`Withdrawing from prestorage`);
+		}
+		return;
+}
 //profiler.registerObject(Filler, 'CreepFiller');
 
 export default Filler;

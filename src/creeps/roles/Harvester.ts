@@ -247,7 +247,10 @@ const Harvester = {
 							// Move to source before harvesting
 							source = Game.getObjectById(cMem.source) as Source;
 							if (!source) {
-								creep.say('No src!');
+								if (creep.room.name !== cMem.targetRoom) {
+									const roomPos = new RoomPosition(25,25,cMem.targetRoom);
+									creep.advMoveTo(roomPos, pathing.harvesterPathing, true);
+								}
 							} else if (!pos.isNearTo(source)) {
 								creep.advMoveTo(source, pathing.harvesterPathing, true);
 							} else {
