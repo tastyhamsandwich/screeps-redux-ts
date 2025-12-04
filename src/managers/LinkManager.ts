@@ -15,7 +15,6 @@ const LinkManager = {
 						if (room.linkTwo) if (link.id === room.linkTwo.id) continue;
 						if (room.linkController) if (link.id === room.linkController.id) continue;
 						if (!room.memory.links.remotes) room.memory.links.remotes = [];
-						if (!room.memory.links.remotes.includes(link.id))
 							room.memory.links.remotes.push(link.id);
 					}
 				}
