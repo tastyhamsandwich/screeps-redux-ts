@@ -1,0 +1,344 @@
+{
+	"ConglomerateExample": {
+		"subStampsUsed": [
+			{
+				"stamp": "CrossFiveStamp",
+				"placedAt": {
+					"x": 26,
+					"y": 11
+				},
+				"mirrorVert": false,
+				"mirrorHoriz": false,
+				"rotate90": 0,
+				"buildRoads": true
+			},
+			{
+				"stamp": "DiagFiveStamp",
+				"placedAt": {
+					"x": 22,
+					"y": 8
+				},
+				"mirrorVert": false,
+				"mirrorHoriz": false,
+				"rotate90": 1,
+				"buildRoads": true
+			},
+			{
+				"stamp": "DiagFiveStamp",
+				"placedAt": {
+					"X": 29,
+					"y": 7
+				},
+				"mirrorVert": false,
+				"mirrorHoriz": false,
+				"rotate90": 2,
+				"buildRoads": true
+			},
+			{
+				"stamp": "DiagFiveStamp",
+				"placedAt": {
+					"X": 30,
+					"y": 14
+				},
+				"mirrorVert": false,
+				"mirrorHoriz": false,
+				"rotate90": 3,
+				"buildRoads": true
+			},
+			{
+				"stamp": "DiagThreeStamp",
+				"placedAt": {
+					"X": 20,
+					"y": 8
+				},
+				"mirrorVert": false,
+				"mirrorHoriz": false,
+				"rotate90": 1,
+				"buildRoads": false
+			},
+			{
+				"stamp": "DiagThreeStamp",
+				"placedAt": {
+					"X": 22,
+					"y": 6
+				},
+				"mirrorVert": false,
+				"mirrorHoriz": false,
+				"rotate90": 1,
+				"buildRoads": false
+			},
+			{
+				"stamp": "DiagThreeStamp",
+				"placedAt": {
+					"X": 29,
+					"y": 5
+				},
+				"mirrorVert": false,
+				"mirrorHoriz": false,
+				"rotate90": 2,
+				"buildRoads": false
+			},
+			{
+				"stamp": "DiagThreeStamp",
+				"placedAt": {
+					"X": 31,
+					"y": 7
+				},
+				"mirrorVert": false,
+				"mirrorHoriz": false,
+				"rotate90": 2,
+				"buildRoads": false
+			},
+			{
+				"stamp": "DiagThreeStamp",
+				"placedAt": {
+					"X": 32,
+					"y": 14
+				},
+				"mirrorVert": false,
+				"mirrorHoriz": false,
+				"rotate90": 3,
+				"buildRoads": false
+			},
+			{
+				"stamp": "DiagThreeStamp",
+				"placedAt": {
+					"X": 30,
+					"y": 16
+				},
+				"mirrorVert": false,
+				"mirrorHoriz": false,
+				"rotate90": 3,
+				"buildRoads": false
+			},
+			{
+				"stamp": "DiagThreeStamp",
+				"placedAt": {
+					"X": 23,
+					"y": 17
+				},
+				"mirrorVert": false,
+				"mirrorHoriz": false,
+				"rotate90": 0,
+				"buildRoads": false
+			},
+			{
+				"stamp": "DiagThreeStamp",
+				"placedAt": {
+					"X": 21,
+					"y": 15
+				},
+				"mirrorVert": false,
+				"mirrorHoriz": false,
+				"rotate90": 0,
+				"buildRoads": false
+			}
+		],
+		"structures": {
+			"extension": [
+				{
+					"x": 3,
+					"y": 3
+				},
+				{
+					"x": 3,
+					"y": 4
+				},
+				{
+					"x": 3,
+					"y": 5
+				},
+				{
+					"x": 4,
+					"y": 4
+				},
+				{
+					"x": 2,
+					"y": 4
+				},
+				{
+					"x": 4,
+					"y": 2
+				},
+				{
+					"x": 5,
+					"y": 2
+				},
+				{
+					"x": 5,
+					"y": 3
+				},
+				{
+					"x": 6,
+					"y": 3
+				},
+				{
+					"x": 5,
+					"y": 5
+				},
+				{
+					"x": 5,
+					"y": 6
+				},
+				{
+					"x": 4,
+					"y": 6
+				},
+				{
+					"x": 3,
+					"y": 7
+				},
+				{
+					"x": 2,
+					"y": 7
+				},
+				{
+					"x": 2,
+					"y": 6
+				},
+				{
+					"x": 1,
+					"y": 6
+				},
+				{
+					"x": 1,
+					"y": 5
+				},
+				{
+					"x": 1,
+					"y": 3
+				},
+				{
+					"x": 1,
+					"y": 2
+				},
+				{
+					"x": 2,
+					"y": 2
+				},
+				{
+					"x": 2,
+					"y": 1
+				},
+				{
+					"x": 3,
+					"y": 1
+				},
+				{
+					"x": 6,
+					"y": 4
+				}
+			],
+			"road": [
+				{
+					"x": 3,
+					"y": 6
+				},
+				{
+					"x": 4,
+					"y": 5
+				},
+				{
+					"x": 5,
+					"y": 4
+				},
+				{
+					"x": 4,
+					"y": 3
+				},
+				{
+					"x": 3,
+					"y": 2
+				},
+				{
+					"x": 2,
+					"y": 3
+				},
+				{
+					"x": 1,
+					"y": 4
+				},
+				{
+					"x": 2,
+					"y": 5
+				},
+				{
+					"x": 0,
+					"y": 5
+				},
+				{
+					"x": 0,
+					"y": 6
+				},
+				{
+					"x": 1,
+					"y": 7
+				},
+				{
+					"x": 2,
+					"y": 8
+				},
+				{
+					"x": 3,
+					"y": 8
+				},
+				{
+					"x": 4,
+					"y": 7
+				},
+				{
+					"x": 5,
+					"y": 7
+				},
+				{
+					"x": 6,
+					"y": 6
+				},
+				{
+					"x": 6,
+					"y": 5
+				},
+				{
+					"x": 4,
+					"y": 1
+				},
+				{
+					"x": 5,
+					"y": 1
+				},
+				{
+					"x": 6,
+					"y": 2
+				},
+				{
+					"x": 7,
+					"y": 3
+				},
+				{
+					"x": 7,
+					"y": 4
+				},
+				{
+					"x": 0,
+					"y": 3
+				},
+				{
+					"x": 0,
+					"y": 2
+				},
+				{
+					"x": 1,
+					"y": 1
+				},
+				{
+					"x": 2,
+					"y": 0
+				},
+				{
+					"x": 3,
+					"y": 0
+				}
+			]
+		}
+	}
+}

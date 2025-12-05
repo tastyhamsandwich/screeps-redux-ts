@@ -1,0 +1,38 @@
+{
+	"SingleOneStamp": {
+		"centerPoint": {
+			"x": 1,
+			"y": 1
+		},
+		"stampDims": {
+			"width": 3,
+			"height": 3
+		},
+		"structures": {
+			"extension": [
+				{
+					"dx": 0,
+					"dy": 0
+				}
+			],
+			"road": [
+				{
+					"dx": 0,
+					"dy": 1
+				},
+				{
+					"dx": -1,
+					"dy": 0
+				},
+				{
+					"dx": 0,
+					"dy": -1
+				},
+				{
+					"dx": 1,
+					"dy": 0
+				}
+			]
+		}
+	}
+}

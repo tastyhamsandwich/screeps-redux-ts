@@ -472,8 +472,7 @@ namespace NodeJS {
 
 	//# OTHER/GENERAL TYPEDEFS
 	type alignment = 'left' | 'right' | 'center';
-	type CreepRole = "harvester" | "upgrader" | "builder" | "repairer" | "defender" | "filler" | "hauler" | "remoteharvester" | "reserver" | "scout" | "conveyor" | "worker" | "infantry"
-	type RoomName = `${'W' | 'E'}${number}${'N' | 'S'}${number}`;
+	type CreepRole = "harvester" | "upgrader" | "builder" | "repairer" | "defender" | "filler" | "hauler" | "remoteharvester" | "reserver" | "scout" | "conveyor" | "worker" | "infantry";
 
 	//# ROOM MANAGER INTERFACES
 	interface RoomData {
@@ -587,8 +586,9 @@ namespace NodeJS {
 		[rcl: number]: StructurePlacement[];
 	}
 
+	type RoomName = `${'W' | 'E'}${number}${'N' | 'S'}${number}`
 	type RCLLevel = 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8;
-
+	type PackedPos = `${string & { __brand: `\\d,\\d,${RoomName}` }}`;
 	type InnerPositions = Array<RoomPosition | { x: number; y: number }>;
 
 	interface DistTransOptions {
