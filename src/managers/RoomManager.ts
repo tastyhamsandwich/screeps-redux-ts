@@ -3,25 +3,30 @@ import SpawnManager from './SpawnManager';
 import EnergyManager from './EnergyManager';
 import LinkManager from './LinkManager';
 //import TaskManager from '../../unused/TaskManager';
-import BasePlanner, { computePlanChecksum } from '../modules/BasePlanner';
 import { STRUCTURE_PRIORITY, PLAYER_USERNAME } from '../functions/utils/constants';
 import { legacySpawnManager } from '../modules/LegacySpawnSystem';
 import { calcPathLength, log, getReturnCode, calcPath } from '../functions/utils/globals';
 import { determineBodyParts } from '../functions/creep/body';
 import RoomPlanningVisualizer from '@modules/PlanVisualizer';
 import * as FUNC from '@functions/index';
+import BasePlanner from '../modules/BasePlanner';
 
 /** Manages all logic and operations for a single room. */
 export default class RoomManager {
 	private room: Room;
+	public rooms: Room[];
 	private resources: RoomResources;
 	private stats: RoomStats;
 	private spawnManager: SpawnManager;
 	private energyManager: EnergyManager;
 	//private TaskManager: TaskManager;
+	private level: number;
+	private constructionSites: ConstructionSite[];
+	private previousCSites: number;
+	private currentCSites: number;
 	private LegacySpawnManager;
-	private BasePlanner: BasePlanner | null;
 	private basePlan: PlanResult | null = null;
+	private basePlanner: BasePlanner | null = null;
 	private haulerPairs: { start: string, end: string, length: number }[] | null = null;
 	public PlanVisualizer: RoomPlanningVisualizer | null = null;
 	private _spawns: Id<StructureSpawn>[];
@@ -43,11 +48,17 @@ export default class RoomManager {
 		this.energyManager = new EnergyManager(room);
 		//this.TaskManager = new TaskManager(room);
 		this.LegacySpawnManager = legacySpawnManager;
-		this.BasePlanner = null; // Only create when regeneration is needed
 		this.PlanVisualizer = new RoomPlanningVisualizer(room);
+		this.basePlanner = new BasePlanner(room);
 		this._spawns = this.room.find(FIND_MY_SPAWNS).map((s) => s.id);
 		this._creeps = Game.creeps;
 		this._towers = this.room.memory.objects.towers;
+		this.loadBasePlanFromMemory();
+		this.rooms = [this.room];
+		this.level = this.room.controller!.level;
+		this.constructionSites = [];
+		this.previousCSites = 0;
+		this.currentCSites = 0;
 
 		Memory.globalData.numColonies++;
 		this.room.memory.data.flags.initialized = true;
@@ -102,54 +113,11 @@ export default class RoomManager {
 		}
 	}
 
-	private initializeMemory() {
-		try {
-			if (!this.room.memory.data)
-				this.room.memory.data = {
-					flags: {
-						dropHarvestingEnabled: false,
-						basePlanGeneratde: false,
-						bootstrappingMode: false,
-						initialized: false,
-						advSpawnSystem: false
-					},
-					indices: {
-						nextHarvesterAssigned: 0,
-						haulerIndex: 0,
-						lastBootstrapRoleIndex: 0,
-						lastNormalRoleIndex: 0
-					},
-				};
-			if (!this.room.memory.visuals)
-				this.room.memory.visuals = {
-					settings: {},
-					basePlan: {
-						visDistTrans: false,
-						visBasePlan: false,
-						visFloodFill: false,
-						visPlanInfo: false,
-						buildProgress: false
-					},
-					enableVisuals: false,
-					redAlertOverlay: true,
-					showPlanning: false
-				};
-			if (!this.room.memory.quotas) this.room.memory.quotas = {};
-			if (!this.room.memory.objects) this.room.memory.objects = {};
-			if (!this.room.memory.containers) this.room.memory.containers = {} as any;
-			if (!this.room.memory.remoteRooms) this.room.memory.remoteRooms = {};
-			if (!this.room.memory.settings)
-				this.room.memory.settings = {
-					basePlanning: { debug: false }
-				} as any;
-		} catch (e) {
-			console.log(`Execution Error In Function: RoomManager.initializeMemory(${this.room.name}) on Tick ${Game.time}. Error: ${e}`);
-		}
-	}
 
 	/** Main run method - called every tick */
 	run(): void {
 		try {
+			this.level = (this.room.controller) ? this.room.controller?.level : 0;
 			const room = this.room;
 			const roomMem = room.memory;
 			roomMem.data ??= { flags: {}, indices: {} };
@@ -159,7 +127,11 @@ export default class RoomManager {
 			const conveyor_needed = Boolean(room.linkStorage && (room.linkController || room.linkOne || room.linkTwo) && room.storage && room.memory.quotas.conveyor === 0);
 			const ready_for_drop_harvesting = Boolean(room.containerOne && room.containerTwo && room.energyCapacityAvailable >= 550 && !room.memory.data.flags.dropHarvestingEnabled);
 			const storage_built = Boolean(room.storage && room.prestorage && room.controller && room.controller.level === 4 && room.prestorage.store.getUsedCapacity() === 0);
+			const controller_upgraded = Boolean(this.room.controller && roomMem.data.controllerLevel !== rcl);
+			this.room.log(`roomMem.controllerLevel (${this.room.memory.data.controllerLevel}) | RCL (${this.room.controller!.level}) | controller_upgraded: ${controller_upgraded}`);
 
+			if (controller_upgraded)
+				this.handleRCLUpgrade();
 			if (storage_built)
 				room.prestorage.destroy();
 			if (ready_for_remotes)
@@ -170,6 +142,9 @@ export default class RoomManager {
 				room.memory.data.flags.dropHarvestingEnabled = true;
 				room.setQuota('upgrader', 4);
 			}
+
+			// Ensure we have a base plan ready
+			this.ensureBasePlanGenerated();
 
 			// Update energy management metrics
 			this.energyManager.run();
@@ -194,9 +169,6 @@ export default class RoomManager {
 				this.LegacySpawnManager.run(this.room);
 			}
 
-			// Handle RCL upgrades - detect level changes and place construction sites for new RCL
-			this.handleRCLUpgrade();
-
 			// Display Tower Damage/Range Overlay if enabled
 			FUNC.towerDamageOverlay(room);
 
@@ -207,41 +179,8 @@ export default class RoomManager {
 				rmData.lastResourceScan = Game.time;
 			}
 
-			// Initialize visual settings if needed
-			if (!rmData.flags.basePlanGenerated) {
-				if (!roomMem.visuals.basePlan) roomMem.visuals.basePlan = {};
-				roomMem.visuals.basePlan.visDistTrans ??= true;
-				roomMem.visuals.basePlan.visFloodFill ??= true;
-				roomMem.visuals.basePlan.visBasePlan ??= true;
-				rmData.flags.basePlanGenerated = true;
-			}
-
-			// Generate and cache base plan data
-			let regenerate = false;
-
-			// Determine whether to regenerate plan
-			if (!roomMem.basePlan) regenerate = true;
-			else if (roomMem.basePlan.rclAtGeneration !== rcl) regenerate = true;
-
-			// If regeneration is required
-			if (regenerate) {
-				this.BasePlanner = new BasePlanner(this.room);
-				this.basePlan = this.BasePlanner.createPlan();
-
-				if (this.basePlan) {
-					roomMem.basePlan = {
-						lastGenerated: Game.time,
-						rclAtGeneration: rcl,
-						checksum: computePlanChecksum(this.basePlan),
-						data: this.basePlan
-					};
-					room.log(`Base plan regenerated for RCL${rcl}`);
-					// Otherwise, load cached plan (only assign from memory if not already loaded)
-				}
-			} else if (!this.basePlan && roomMem.basePlan) this.basePlan = roomMem.basePlan.data;
-
-			// Process the plan if available
-			if (this.basePlan) this.handleBasePlan(this.basePlan);
+			this.updateConstructionSites();
+			this.manageBuilderQuota();
 
 			// Run task management for workers
 			//this.TaskManager.run();
@@ -263,8 +202,11 @@ export default class RoomManager {
 			const energyVisual = new RoomVisual(this.room.name);
 			this.energyManager.visualizeEnergyStats(energyVisual);
 
+			// Handle RCL upgrades - detect level changes and place construction sites for new RCL
+			this.handleRCLUpgrade();
+
 			if (roomMem.visuals.enableVisuals)
-				this.PlanVisualizer?.visualize(this.basePlan?.dtGrid, this.basePlan?.floodFill, this.basePlan?.placements);
+				this.PlanVisualizer?.visualize(this.basePlan?.dtGrid, this.basePlan?.floodFill, this.basePlan);
 		} catch (e) {
 			console.log(`Execution Error In Function: RoomManager.run(${this.room.name}) on Tick ${Game.time}. Error: ${e}`);
 		}
@@ -284,27 +226,31 @@ export default class RoomManager {
 		}
 	}
 
+	refresh(): void {
+		this.room = Game.rooms[this.room.name];
+		//this.remotes = _.compact(_.map(this.remotes, remote => Game.rooms[remote.name]))
+	}
+
 	/** Scans the room for all relevant structures and resources */
 	private scanResources(): RoomResources {
 		try {
+			this.room.cacheObjects();
+			const objIDs = this.room.memory.objects;
 			return {
-				sources: this.room.find(FIND_SOURCES),
+				sources: (objIDs.sources) ? objIDs.sources!.map(id => Game.getObjectById(id)!) : [],
 				minerals: this.room.find(FIND_MINERALS),
 				controller: this.room.controller,
-				containers: this.room.find(FIND_STRUCTURES, {
-					filter: (s) => s.structureType === STRUCTURE_CONTAINER
-				}) as StructureContainer[],
-				towers: this.room.find(FIND_MY_STRUCTURES, {
-					filter: (s) => s.structureType === STRUCTURE_TOWER
-				}) as StructureTower[],
-				spawns: this.room.find(FIND_MY_STRUCTURES, {
-					filter: (s) => s.structureType === STRUCTURE_SPAWN
-				}) as StructureSpawn[],
-				links: this.room.find(FIND_MY_STRUCTURES, {
-					filter: (s) => s.structureType === STRUCTURE_LINK
-				}) as StructureLink[],
+				containers: (objIDs.containers) ? objIDs.containers!.map(id => Game.getObjectById(id)!) : [],
+				towers: (objIDs.towers) ? objIDs.towers!.map(id => Game.getObjectById(id)!) : [],
+				spawns: (objIDs.spawns) ? objIDs.spawns!.map(id => Game.getObjectById(id)!) : [],
+				links: (objIDs.links) ? objIDs.links!.map(id => Game.getObjectById(id)!) : [],
 				storage: this.room.storage,
-				terminal: this.room.terminal
+				terminal: this.room.terminal,
+				labs: (objIDs.labs) ? objIDs.labs!.map(id => Game.getObjectById(id)!) : [],
+				powerSpawn: (objIDs.powerSpawn) ? Game.getObjectById(objIDs.powerSpawn)! : undefined,
+				nuker: (objIDs.nuker) ? Game.getObjectById(objIDs.nuker)! : undefined,
+				observer: (objIDs.observer) ? Game.getObjectById(objIDs.observer)! : undefined,
+				extractor: (objIDs.extractor) ? Game.getObjectById(objIDs.extractor)! : undefined,
 			};
 		} catch (e) {
 			console.log(`Execution Error In Function: RoomManager.scanResources(${this.room.name}) on Tick ${Game.time}. Error: ${e}`);
@@ -317,7 +263,12 @@ export default class RoomManager {
 				spawns: [],
 				links: [],
 				storage: undefined,
-				terminal: undefined
+				terminal: undefined,
+				labs: [],
+				powerSpawn: undefined,
+				nuker: undefined,
+				observer: undefined,
+				extractor: undefined
 			};
 		}
 	}
@@ -330,9 +281,27 @@ export default class RoomManager {
 			this.room.memory.visuals.basePlan.visBasePlan = !current;
 			this.room.memory.visuals.basePlan.visDistTrans = !current;
 			this.room.memory.visuals.basePlan.visFloodFill = !current;
-			console.log(`${this.room.link()} Base planner visuals ${!current ? 'enabled' : 'disabled'}`);
+			this.room.log(`Base planner visuals ${!current ? 'enabled' : 'disabled'}`);
 		} catch (e) {
-			console.log(`Execution Error In Function: RoomManager.togglePlanVisuals(${this.room.name}) on Tick ${Game.time}. Error: ${e}`);
+			this.room.log(`Execution Error In Function: RoomManager.togglePlanVisuals(${this.room.name}) on Tick ${Game.time}. Error: ${e}`);
+		}
+	}
+
+	/** Set individual base plan visualization layers */
+	public setPlanVisuals(opts: { enable?: boolean; dist?: boolean; flood?: boolean; base?: boolean; info?: boolean; build?: boolean }): void {
+		try {
+			const visuals = this.room.memory.visuals ??= { basePlan: {} as any, enableVisuals: false } as any;
+			visuals.basePlan ??= {} as any;
+			if (opts.enable !== undefined) visuals.enableVisuals = opts.enable;
+			if (opts.dist !== undefined) visuals.basePlan.visDistTrans = opts.dist;
+			if (opts.flood !== undefined) visuals.basePlan.visFloodFill = opts.flood;
+			if (opts.base !== undefined) visuals.basePlan.visBasePlan = opts.base;
+			if (opts.info !== undefined) visuals.basePlan.visPlanInfo = opts.info;
+			if (opts.build !== undefined) visuals.basePlan.buildProgress = opts.build;
+			const summary = `enable=${visuals.enableVisuals} dist=${!!visuals.basePlan.visDistTrans} flood=${!!visuals.basePlan.visFloodFill} base=${!!visuals.basePlan.visBasePlan} info=${!!visuals.basePlan.visPlanInfo} build=${!!visuals.basePlan.buildProgress}`;
+			console.log(`${this.room.link()} Updated plan visuals: ${summary}`);
+		} catch (e) {
+			console.log(`Execution Error In Function: RoomManager.setPlanVisuals(${this.room.name}) on Tick ${Game.time}. Error: ${e}`);
 		}
 	}
 
@@ -340,6 +309,7 @@ export default class RoomManager {
 	public regenerateBasePlan(): void {
 		try {
 			delete this.room.memory.basePlan;
+			this.basePlan = null;
 			this.room.log(`Base plan cleared - will regenerate next tick`);
 		} catch (e) {
 			console.log(`Execution Error In Function: RoomManager.regenerateBasePlan(${this.room.name}) on Tick ${Game.time}. Error: ${e}`);
@@ -351,6 +321,7 @@ export default class RoomManager {
 		try {
 			const room = this.room;
 			const rcl = room.controller?.level ?? 0;
+			room.log(`forceConstructionSitePlacement invoked for RCL${rcl}`);
 
 			if (!this.basePlan) {
 				room.log(`No base plan available - cannot force construction site placement`);
@@ -358,9 +329,10 @@ export default class RoomManager {
 			}
 
 			const plannedForRCL = this.basePlan.rclSchedule[rcl] || [];
+			room.log(`Planned entries for RCL${rcl}: ${plannedForRCL.length}`);
 
 			if (plannedForRCL.length === 0) {
-				console.log(`${this.room.link()} No structures scheduled for RCL${rcl}`);
+				room.log(`No structures scheduled for RCL${rcl}`);
 				return { placed: 0, failed: 0, errors: [`No structures scheduled for RCL${rcl}`] };
 			}
 
@@ -395,6 +367,7 @@ export default class RoomManager {
 
 				const pos = new RoomPosition(entry.pos.x, entry.pos.y, room.name);
 				const result = room.createConstructionSite(pos, entry.structure as BuildableStructureConstant);
+				console.log(`${room.link()} createConstructionSite(${entry.structure} @ ${entry.pos.x},${entry.pos.y}) -> ${result}`);
 
 				if (result === OK) {
 					placed++;
@@ -415,10 +388,10 @@ export default class RoomManager {
 			room.log(`Force placement complete: ${placed} placed, ${failed} failed`);
 			if (placed > 0) {
 				room.log(`Placed ${placed} construction sites for RCL${rcl}`);
+				if (room.memory.basePlan && room.memory.basePlan.scheduleSize)
+					room.memory.basePlan.scheduleSize[rcl] -= placed;
 			}
-			if (errors.length > 0) {
-				room.log(`Placement errors: ${errors.join(', ')}`);
-			}
+			if (errors.length > 0) room.log(`Placement errors: ${errors.join(', ')}`);
 
 			return { placed, failed, errors };
 		} catch (e) {
@@ -435,8 +408,7 @@ export default class RoomManager {
 			if (!controller) return;
 
 			const currentRCL = controller.level;
-			const previousRCL = room.memory.data?.controllerLevel ?? currentRCL;
-
+			const previousRCL = room.memory.data.controllerLevel ?? 0;
 			// No change detected
 			if (currentRCL === previousRCL) return;
 
@@ -446,7 +418,8 @@ export default class RoomManager {
 
 			// Log the upgrade
 			if (currentRCL > previousRCL) {
-				room.log(`Controller upgraded: RCL${previousRCL} → RCL${currentRCL}`);
+				room.log(`Controller upgraded: RCL${previousRCL} -> RCL${currentRCL}`);
+				room.log(`Base plan present: ${!!this.basePlan}. RCL schedule entries: ${this.basePlan?.rclSchedule?.[currentRCL]?.length ?? 0}`);
 				if (currentRCL > room.memory.stats.controllerLevelReached) {
 					room.memory.stats.controllerLevelReached = currentRCL;
 				}
@@ -460,27 +433,15 @@ export default class RoomManager {
 					failedPlacements: []
 				};
 
-				console.log(`${room.link()} RCL${currentRCL} build queue initialized. Ready to place construction sites.`);
+				room.log(`RCL${currentRCL} build queue initialized. Ready to place construction sites.`);
 
-				const placedStructs = room.memory.basePlan?.placedStructures;
-
-				if (placedStructs) {
-						for (const entry of placedStructs) {
-						const struct = entry.struct;
-						const x = entry.x;
-						const y = entry.y;
-
-						const result = room.createConstructionSite(x, y, struct);
-						switch (result) {
-							case OK:
-								const placed = placedStructs.shift();
-								room.log(`Placed ${struct} at position ${x},${y} successfully!`);
-						}
-					}
-				}
+				this.ensureBasePlanGenerated();
+				const placementResult = this.forceConstructionSitePlacement();
+				if (placementResult.placed > 0) room.log(`Placed ${placementResult.placed} planned sites for RCL${currentRCL}`);
+				if (placementResult.failed > 0) room.log(`Failed to place ${placementResult.failed} planned sites: ${placementResult.errors.join(', ')}`);
 			}
 		} catch (e) {
-			console.log(`Execution Error In Function: RoomManager.handleRCLUpgrade(${this.room.name}) on Tick ${Game.time}. Error: ${e}`);
+			this.room.log(`Execution Error In Function: RoomManager.handleRCLUpgrade(${this.room.name}) on Tick ${Game.time}. Error: ${e}`);
 		}
 	}
 
@@ -506,7 +467,7 @@ export default class RoomManager {
 				damagedStructures
 			};
 		} catch (e) {
-			console.log(`Execution Error In Function: RoomManager.gatherStats(${this.room.name}) on Tick ${Game.time}. Error: ${e}`);
+			this.room.log(`Execution Error In Function: RoomManager.gatherStats(${this.room.name}) on Tick ${Game.time}. Error: ${e}`);
 			return {
 				controllerLevel: 0,
 				energyAvailable: 0,
@@ -1328,427 +1289,144 @@ export default class RoomManager {
 		return inQueue || inScheduled;
 	}
 
-	/** Process construction tasks as created by BasePlanner */
-	private handleBasePlan(plan: PlanResult): void {
-		const mem = this.room.memory;
-		const rcl = mem.data.controllerLevel;
-		const now = Game.time;
-		const debugMode = this.room.memory.settings?.basePlanning?.debug || false;
+	public clearRCL(): boolean {
+		this.room.memory.data.controllerLevel = 0;
+		const isZero = this.room.memory.data.controllerLevel === 0;
+		this.room.log(`Cleared stored RCL in Room Data!`);
+		return isZero;
+	}
 
-		// Initialize or reset plan
-		if (!mem.buildQueue || mem.buildQueue.activeRCL !== rcl) {
-			const plannedForRCL = plan.rclSchedule[rcl] || [];
 
-			mem.buildQueue = {
-				plannedAt: now,
-				lastBuiltTick: 0,
-				index: 0,
-				activeRCL: rcl,
-				failedPlacements: []  // Track structures that failed to place
-			};
-
-			// Log RCL schedule contents for debugging
-			if (plannedForRCL.length > 0) {
-				const structureCounts: { [key: string]: number } = {};
-				for (const p of plannedForRCL) {
-					structureCounts[p.structure] = (structureCounts[p.structure] || 0) + 1;
-				}
-				const structureList = Object.entries(structureCounts)
-					.map(([type, count]) => `${count}x ${type}`)
-					.join(', ');
-				console.log(`${this.room.link()} RCL${rcl} build schedule: ${structureList} (${plannedForRCL.length} total structures)`);
-			} else {
-				console.log(`${this.room.link()} WARNING: RCL${rcl} build schedule is empty!`);
-			}
-		}
-
-		// Ensure buildQueue is defined before continuing
-		if (!mem.buildQueue) return;
-
-		// Early return: Skip expensive room.find() calls if we've completed all structures for current RCL
-		const plannedForCurrentRCL = plan.rclSchedule[rcl] || [];
-		if (mem.buildQueue.index >= plannedForCurrentRCL.length && (!mem.buildQueue.failedPlacements || mem.buildQueue.failedPlacements.length === 0)) {
-			// All structures for this RCL are complete - no need to process build queue
-			// RCL upgrades will reset the build queue when RCL changes
-			return;
-		}
-
-		// Safety limit: 5 new sites per tick unless CPU is constrained
-		const MAX_PER_TICK = (Game.cpu.bucket > 8000) ? 5 : 1;
-		let created = 0;
-
-		const existingSites = this.room.find(FIND_CONSTRUCTION_SITES);
-		const existingStructs = this.room.find(FIND_STRUCTURES);
-		const existingPositions = new Set(
-			[
-				...existingStructs.map(s => `${s.pos.x},${s.pos.y},${s.structureType}`),
-				...existingSites.map(s => `${s.pos.x},${s.pos.y},${s.structureType}`)
-			]
-		);
-
-		const plannedForRCL = plan.rclSchedule[rcl] || [];
-		const queueStart = mem.buildQueue.index;
-		const remaining = plannedForRCL
-			.slice(queueStart)
-			.sort((a, b) => {
-				const pa = STRUCTURE_PRIORITY[a.structure as BuildableStructureConstant] ?? 99;
-				const pb = STRUCTURE_PRIORITY[b.structure as BuildableStructureConstant] ?? 99;
-				return pa - pb;
-			});
-
-		// Track placements and errors for batch logging
-		const placedStructures: string[] = [];
-		const placementErrors: Array<{structure: string, pos: {x: number, y: number}, error: string}> = [];
-
-		for (const entry of remaining) {
-			const key = `${entry.pos.x},${entry.pos.y},${entry.structure}`;
-			if (existingPositions.has(key)) {
-				mem.buildQueue.index++;
-				continue;
-			}
-
-			const pos = new RoomPosition(entry.pos.x, entry.pos.y, this.room.name);
-			const result = this.room.createConstructionSite(pos, entry.structure as BuildableStructureConstant);
-
-			if (result === OK) {
-				created++;
-				mem.buildQueue.index++;
-				mem.buildQueue.lastBuiltTick = now;
-				placedStructures.push(`${entry.structure}@${entry.pos.x},${entry.pos.y}`);
-				if (created >= MAX_PER_TICK) break;
-			} else {
-				// Handle errors from createConstructionSite
-				const errorMessages: Record<number, string> = {
-					[ERR_INVALID_TARGET]: 'Invalid target location',
-					[ERR_FULL]: 'Too many construction sites (max 100)',
-					[ERR_INVALID_ARGS]: 'Invalid structure type or position',
-					[ERR_RCL_NOT_ENOUGH]: 'Room Controller Level too low',
-					[ERR_NOT_OWNER]: 'Not the owner of this room'
+	private initializeMemory() {
+		try {
+			if (!this.room.memory.data)
+				this.room.memory.data = {
+					flags: {
+						dropHarvestingEnabled: false,
+						basePlanGeneratde: false,
+						bootstrappingMode: false,
+						initialized: false,
+						advSpawnSystem: false
+					},
+					indices: {
+						nextHarvesterAssigned: 0,
+						haulerIndex: 0,
+						lastBootstrapRoleIndex: 0,
+						lastNormalRoleIndex: 0
+					},
+					controllerLevel: 0,
 				};
-
-				const errorMsg = errorMessages[result] || `Unknown error (${result})`;
-
-				// Track error for batch logging and potential retry
-				placementErrors.push({
-					structure: entry.structure,
-					pos: { x: entry.pos.x, y: entry.pos.y },
-					error: errorMsg
-				});
-
-				// Only skip this item if it's not a temporary error (like ERR_FULL or ERR_RCL_NOT_ENOUGH)
-				// These errors may resolve themselves and should be retried
-				if (result === ERR_FULL) {
-					// Too many construction sites - stop processing and retry next tick
-					break;
-				} else if (result === ERR_RCL_NOT_ENOUGH) {
-					// RCL not high enough yet - this shouldn't happen if BasePlanner is working correctly
-					// Skip this structure and move to next
-					mem.buildQueue.index++;
-					console.log(`${this.room.link()} WARNING: Tried to place ${entry.structure} at RCL${rcl} but it requires higher RCL!`);
-				} else {
-					// Permanent error (invalid position, etc.) - skip and move on
-					mem.buildQueue.index++;
-				}
+			if (!this.room.memory.visuals)
+				this.room.memory.visuals = {
+					settings: {},
+					basePlan: {
+						visDistTrans: false,
+						visBasePlan: false,
+						visFloodFill: false,
+						visPlanInfo: false,
+						buildProgress: false
+					},
+					enableVisuals: false,
+					redAlertOverlay: true,
+					showPlanning: false
+				};
+			if (!this.room.memory.quotas) this.room.memory.quotas = {};
+			if (!this.room.memory.objects) this.room.memory.objects = {};
+			if (!this.room.memory.containers) this.room.memory.containers = {} as any;
+			if (!this.room.memory.remoteRooms) this.room.memory.remoteRooms = {};
+			if (!this.room.memory.settings)
+				this.room.memory.settings = {
+					basePlanning: { debug: false }
+				} as any;
+			if (!this.room.memory.stats) {
+				this.room.memory.stats = {
+					energyHarvested: 0,
+					energyDeposited: 0,
+					controlPoints: 0,
+					constructionPoints: 0,
+					creepsSpawned: 0,
+					creepPartsSpawned: 0,
+					controllerLevelReached: 0,
+					npcInvadersKilled: 0,
+					hostilePlayerCreepsKilled: 0,
+					mineralsHarvested: {},
+					labStats: { compoundsMade: {}, creepsBoosted: 0, boostsUsed: {}, energySpentBoosting: 0 }
+				} as any;
 			}
-		}
-
-		// Batch log placements and errors
-		if (placedStructures.length > 0) {
-			if (debugMode) {
-				console.log(`${this.room.link()} Placed ${placedStructures.length} construction sites for RCL${rcl}: ${placedStructures.join(', ')}`);
-			}
-			const parseEntry = (entry) => {
-				const [struct, coords] = entry.split('@');
-				const [x, y] = coords.split(',').map(Number);
-
-				return { struct, x, y };
-			}
-
-			this.room.memory.basePlan!.placedStructures ??= [];
-
-			for (const entry of placedStructures) {
-				const parsedEntry = parseEntry(entry);
-				if (!this.room.memory.basePlan!.placedStructures.includes(parsedEntry))
-					this.room.memory.basePlan!.placedStructures.push(parsedEntry);
-			}
-		}
-		if (placementErrors.length > 0 && debugMode) {
-			console.log(`${this.room.link()} Failed to place ${placementErrors.length} structures:`);
-			for (const err of placementErrors) {
-				console.log(`  - ${err.structure}@${err.pos.x},${err.pos.y}: ${err.error}`);
-			}
-		}
-
-		// If we've finished the current RCL batch, log completion
-		// Don't reset index - leave it at length to prevent repeated expensive room.find() calls
-		if (mem.buildQueue.index >= plannedForRCL.length) {
-			// Log only once when first completing the RCL, not every tick
-			if (mem.buildQueue.index === plannedForRCL.length) {
-				console.log(`${this.room.link()} Finished placing all RCL${rcl} construction sites from base plan.`);
-				mem.buildQueue.index++; // Increment past length to prevent this log from repeating
-			}
-		}
-
-		const visual = new RoomVisual(this.room.name);
-		visual.text(
-			`Building ${mem.buildQueue?.index ?? 0}/${plan.rclSchedule[mem.buildQueue?.activeRCL || 1]?.length || 0}`,
-			3, 48,
-			{ align: 'left', color: '#88f', font: 0.8 }
-		);
-	}
-
-	/** Draws planned structures (like extensions) on the room using RoomVisuals. */
-	private drawPlanningVisuals(): void {
-		const visual = new RoomVisual(this.room.name);
-
-		// Extensions (planned)
-		const extensionSites = this.room.find(FIND_CONSTRUCTION_SITES, {
-			filter: s => s.structureType === STRUCTURE_EXTENSION
-		});
-
-		for (const site of extensionSites) {
-			visual.circle(site.pos, {
-				radius: 0.4,
-				fill: 'yellow',
-				opacity: 0.3,
-				stroke: 'orange'
-			});
-		}
-
-		// Existing extensions
-		const extensions = this.room.find(FIND_STRUCTURES, {
-			filter: s => s.structureType === STRUCTURE_EXTENSION
-		});
-		for (const ext of extensions) {
-			visual.circle(ext.pos, {
-				radius: 0.4,
-				fill: '#00ff00',
-				opacity: 0.2
-			});
-		}
-
-		// Planned controller or source containers (from memory)
-		const data = this.room.memory.data as RoomData | undefined;
-		if (data) {
-			if (data.controllerContainer) {
-				const obj = Game.getObjectById(data.controllerContainer);
-				if (obj) visual.circle(obj.pos, { radius: 0.45, fill: 'cyan', opacity: 0.3 });
-			}
-			if (data.sourceOne?.container) {
-				const obj = Game.getObjectById(data.sourceOne.container);
-				if (obj) visual.circle(obj.pos, { radius: 0.45, fill: 'purple', opacity: 0.3 });
-			}
-			if (data.sourceTwo?.container) {
-				const obj = Game.getObjectById(data.sourceTwo.container);
-				if (obj) visual.circle(obj.pos, { radius: 0.45, fill: 'purple', opacity: 0.3 });
-			}
-		}
-
-		// Draw spawn marker (center of planning)
-		const spawn = this.resources.spawns[0];
-		if (spawn) {
-			visual.circle(spawn.pos, { radius: 0.6, fill: '#00f', opacity: 0.2 });
-			visual.text('Spawn Center', spawn.pos.x, spawn.pos.y - 0.8, {
-				align: 'center',
-				color: '#66f',
-				font: 0.6
-			});
+		} catch (e) {
+			console.log(`Execution Error In Function: RoomManager.initializeMemory(${this.room.name}) on Tick ${Game.time}. Error: ${e}`);
 		}
 	}
 
-	/** Draws Base Plan construction progress widget for visualization. */
-	private visualizeBuildQueue(): void {
-		const visual = new RoomVisual(this.room.name);
-		const mem = this.room.memory.buildQueue;
-		if (!mem) return;
-
-		visual.text(
-			`RCL${mem.activeRCL} build ${mem.index}`,
-			3, 47,
-			{ align: 'left', color: '#ccc', font: 0.8 }
-		);
-	}
-
-	private drawPlannerVisuals(): void {
-		const vis = new RoomVisual(this.room.name);
-
-		if (this.room.memory.visuals.basePlan.visDistTrans && this.BasePlanner?.dtGrid) {
-			this.drawDistanceTransform(vis, this.BasePlanner.dtGrid);
-		}
-
-		if (this.room.memory.visuals.basePlan.visFloodFill && this.BasePlanner?.floodGrid) {
-			this.drawFloodFill(vis, this.BasePlanner.floodGrid);
-		}
-
-		if (this.room.memory.visuals.basePlan.visBasePlan && this.basePlan) {
-			this.drawBaseLayout(vis, this.basePlan);
+	/** Load a stored base plan and rehydrate RoomPositions */
+	private loadBasePlanFromMemory(): void {
+		try {
+			const memPlan = this.room.memory.basePlan?.data as PlanResult | undefined;
+			if (!memPlan) return;
+			this.basePlan = this.hydratePlan(memPlan);
+			this.room.memory.data.centerPoint = { x: this.basePlan.startPos.x, y: this.basePlan.startPos.y } as any;
+		} catch (e) {
+			console.log(`Execution Error In Function: RoomManager.loadBasePlanFromMemory(${this.room.name}) on Tick ${Game.time}. Error: ${e}`);
 		}
 	}
 
-	private drawDistanceTransform(vis: RoomVisual, dist: number[][]): void {
-		const flatDist: number[] = [];
-
-		for (let i = 0; i < dist.length; i++) flatDist.push(...dist[i]);
-		const max = Math.max(...flatDist);
-
-		for (let x = 0; x < 50; x++) {
-			for (let y = 0; y < 50; y++) {
-				const val = dist[x][y];
-				if (val <= 0) continue;
-
-				const hue = Math.floor((val / max) * 240); // blue → green gradient
-				vis.rect(x - 0.5, y - 0.5, 1, 1, {
-					fill: `hsl(${hue}, 80%, 40%)`,
-					opacity: 0.4,
-					stroke: 'none'
-				});
+	/** Ensure a base plan exists in memory and on this instance */
+	private ensureBasePlanGenerated(): void {
+		try {
+			if (this.basePlan) return;
+			if (this.room.memory.basePlan?.data) {
+				this.basePlan = this.hydratePlan(this.room.memory.basePlan.data as PlanResult);
+				return;
 			}
-		}
-
-		vis.text('Distance Transform', 25, 1, { align: 'center', color: '#00f', font: 0.8 });
-	}
-
-	private drawFloodFill(vis: RoomVisual, flood: number[][]): void {
-		const flatFlood: number[] = [];
-		for (let i = 0; i < flood.length; i++) flatFlood.push(...flood[i]);
-		const max = Math.max(...flatFlood);
-		for (let x = 0; x < 50; x++) {
-			for (let y = 0; y < 50; y++) {
-				const val = flood[x][y];
-				if (val <= 0) continue;
-
-				const hue = Math.floor((1 - val / max) * 240); // red→green gradient
-				vis.rect(x - 0.5, y - 0.5, 1, 1, {
-					fill: `hsl(${hue}, 80%, 40%)`,
-					opacity: 0.35,
-					stroke: 'none'
-				});
+			if (!this.basePlanner) this.basePlanner = new BasePlanner(this.room);
+			const plan = this.basePlanner.createPlan();
+			if (plan) {
+				this.basePlan = plan;
+				this.room.memory.data.centerPoint = { x: plan.startPos.x, y: plan.startPos.y } as any;
+				this.savePlanToMemory(plan);
+				this.room.log(`Generated base plan at (${plan.startPos.x},${plan.startPos.y})`);
 			}
+		} catch (e) {
+			console.log(`Execution Error In Function: RoomManager.ensureBasePlanGenerated(${this.room.name}) on Tick ${Game.time}. Error: ${e}`);
 		}
-
-		vis.text('Flood Fill Map', 25, 2, { align: 'center', color: '#0f0', font: 0.8 });
 	}
 
-	private drawBaseLayout(vis: RoomVisual, plan: PlanResult): void {
-		const rcl = this.room.controller?.level ?? 8;
-		const placements = Object.values(plan.rclSchedule).reduce((acc, arr) => acc.concat(arr), [] as any[]);
-
-		for (const entry of placements) {
-			const { x, y } = entry.pos;
-			const sType = entry.structure as BuildableStructureConstant;
-
-			switch (sType) {
-				case STRUCTURE_ROAD:
-					vis.line(x, y, x + 0.001, y + 0.001, { color: '#aaa', width: 0.1 });
-					break;
-
-				case STRUCTURE_SPAWN:
-					this.drawShape(vis, x, y, 'circle', '#a0f', 'S');
-					break;
-
-				case STRUCTURE_EXTENSION:
-					this.drawShape(vis, x, y, 'circle', '#ff0', 'E', 0.35);
-					break;
-
-				case STRUCTURE_TOWER:
-					this.drawShape(vis, x, y, 'circle', '#f00', 'T');
-					break;
-
-				case STRUCTURE_LINK:
-					this.drawShape(vis, x, y, 'diamond', '#7f7', 'L');
-					break;
-
-				case STRUCTURE_STORAGE:
-					this.drawShape(vis, x, y, 'rect', '#f80', 'S', 0.55, 0.35);
-					break;
-
-				case STRUCTURE_TERMINAL:
-					this.drawShape(vis, x, y, 'triangle', '#0ff', 'T', 0.6);
-					break;
-
-				case STRUCTURE_LAB:
-					this.drawShape(vis, x, y, 'circle', '#0f0', 'L');
-					break;
-
-				case STRUCTURE_FACTORY:
-					this.drawShape(vis, x, y, 'hex', '#fff', 'F', 0.5);
-					break;
-
-				case STRUCTURE_NUKER:
-					this.drawShape(vis, x, y, 'oct', '#f0f', 'N', 0.6);
-					break;
-
-				case STRUCTURE_OBSERVER:
-					this.drawShape(vis, x, y, 'triangle', '#88f', 'O', 0.4);
-					break;
-
-				case STRUCTURE_RAMPART:
-					vis.rect(x - 0.5, y - 0.5, 1, 1, {
-						fill: '#00ff0080',
-						stroke: '#0f0',
-						opacity: 0.3
-					});
-					break;
-
-				default:
-					vis.circle(x, y, { radius: 0.25, fill: '#999', stroke: '#555' });
-					break;
-			}
-		}
-
-		vis.text('Base Layout', 25, 3, { align: 'center', color: '#fff', font: 0.8 });
+	private hydratePlan(raw: PlanResult): PlanResult {
+		const startPos = new RoomPosition((raw.startPos as any).x, (raw.startPos as any).y, this.room.name);
+		const controllerArea = (raw.controllerArea || []).map((p: any) => new RoomPosition(p.x, p.y, this.room.name));
+		const ramparts = (raw.ramparts || []).map((p: any) => new RoomPosition(p.x, p.y, this.room.name));
+		return { ...raw, startPos, controllerArea, ramparts };
 	}
 
-	private drawShape(
-		vis: RoomVisual,
-		x: number,
-		y: number,
-		shape: 'circle' | 'rect' | 'triangle' | 'diamond' | 'hex' | 'oct',
-		color: string,
-		label: string,
-		size: number = 0.45,
-		height?: number
-	): void {
-		const opts = { stroke: color, fill: `${color}40`, opacity: 0.8 };
-		switch (shape) {
-			case 'circle':
-				vis.circle(x, y, { radius: size, ...opts });
-				break;
-			case 'rect':
-				vis.rect(x - size, y - (height ?? size), size * 2, (height ?? size) * 2, opts);
-				break;
-			case 'triangle':
-				vis.poly([[x, y - size], [x - size, y + size], [x + size, y + size]], opts);
-				break;
-			case 'diamond':
-				vis.poly([[x, y - size], [x - size, y], [x, y + size], [x + size, y]], opts);
-				break;
-			case 'hex':
-				vis.poly(this.makePolygon(x, y, 6, size), opts);
-				break;
-			case 'oct':
-				vis.poly(this.makePolygon(x, y, 8, size), opts);
-				break;
-		}
-		vis.text(label, x, y + 0.05, { color: '#000', align: 'center', font: 0.5 });
+	private savePlanToMemory(plan: PlanResult): void {
+		const serialized: PlanResult = {
+			...plan,
+			startPos: { x: plan.startPos.x, y: plan.startPos.y, roomName: this.room.name } as any,
+			controllerArea: plan.controllerArea.map(p => ({ x: p.x, y: p.y, roomName: p.roomName } as any)),
+			ramparts: plan.ramparts.map(p => ({ x: p.x, y: p.y, roomName: p.roomName } as any))
+		};
+
+		this.room.memory.basePlan = {
+			lastGenerated: Game.time,
+			rclAtGeneration: this.room.controller?.level ?? 0,
+			checksum: `${plan.startPos.x},${plan.startPos.y}-${Game.time}`,
+			data: serialized
+		};
 	}
 
-	private makePolygon(cx: number, cy: number, sides: number, radius: number): [number, number][] {
-		const pts: [number, number][] = [];
-		for (let i = 0; i < sides; i++) {
-			const a = (2 * Math.PI * i) / sides;
-			pts.push([cx + radius * Math.cos(a), cy + radius * Math.sin(a)]);
-		}
-		return pts;
+	private updateConstructionSites(): void {
+		this.previousCSites = this.constructionSites.length ?? 0;
+		this.constructionSites = this.room.find(FIND_MY_CONSTRUCTION_SITES);
+		this.currentCSites = this.constructionSites.length ?? 0;
 	}
 
-	private handleBasePlanV2 (plan: PlanResult): void {
-
-		const mem = this.room.memory.basePlan;
-		const rcl = this.room.controller?.level;
-		const schedule = plan.rclSchedule;
-
-
+	private manageBuilderQuota(): void {
+		if (this.currentCSites > 3 && this.room.memory.quotas.builder < 3)
+			this.room.setQuota('builder', 3);
+		else if (this.currentCSites > 5 && this.room.memory.quotas.builder < 5)
+			this.room.setQuota('builder', 5);
+		else if (this.room.memory.quotas.builder > 1)
+			this.room.setQuota('builder', 1);
 	}
 
 }

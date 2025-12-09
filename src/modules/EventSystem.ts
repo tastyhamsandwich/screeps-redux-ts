@@ -8,6 +8,7 @@ export interface EventMap {
 	controllerLevelUpgraded: { roomName: string; newLevel: number };
 	storageBuilt: { roomName: string, roomPos: RoomPosition };
 	remoteRoomCached: { roomName: string, hostRoom: string };
+	containerBuilt: { room: string, pos: RoomPosition };
 }
 
 export type Priority = "low" | "normal" | "high";

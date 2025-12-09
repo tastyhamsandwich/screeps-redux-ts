@@ -1,9 +1,9 @@
 
 interface RoomVisual {
-	structure(x, y, type, opts: { [key: string]: any; });
-	connectRoads(opts: { [key: string]: any });
-	speech(text, x, y, opts: { [key: string]: any; });
-	animatedPosition(x, y, opts: { [key: string]: any; });
+	structure(x, y, type, opts?: { [key: string]: any; });
+	connectRoads(opts?: { [key: string]: any });
+	speech(text, x, y, opts?: { [key: string]: any; });
+	animatedPosition(x, y, opts?: { [key: string]: any; });
 	test();
 	resource(type: any, x: number, y: number, size: number);
 	_compound(type: any, x: number, y: number, size: number);

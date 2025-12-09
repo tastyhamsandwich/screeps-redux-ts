@@ -1,4 +1,56 @@
 "use strict";
+
+export function DefenseMgr(tower: StructureTower) {
+	try {
+		if (!tower) return;
+
+		const room = tower.room;
+		const pos = tower.pos;
+
+		const topLeft = new RoomPosition(tower.pos.x - 5, tower.pos.y - 5, room.name); // RoomPos for visual overlay
+
+		const hostilesInRoom: Creep[] = room.find(FIND_HOSTILE_CREEPS, { filter: (i) => ((i.pos.x <= 46 && i.pos.x >= 3 && i.pos.y <= 46 && i.pos.y >= 3) && i.owner.username !== 'Invader')});
+
+		if (hostilesInRoom.length) {
+			room.log(`Owner Name: ${hostilesInRoom[0].owner.username} | ${hostilesInRoom}`);
+			Game.map.visual.rect(topLeft, 11, 11, { fill: 'transparent', stroke: '#ff0000'});
+
+			const attackHostiles = hostilesInRoom.filter((creep) => {
+				if (creep.getActiveBodyparts(ATTACK) > 0 || creep.getActiveBodyparts(RANGED_ATTACK) > 0 ||
+				creep.getActiveBodyparts(WORK) > 0 || creep.getActiveBodyparts(CARRY) > 0)
+				 return creep;
+				else return false;
+			});
+			const healHostiles = hostilesInRoom.filter(
+				(creep) => {
+					if (creep.getActiveBodyparts(HEAL) > 0) return creep;
+					else return false;
+				});
+
+			if (healHostiles.length) {
+				// If we detect healer hostiles, post advisory in console
+				room.log(`Healer Hostiles: ${healHostiles}`);
+				const closestHealer = tower.pos.findClosestByRange(healHostiles);
+
+				// Attack the nearest healer first
+				if (closestHealer) {
+					tower.attack(closestHealer);
+					return;
+				}
+			} else if (attackHostiles.length) {
+				room.log(`Attack Hostiles: ${attackHostiles}`);
+				const closestAttacker = tower.pos.findClosestByRange(attackHostiles);
+
+				if (closestAttacker) {
+					tower.attack(closestAttacker);
+					return;
+				}
+			}
+		}
+	} catch (e) {
+
+	}
+}
 export default function DefenseManager(tower: StructureTower) {
 	try {
 		const room = tower.room;

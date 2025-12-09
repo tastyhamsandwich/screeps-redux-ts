@@ -70,6 +70,10 @@ namespace NodeJS {
 			ramparts?: Id<StructureRampart>[];
 			terminal?: Id<StructureTerminal>;
 			extractor?: Id<StructureExtractor>;
+			powerSpawn?: Id<StructurePowerSpawn>;
+			factory?: Id<StructureFactory>;
+			observer?: Id<StructureObserver>;
+			nuker?: Id<StructureNuker>;
 			[key: string]: any;
 		 };
 		sources: { [key: string]: string[] };
@@ -118,6 +122,7 @@ namespace NodeJS {
 			rclAtGeneration: number;
 			checksum: string;
 			data: PlanResult;
+			scheduleSize?: { [key: number]: number };
 			placedStructures?: {
 				struct: BuildableStructureConstant;
 				x: number;
@@ -181,6 +186,11 @@ namespace NodeJS {
 		linkController: StructureLink;
 		linkStorage: StructureLink;
 		spawns: StructureSpawn[];
+	}
+
+	interface StructureController {
+		reservedByMe;
+		needsReserving(reserveBuffer: number);
 	}
 
 	interface Creep {
@@ -472,8 +482,7 @@ namespace NodeJS {
 
 	//# OTHER/GENERAL TYPEDEFS
 	type alignment = 'left' | 'right' | 'center';
-	type CreepRole = "harvester" | "upgrader" | "builder" | "repairer" | "defender" | "filler" | "hauler" | "remoteharvester" | "reserver" | "scout" | "conveyor" | "worker" | "infantry"
-	type RoomName = `${'W' | 'E'}${number}${'N' | 'S'}${number}`;
+	type CreepRole = "harvester" | "upgrader" | "builder" | "repairer" | "defender" | "filler" | "hauler" | "remoteharvester" | "reserver" | "scout" | "conveyor" | "worker" | "infantry";
 
 	//# ROOM MANAGER INTERFACES
 	interface RoomData {
@@ -512,6 +521,11 @@ namespace NodeJS {
 		links: StructureLink[];
 		storage: StructureStorage | undefined;
 		terminal: StructureTerminal | undefined;
+		labs: StructureLab[];
+		powerSpawn: StructurePowerSpawn | undefined;
+		nuker: StructureNuker | undefined;
+		observer: StructureObserver | undefined;
+		extractor: StructureExtractor | undefined;
 	}
 
 	interface RoomStats {
@@ -523,7 +537,6 @@ namespace NodeJS {
 	}
 
 	//# BASE PLANNER INTERFACES
-	type Pos = { x: number; y: number };
 	type TileUsage =
 		| 'spawn'
 		| 'storage'
@@ -587,8 +600,9 @@ namespace NodeJS {
 		[rcl: number]: StructurePlacement[];
 	}
 
+	type RoomName = `${'W' | 'E'}${number}${'N' | 'S'}${number}`
 	type RCLLevel = 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8;
-
+	type PackedPos = `${string & { __brand: `\\d,\\d,${RoomName}` }}`;
 	type InnerPositions = Array<RoomPosition | { x: number; y: number }>;
 
 	interface DistTransOptions {
@@ -601,6 +615,101 @@ namespace NodeJS {
 		costThreshold?: number;
 		visual?: boolean;
 	}
+
+	type Pos = { x: number; y: number };
+
+	type RawOffset = { x?: number; y?: number; dx?: number; dy?: number; X?: number; Y?: number };
+
+	type RawSubStamp = {
+		stamp: string;
+		placedAt?: RawOffset;
+		mirrorVert?: boolean;
+		mirrorHoriz?: boolean;
+		rotate90?: number;
+		buildRoads?: boolean;
+	};
+
+	type RawStampBody = {
+		anchorPoint?: Pos;
+		centerPoint?: Pos;
+		centerSquare?: Pos[];
+		stampDims?: { width?: number; height?: number };
+		structures?: Record<string, RawOffset[]>;
+		subStampsUsed?: RawSubStamp[];
+	};
+
+	interface ParsedStructurePlacement {
+		structure: BuildableStructureConstant;
+		pos: Pos;
+		offset: { dx: number; dy: number };
+	}
+
+	interface ParsedSubStamp {
+		stamp: string;
+		placedAt: Pos;
+		mirrorVert: boolean;
+		mirrorHoriz: boolean;
+		rotate90: number;
+		buildRoads: boolean;
+	}
+
+	interface ParsedStamp {
+		name: string;
+		anchorPoint: Pos;
+		stampWidth: number;
+		stampHeight: number;
+		centerPoint?: Pos;
+		centerSquare?: Pos[];
+		rotationOrigin: Pos;
+		placements: ParsedStructurePlacement[];
+		subStampsUsed?: ParsedSubStamp[];
+	}
+
+	interface ParsedStructurePlacement {
+		structure: BuildableStructureConstant;
+		pos: Pos;
+		offset: { dx: number; dy: number };
+	}
+
+	interface ParsedSubStamp {
+		stamp: string;
+		placedAt: Pos;
+		mirrorVert: boolean;
+		mirrorHoriz: boolean;
+		rotate90: number;
+		buildRoads: boolean;
+	}
+
+	interface ParsedStamp {
+		name: string;
+		anchorPoint: Pos;
+		stampWidth: number;
+		stampHeight: number;
+		centerPoint?: Pos;
+		centerSquare?: Pos[];
+		rotationOrigin: Pos;
+		placements: ParsedStructurePlacement[];
+		subStampsUsed?: ParsedSubStamp[];
+	}
+
+	type StampTransformOptions = {
+		rotate90?: 0 | 1 | 2 | 3;
+		mirrorHoriz?: boolean;
+		mirrorVert?: boolean;
+		buildRoads?: boolean;
+		anchor?: Pos;
+	};
+
+	type Raw = Record<string, RawStampBody>;
+
+	const ConglomerateExample: Raw;
+	const CrossFiveStamp: Raw;
+	const DiagFiveStamp: Raw;
+	const DiagTenStamp: Raw;
+	const DiagThreeStamp: Raw;
+	const SingleOneStamp: Raw;
+	const StickFiveStamp: Raw;
+	const WrapFiveStamp: Raw;
 
 	//# WORK ASSIGNMENT INTERFACES
 

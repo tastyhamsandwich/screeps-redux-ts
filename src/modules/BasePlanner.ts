@@ -1,4 +1,6 @@
 import { getDistanceTransform, getPositionsByPathCost, getMinCut } from './PlanningFunctions';
+import { jsonToConstant } from '@modules/stamps/parseJSONStamp';
+import { extensionParsedStamps } from '@modules/stamps/ExtensionStamps';
 
 /**
  * Core 5x5 stamp template for base center
@@ -105,6 +107,8 @@ export default class BasePlanner {
 	private controllerUpgradeArea: RoomPosition[] = [];
 	private ramparts: RoomPosition[] = [];
 	private structurePlacements: Map<string, StructurePlacement> = new Map();
+	private extensionStampCatalog: ParsedStamp[] = extensionParsedStamps;
+	private placementLookup: Map<string, StructurePlacement[]> = new Map();
 
 	/**
 	 * Creates a new BasePlanner instance for the given room
@@ -367,6 +371,7 @@ export default class BasePlanner {
 		for (const placement of placements) {
 			const key = `${placement.pos.x},${placement.pos.y}`;
 			this.structurePlacements.set(key, placement);
+			this.registerPlacementInLookup(placement);
 		}
 
 		return true;
@@ -491,76 +496,303 @@ export default class BasePlanner {
 	}
 
 	/**
-	 * Allocate extensions grouped by RCL level
-	 * Places extensions in organized clusters that grow outward from the core
-	 * Each RCL level gets a cohesive group positioned together
+	 * Allocate extensions using stamp catalog (rotations/mirrors) and road alignment scoring.
+	 * Prefers larger stamps first, then best road overlap, while limiting cross-stamp adjacency.
+	 * Extensions cannot have more than 2 existing (previous-stamp) cardinally adjacent extensions.
+	 * Stamps are rotated/flipped to find fits before falling back to smaller stamps.
 	 * RCL 2: 5, RCL 3: 5, RCL 4: 10, RCL 5: 10, RCL 6: 10, RCL 7: 10, RCL 8: 10 (total 60)
-	 * @author randomencounter
 	 */
 	private allocateExtensionsByRCLGroup(): void {
 		if (!this.startPos) return;
 
 		const extensionsPerRCL: { [key: number]: number } = {
-			2: 5, 3: 5, 4: 10, 5: 10, 6: 10, 7: 10, 8: 10
+			2: 5,
+			3: 5,
+			4: 10,
+			5: 10,
+			6: 10,
+			7: 10,
+			8: 10
 		};
 
-		const startCorner = this.findExtensionStartCorner();
-		if (!startCorner) {
-			console.log(`${this.room.link()} Warning: Could not find suitable starting corner for extensions`);
-			return;
-		}
+		// Cache existing placements for scoring
+		const existingExtensions = this.collectPositionsByStructure(STRUCTURE_EXTENSION);
+		const existingRoads = this.collectPositionsByStructure(STRUCTURE_ROAD);
+		const placementLookup = this.buildPlacementLookup();
+		this.placementLookup = placementLookup;
 
-		const used = new Set<string>();
-		let placedTotal = 0;
+		const initialExtensions = existingExtensions.size;
+		let placedTotal = initialExtensions;
+		const catalog = this.extensionStampCatalog
+			.map(stamp => ({
+				stamp,
+				extCount: stamp.placements.filter(p => p.structure === STRUCTURE_EXTENSION).length
+			}))
+			.sort((a, b) => b.extCount - a.extCount);
 
-		// For each RCL, place the requested number of extensions using pattern packs.
 		for (const rcl of [2, 3, 4, 5, 6, 7, 8]) {
 			let remaining = extensionsPerRCL[rcl];
 			if (remaining <= 0) continue;
 
-			// Prefer larger patterns first to keep clusters compact
-			const sizeOrderedPatterns = this.extensionPatterns
-				.map(p => ({ p, size: p.coords.length }))
-				.sort((a, b) => b.size - a.size)
-				.map(x => x.p);
+			let safety = 0;
+			while (remaining > 0 && safety++ < 100) {
+				const candidate = this.findBestExtensionStampPlacement(
+					catalog,
+					remaining,
+					existingExtensions,
+					existingRoads,
+					placementLookup,
+					rcl
+				);
 
-			// Try to pack the 'remaining' number using pattern instances
-			// Strategy: greedy pick largest pattern that fits leftover count.
-			let failCount = 0;
-			while (remaining > 0 && failCount < 40) {
-				// pick pattern whose size <= remaining, prefer largest
-				let chosenPattern = sizeOrderedPatterns.find(p => p.coords.length <= remaining);
-				if (!chosenPattern) {
-					// fallback to single
-					chosenPattern = this.extensionPatterns.find(p => p.name === 'single')!;
+				if (!candidate) break;
+
+				// Commit extensions
+				for (const pos of candidate.extensions) {
+					const key = `${pos.x},${pos.y}`;
+					const placement: StructurePlacement = {
+						pos,
+						structure: STRUCTURE_EXTENSION,
+						priority: 3,
+						meta: { minRCL: rcl }
+					};
+					this.structurePlacements.set(key, placement);
+					this.registerPlacementInLookup(placement, placementLookup);
+					existingExtensions.add(key);
+					placedTotal++;
+					remaining--;
+					if (remaining <= 0) break;
 				}
 
-				// find an origin near the core corner
-				const origin = this.findClusterOrigin(startCorner, used);
-				if (!origin) {
-					// no origin found; expand fallback search by searching outward from startCorner manually
-					failCount++;
-					break;
-				}
-
-				// attempt to place pattern with rotation/mirror search
-				const placed = this.placeExtensionPattern(origin, chosenPattern, rcl, used);
-				if (placed > 0) {
-					remaining -= placed;
-					placedTotal += placed;
-					failCount = 0;
-				} else {
-					// couldn't place this pattern at this origin, mark this origin used for a while and try next
-					failCount++;
-					used.add(`${origin.x},${origin.y}`);
+				// Commit roads (only if not already blocked by other structures)
+				for (const pos of candidate.roads) {
+					const key = `${pos.x},${pos.y}`;
+					if (this.hasBlockingStructure(pos, placementLookup)) continue;
+					if (this.hasRoadAt(pos, existingRoads, placementLookup)) continue;
+					const roadPlacement: StructurePlacement = {
+						pos,
+						structure: STRUCTURE_ROAD,
+						priority: Math.max(9, 11 - rcl),
+						meta: { minRCL: rcl }
+					};
+					this.structurePlacements.set(key + '_road', roadPlacement);
+					this.registerPlacementInLookup(roadPlacement, placementLookup);
+					existingRoads.add(key);
 				}
 			}
+
 			if (remaining > 0) {
 				console.log(`${this.room.link()} Warning: could not place ${extensionsPerRCL[rcl] - remaining} / ${extensionsPerRCL[rcl]} extensions for RCL${rcl}`);
 			}
 		}
 
-		console.log(`${this.room.link()} Placed ${placedTotal} extensions in RCL-grouped clusters`);
+		console.log(`${this.room.link()} Placed ${placedTotal - initialExtensions} extensions in RCL-grouped clusters`);
+	}
+
+	private findBestExtensionStampPlacement(
+		catalog: { stamp: ParsedStamp; extCount: number }[],
+		remaining: number,
+		existingExtensions: Set<string>,
+		existingRoads: Set<string>,
+		lookup: Map<string, StructurePlacement[]>,
+		rcl: number
+	): { extensions: Pos[]; roads: Pos[] } | null {
+		if (!this.startPos) return null;
+
+		const searchRadius = 12;
+		const anchors: Pos[] = [];
+		for (let x = Math.max(1, this.startPos.x - searchRadius); x <= Math.min(48, this.startPos.x + searchRadius); x++) {
+			for (let y = Math.max(1, this.startPos.y - searchRadius); y <= Math.min(48, this.startPos.y + searchRadius); y++) {
+				const flood = this.floodGrid?.[x]?.[y];
+				if (flood === undefined || flood >= 255) continue;
+				if (this.terrain.get(x, y) === TERRAIN_MASK_WALL) continue;
+				anchors.push({ x, y });
+			}
+		}
+
+		// check closer anchors first
+		anchors.sort((a, b) => {
+			const da = Math.abs(a.x - this.startPos!.x) + Math.abs(a.y - this.startPos!.y);
+			const db = Math.abs(b.x - this.startPos!.x) + Math.abs(b.y - this.startPos!.y);
+			return da - db;
+		});
+
+		const transforms: StampTransformOptions[] = [];
+		for (let rot = 0; rot < 4; rot++) {
+			for (const mirrorHoriz of [false, true]) {
+				for (const mirrorVert of [false, true]) {
+					transforms.push({ rotate90: rot as 0 | 1 | 2 | 3, mirrorHoriz, mirrorVert });
+				}
+			}
+		}
+
+		for (const entry of catalog) {
+			if (entry.extCount <= 0 || entry.extCount > remaining) continue;
+
+			let best: {
+				extensions: Pos[];
+				roads: Pos[];
+				roadOverlap: number;
+				newRoads: number;
+			} | null = null;
+
+			for (const anchor of anchors) {
+				for (const transform of transforms) {
+					const evaluated = this.evaluateExtensionStampPlacement(
+						entry.stamp,
+						anchor,
+						transform,
+						existingExtensions,
+						existingRoads,
+						lookup
+					);
+					if (!evaluated) continue;
+
+					if (
+						!best ||
+						evaluated.roadOverlap > best.roadOverlap ||
+						(evaluated.roadOverlap === best.roadOverlap && evaluated.newRoads < best.newRoads)
+					) {
+						best = evaluated;
+					}
+				}
+			}
+
+			if (best) {
+				return { extensions: best.extensions, roads: best.roads };
+			}
+		}
+
+		return null;
+	}
+
+	private evaluateExtensionStampPlacement(
+		stamp: ParsedStamp,
+		anchor: Pos,
+		transform: StampTransformOptions,
+		existingExtensions: Set<string>,
+		existingRoads: Set<string>,
+		lookup: Map<string, StructurePlacement[]>
+	): { extensions: Pos[]; roads: Pos[]; roadOverlap: number; newRoads: number } | null {
+		const placements = jsonToConstant(stamp, { ...transform, anchor, buildRoads: true });
+		const extensions: Pos[] = [];
+		const roads: Pos[] = [];
+		let roadOverlap = 0;
+		let newRoads = 0;
+
+		for (const placement of placements) {
+			const { x, y } = placement.pos;
+
+			// Bounds and terrain
+			if (x < 1 || x > 48 || y < 1 || y > 48) return null;
+			if (this.terrain.get(x, y) === TERRAIN_MASK_WALL) return null;
+
+			const key = `${x},${y}`;
+			const planned = this.findPlannedStructureAt(placement.pos, lookup);
+
+			if (placement.structure === STRUCTURE_EXTENSION) {
+				// avoid conflicts
+				if (planned) return null;
+				if (existingRoads.has(key)) return null;
+
+				// adjacency to previous stamps: no more than 2 cardinal neighbors already placed
+				if (this.countAdjacentExtensions(placement.pos, existingExtensions) > 2) return null;
+
+				extensions.push({ x, y });
+			} else if (placement.structure === STRUCTURE_ROAD) {
+				if (planned && planned.structure !== STRUCTURE_ROAD) return null;
+				if (existingRoads.has(key)) {
+					roadOverlap++;
+				} else {
+					newRoads++;
+					roads.push({ x, y });
+				}
+			} else {
+				// Only extension/road stamps are allowed in this flow
+				if (planned) return null;
+			}
+		}
+
+		if (extensions.length === 0) return null;
+
+		return { extensions, roads, roadOverlap, newRoads };
+	}
+
+	private countAdjacentExtensions(pos: Pos, existingExtensions: Set<string>): number {
+		const adj = [
+			`${pos.x + 1},${pos.y}`,
+			`${pos.x - 1},${pos.y}`,
+			`${pos.x},${pos.y + 1}`,
+			`${pos.x},${pos.y - 1}`
+		];
+		let total = 0;
+		for (const k of adj) {
+			if (existingExtensions.has(k)) total++;
+		}
+		return total;
+	}
+
+	private buildPlacementLookup(): Map<string, StructurePlacement[]> {
+		const lookup = new Map<string, StructurePlacement[]>();
+		for (const placement of this.structurePlacements.values()) {
+			this.registerPlacementInLookup(placement, lookup);
+		}
+		return lookup;
+	}
+
+	private registerPlacementInLookup(placement: StructurePlacement, lookup: Map<string, StructurePlacement[]> = this.placementLookup): void {
+		const key = this.positionKey(placement.pos);
+		const list = lookup.get(key) ?? [];
+		list.push(placement);
+		lookup.set(key, list);
+	}
+
+	private positionKey(pos: Pos): string {
+		return `${pos.x},${pos.y}`;
+	}
+
+	private collectPositionsByStructure(structure: StructureConstant): Set<string> {
+		const set = new Set<string>();
+		for (const placement of this.structurePlacements.values()) {
+			if (placement.structure === structure) {
+				set.add(`${placement.pos.x},${placement.pos.y}`);
+			}
+		}
+		return set;
+	}
+
+	private hasBlockingStructure(pos: Pos, lookup?: Map<string, StructurePlacement[]>): boolean {
+		const blocking = this.findPlannedStructureAt(pos, lookup);
+		return Boolean(blocking && blocking.structure !== STRUCTURE_ROAD);
+	}
+
+	private hasRoadAt(pos: Pos, roadSet: Set<string>, lookup?: Map<string, StructurePlacement[]>): boolean {
+		const key = `${pos.x},${pos.y}`;
+		if (roadSet.has(key)) return true;
+		if (lookup) {
+			const arr = lookup.get(key);
+			if (arr && arr.some(p => p.structure === STRUCTURE_ROAD)) return true;
+		}
+		const planned = this.findPlannedStructureAt(pos, lookup);
+		return planned?.structure === STRUCTURE_ROAD;
+	}
+
+	private findPlannedStructureAt(pos: Pos, lookup?: Map<string, StructurePlacement[]>): StructurePlacement | null {
+		if (lookup) {
+			const key = this.positionKey(pos);
+			const existing = lookup.get(key);
+			if (existing && existing.length > 0) {
+				const nonRoad = existing.find(p => p.structure !== STRUCTURE_ROAD);
+				return nonRoad ?? existing[0];
+			}
+		} else {
+			for (const placement of this.structurePlacements.values()) {
+				if (placement.pos.x === pos.x && placement.pos.y === pos.y) {
+					return placement;
+				}
+			}
+		}
+		return null;
 	}
 	/* private allocateExtensionsByRCLGroup(): void {
 		if (!this.startPos) return;
@@ -1307,6 +1539,14 @@ export default class BasePlanner {
 		// Special handling for containers that upgrade to links/storage
 		this.handleContainerUpgrades(schedule);
 
+		if (this.room.memory.basePlan) {
+			this.room.memory.basePlan.scheduleSize = { 1: 0, 2: 0, 3: 0, 4: 0, 5: 0, 6: 0, 7: 0, 8: 0 };
+
+			for (let i = 1; i <= 8; i++) {
+				const rclGroup = Object.values(schedule);
+				this.room.memory.basePlan.scheduleSize[i] = rclGroup.length;
+			}
+		}
 		return schedule;
 	}
 
