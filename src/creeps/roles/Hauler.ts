@@ -25,6 +25,10 @@ const Hauler = {
 				else if (pos.y == 0 ) creep.move(BOTTOM);
 
 				if (creep.ticksToLive! <= 2) creep.say('☠️');
+				if (cMem.RFQ === 'hauler_dying' && cMem.announcedDeath !== true ) {
+					creep.log(`Not enough TTL to complete rest of journey, peacefully awaiting the end...`);
+					cMem.announcedDeath = true;
+				}
 
 				if (!cMem.pickup && !cMem.dropoff) {
 					if (rMem.data.logisticalPairs)
@@ -77,6 +81,10 @@ const Hauler = {
 					}
 				} else {
 					// DROPOFF PHASE
+					if (creep.ticksToLive && creep.ticksToLive < creep.memory.pathLength) {
+						cMem.RFQ = 'hauler_dying';
+						return;
+					}
 					const inDropoffRoom = creep.room.name === dropoffRoom;
 					if (!inDropoffRoom) {
 						// Navigate to dropoff room (even without visibility)

@@ -1,5 +1,5 @@
 //const profiler = require('screeps-profiler');
-
+import Events from '@modules/EventSystem';
 import { aiAlert, navRallyPoint } from '../common';
 import { pathing } from '@constants';
 
@@ -251,11 +251,9 @@ const Harvester = {
 									const roomPos = new RoomPosition(25,25,cMem.targetRoom);
 									creep.advMoveTo(roomPos, pathing.harvesterPathing, true);
 								}
-							} else if (!pos.isNearTo(source)) {
+							} else if (!pos.isNearTo(source))
 								creep.advMoveTo(source, pathing.harvesterPathing, true);
-							} else {
-								creep.harvestEnergy();
-							}
+							else creep.harvestEnergy();
 						}
 					}
 				} else navRallyPoint(creep);
@@ -309,7 +307,9 @@ function buildContainer(creep: Creep): void {
 			if (creep.build(site) === ERR_NOT_IN_RANGE) {
 				creep.advMoveTo(site, pathing.harvesterPathing);
 			} else if (site.progress >= site.progressTotal) {
-				// Container is complete, clear the flag
+				//Events.emit("containerComplete", { room: room.name, pos: creep.pos })
+				creep.room.cacheObjects();
+				Game.rooms[cMem.home].manager?.manageContainers();
 				cMem.buildingContainer = false;
 			}
 		}
