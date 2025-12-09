@@ -14,11 +14,16 @@ import BasePlanner from '../modules/BasePlanner';
 /** Manages all logic and operations for a single room. */
 export default class RoomManager {
 	private room: Room;
+	public rooms: Room[];
 	private resources: RoomResources;
 	private stats: RoomStats;
 	private spawnManager: SpawnManager;
 	private energyManager: EnergyManager;
 	//private TaskManager: TaskManager;
+	private level: number;
+	private constructionSites: ConstructionSite[];
+	private previousCSites: number;
+	private currentCSites: number;
 	private LegacySpawnManager;
 	private basePlan: PlanResult | null = null;
 	private basePlanner: BasePlanner | null = null;
@@ -49,6 +54,11 @@ export default class RoomManager {
 		this._creeps = Game.creeps;
 		this._towers = this.room.memory.objects.towers;
 		this.loadBasePlanFromMemory();
+		this.rooms = [this.room];
+		this.level = this.room.controller!.level;
+		this.constructionSites = [];
+		this.previousCSites = 0;
+		this.currentCSites = 0;
 
 		Memory.globalData.numColonies++;
 		this.room.memory.data.flags.initialized = true;
@@ -103,111 +113,11 @@ export default class RoomManager {
 		}
 	}
 
-	private initializeMemory() {
-		try {
-			if (!this.room.memory.data)
-				this.room.memory.data = {
-					flags: {
-						dropHarvestingEnabled: false,
-						basePlanGeneratde: false,
-						bootstrappingMode: false,
-						initialized: false,
-						advSpawnSystem: false
-					},
-					indices: {
-						nextHarvesterAssigned: 0,
-						haulerIndex: 0,
-						lastBootstrapRoleIndex: 0,
-						lastNormalRoleIndex: 0
-					},
-					controllerLevel: 0,
-				};
-			if (!this.room.memory.visuals)
-				this.room.memory.visuals = {
-					settings: {},
-					basePlan: {
-						visDistTrans: false,
-						visBasePlan: false,
-						visFloodFill: false,
-						visPlanInfo: false,
-						buildProgress: false
-					},
-					enableVisuals: false,
-					redAlertOverlay: true,
-					showPlanning: false
-				};
-			if (!this.room.memory.quotas) this.room.memory.quotas = {};
-			if (!this.room.memory.objects) this.room.memory.objects = {};
-			if (!this.room.memory.containers) this.room.memory.containers = {} as any;
-			if (!this.room.memory.remoteRooms) this.room.memory.remoteRooms = {};
-			if (!this.room.memory.settings)
-				this.room.memory.settings = {
-					basePlanning: { debug: false }
-				} as any;
-		} catch (e) {
-			console.log(`Execution Error In Function: RoomManager.initializeMemory(${this.room.name}) on Tick ${Game.time}. Error: ${e}`);
-		}
-	}
-
-	/** Load a stored base plan and rehydrate RoomPositions */
-	private loadBasePlanFromMemory(): void {
-		try {
-			const memPlan = this.room.memory.basePlan?.data as PlanResult | undefined;
-			if (!memPlan) return;
-			this.basePlan = this.hydratePlan(memPlan);
-			this.room.memory.data.centerPoint = { x: this.basePlan.startPos.x, y: this.basePlan.startPos.y } as any;
-		} catch (e) {
-			console.log(`Execution Error In Function: RoomManager.loadBasePlanFromMemory(${this.room.name}) on Tick ${Game.time}. Error: ${e}`);
-		}
-	}
-
-	/** Ensure a base plan exists in memory and on this instance */
-	private ensureBasePlanGenerated(): void {
-		try {
-			if (this.basePlan) return;
-			if (this.room.memory.basePlan?.data) {
-				this.basePlan = this.hydratePlan(this.room.memory.basePlan.data as PlanResult);
-				return;
-			}
-			if (!this.basePlanner) this.basePlanner = new BasePlanner(this.room);
-			const plan = this.basePlanner.plan();
-			if (plan) {
-				this.basePlan = plan;
-				this.room.memory.data.centerPoint = { x: plan.startPos.x, y: plan.startPos.y } as any;
-				this.savePlanToMemory(plan);
-				this.room.log(`Generated base plan at (${plan.startPos.x},${plan.startPos.y})`);
-			}
-		} catch (e) {
-			console.log(`Execution Error In Function: RoomManager.ensureBasePlanGenerated(${this.room.name}) on Tick ${Game.time}. Error: ${e}`);
-		}
-	}
-
-	private hydratePlan(raw: PlanResult): PlanResult {
-		const startPos = new RoomPosition((raw.startPos as any).x, (raw.startPos as any).y, this.room.name);
-		const controllerArea = (raw.controllerArea || []).map((p: any) => new RoomPosition(p.x, p.y, this.room.name));
-		const ramparts = (raw.ramparts || []).map((p: any) => new RoomPosition(p.x, p.y, this.room.name));
-		return { ...raw, startPos, controllerArea, ramparts };
-	}
-
-	private savePlanToMemory(plan: PlanResult): void {
-		const serialized: PlanResult = {
-			...plan,
-			startPos: { x: plan.startPos.x, y: plan.startPos.y, roomName: this.room.name } as any,
-			controllerArea: plan.controllerArea.map(p => ({ x: p.x, y: p.y, roomName: p.roomName } as any)),
-			ramparts: plan.ramparts.map(p => ({ x: p.x, y: p.y, roomName: p.roomName } as any))
-		};
-
-		this.room.memory.basePlan = {
-			lastGenerated: Game.time,
-			rclAtGeneration: this.room.controller?.level ?? 0,
-			checksum: `${plan.startPos.x},${plan.startPos.y}-${Game.time}`,
-			data: serialized
-		};
-	}
 
 	/** Main run method - called every tick */
 	run(): void {
 		try {
+			this.level = (this.room.controller) ? this.room.controller?.level : 0;
 			const room = this.room;
 			const roomMem = room.memory;
 			roomMem.data ??= { flags: {}, indices: {} };
@@ -217,10 +127,11 @@ export default class RoomManager {
 			const conveyor_needed = Boolean(room.linkStorage && (room.linkController || room.linkOne || room.linkTwo) && room.storage && room.memory.quotas.conveyor === 0);
 			const ready_for_drop_harvesting = Boolean(room.containerOne && room.containerTwo && room.energyCapacityAvailable >= 550 && !room.memory.data.flags.dropHarvestingEnabled);
 			const storage_built = Boolean(room.storage && room.prestorage && room.controller && room.controller.level === 4 && room.prestorage.store.getUsedCapacity() === 0);
-			const controller_upgraded = this.room.controller && this.room.controller.level !== this.room.memory.data.controllerLevel;
+			const controller_upgraded = Boolean(this.room.controller && roomMem.data.controllerLevel !== rcl);
+			this.room.log(`roomMem.controllerLevel (${this.room.memory.data.controllerLevel}) | RCL (${this.room.controller!.level}) | controller_upgraded: ${controller_upgraded}`);
 
 			if (controller_upgraded)
-				this.clearRCL();
+				this.handleRCLUpgrade();
 			if (storage_built)
 				room.prestorage.destroy();
 			if (ready_for_remotes)
@@ -268,6 +179,9 @@ export default class RoomManager {
 				rmData.lastResourceScan = Game.time;
 			}
 
+			this.updateConstructionSites();
+			this.manageBuilderQuota();
+
 			// Run task management for workers
 			//this.TaskManager.run();
 
@@ -292,7 +206,7 @@ export default class RoomManager {
 			this.handleRCLUpgrade();
 
 			if (roomMem.visuals.enableVisuals)
-				this.PlanVisualizer?.visualize(this.basePlan?.dtGrid, this.basePlan?.floodFill, this.basePlan?.placements);
+				this.PlanVisualizer?.visualize(this.basePlan?.dtGrid, this.basePlan?.floodFill, this.basePlan);
 		} catch (e) {
 			console.log(`Execution Error In Function: RoomManager.run(${this.room.name}) on Tick ${Game.time}. Error: ${e}`);
 		}
@@ -312,27 +226,31 @@ export default class RoomManager {
 		}
 	}
 
+	refresh(): void {
+		this.room = Game.rooms[this.room.name];
+		//this.remotes = _.compact(_.map(this.remotes, remote => Game.rooms[remote.name]))
+	}
+
 	/** Scans the room for all relevant structures and resources */
 	private scanResources(): RoomResources {
 		try {
+			this.room.cacheObjects();
+			const objIDs = this.room.memory.objects;
 			return {
-				sources: this.room.find(FIND_SOURCES),
+				sources: (objIDs.sources) ? objIDs.sources!.map(id => Game.getObjectById(id)!) : [],
 				minerals: this.room.find(FIND_MINERALS),
 				controller: this.room.controller,
-				containers: this.room.find(FIND_STRUCTURES, {
-					filter: (s) => s.structureType === STRUCTURE_CONTAINER
-				}) as StructureContainer[],
-				towers: this.room.find(FIND_MY_STRUCTURES, {
-					filter: (s) => s.structureType === STRUCTURE_TOWER
-				}) as StructureTower[],
-				spawns: this.room.find(FIND_MY_STRUCTURES, {
-					filter: (s) => s.structureType === STRUCTURE_SPAWN
-				}) as StructureSpawn[],
-				links: this.room.find(FIND_MY_STRUCTURES, {
-					filter: (s) => s.structureType === STRUCTURE_LINK
-				}) as StructureLink[],
+				containers: (objIDs.containers) ? objIDs.containers!.map(id => Game.getObjectById(id)!) : [],
+				towers: (objIDs.towers) ? objIDs.towers!.map(id => Game.getObjectById(id)!) : [],
+				spawns: (objIDs.spawns) ? objIDs.spawns!.map(id => Game.getObjectById(id)!) : [],
+				links: (objIDs.links) ? objIDs.links!.map(id => Game.getObjectById(id)!) : [],
 				storage: this.room.storage,
-				terminal: this.room.terminal
+				terminal: this.room.terminal,
+				labs: (objIDs.labs) ? objIDs.labs!.map(id => Game.getObjectById(id)!) : [],
+				powerSpawn: (objIDs.powerSpawn) ? Game.getObjectById(objIDs.powerSpawn)! : undefined,
+				nuker: (objIDs.nuker) ? Game.getObjectById(objIDs.nuker)! : undefined,
+				observer: (objIDs.observer) ? Game.getObjectById(objIDs.observer)! : undefined,
+				extractor: (objIDs.extractor) ? Game.getObjectById(objIDs.extractor)! : undefined,
 			};
 		} catch (e) {
 			console.log(`Execution Error In Function: RoomManager.scanResources(${this.room.name}) on Tick ${Game.time}. Error: ${e}`);
@@ -345,7 +263,12 @@ export default class RoomManager {
 				spawns: [],
 				links: [],
 				storage: undefined,
-				terminal: undefined
+				terminal: undefined,
+				labs: [],
+				powerSpawn: undefined,
+				nuker: undefined,
+				observer: undefined,
+				extractor: undefined
 			};
 		}
 	}
@@ -463,7 +386,11 @@ export default class RoomManager {
 			}
 
 			room.log(`Force placement complete: ${placed} placed, ${failed} failed`);
-			if (placed > 0) room.log(`Placed ${placed} construction sites for RCL${rcl}`);
+			if (placed > 0) {
+				room.log(`Placed ${placed} construction sites for RCL${rcl}`);
+				if (room.memory.basePlan && room.memory.basePlan.scheduleSize)
+					room.memory.basePlan.scheduleSize[rcl] -= placed;
+			}
 			if (errors.length > 0) room.log(`Placement errors: ${errors.join(', ')}`);
 
 			return { placed, failed, errors };
@@ -1362,69 +1289,144 @@ export default class RoomManager {
 		return inQueue || inScheduled;
 	}
 
-	/** Draws planned structures (like extensions) on the room using RoomVisuals. */
-	private drawPlanningVisuals(): void {
-		const visual = new RoomVisual(this.room.name);
-
-		// Extensions (planned)
-		const extensionSites = this.room.find(FIND_CONSTRUCTION_SITES, {
-			filter: s => s.structureType === STRUCTURE_EXTENSION
-		});
-
-		for (const site of extensionSites) {
-			visual.circle(site.pos, {
-				radius: 0.4,
-				fill: 'yellow',
-				opacity: 0.3,
-				stroke: 'orange'
-			});
-		}
-
-		// Existing extensions
-		const extensions = this.room.find(FIND_STRUCTURES, {
-			filter: s => s.structureType === STRUCTURE_EXTENSION
-		});
-		for (const ext of extensions) {
-			visual.circle(ext.pos, {
-				radius: 0.4,
-				fill: '#00ff00',
-				opacity: 0.2
-			});
-		}
-
-		// Planned controller or source containers (from memory)
-		const data = this.room.memory.data as RoomData | undefined;
-		if (data) {
-			if (data.controllerContainer) {
-				const obj = Game.getObjectById(data.controllerContainer);
-				if (obj) visual.circle(obj.pos, { radius: 0.45, fill: 'cyan', opacity: 0.3 });
-			}
-			if (data.sourceOne?.container) {
-				const obj = Game.getObjectById(data.sourceOne.container);
-				if (obj) visual.circle(obj.pos, { radius: 0.45, fill: 'purple', opacity: 0.3 });
-			}
-			if (data.sourceTwo?.container) {
-				const obj = Game.getObjectById(data.sourceTwo.container);
-				if (obj) visual.circle(obj.pos, { radius: 0.45, fill: 'purple', opacity: 0.3 });
-			}
-		}
-
-		// Draw spawn marker (center of planning)
-		const spawn = this.resources.spawns[0];
-		if (spawn) {
-			visual.circle(spawn.pos, { radius: 0.6, fill: '#00f', opacity: 0.2 });
-			visual.text('Spawn Center', spawn.pos.x, spawn.pos.y - 0.8, {
-				align: 'center',
-				color: '#66f',
-				font: 0.6
-			});
-		}
-	}
-
 	public clearRCL(): boolean {
 		this.room.memory.data.controllerLevel = 0;
 		const isZero = this.room.memory.data.controllerLevel === 0;
 		this.room.log(`Cleared stored RCL in Room Data!`);
 		return isZero;
 	}
+
+
+	private initializeMemory() {
+		try {
+			if (!this.room.memory.data)
+				this.room.memory.data = {
+					flags: {
+						dropHarvestingEnabled: false,
+						basePlanGeneratde: false,
+						bootstrappingMode: false,
+						initialized: false,
+						advSpawnSystem: false
+					},
+					indices: {
+						nextHarvesterAssigned: 0,
+						haulerIndex: 0,
+						lastBootstrapRoleIndex: 0,
+						lastNormalRoleIndex: 0
+					},
+					controllerLevel: 0,
+				};
+			if (!this.room.memory.visuals)
+				this.room.memory.visuals = {
+					settings: {},
+					basePlan: {
+						visDistTrans: false,
+						visBasePlan: false,
+						visFloodFill: false,
+						visPlanInfo: false,
+						buildProgress: false
+					},
+					enableVisuals: false,
+					redAlertOverlay: true,
+					showPlanning: false
+				};
+			if (!this.room.memory.quotas) this.room.memory.quotas = {};
+			if (!this.room.memory.objects) this.room.memory.objects = {};
+			if (!this.room.memory.containers) this.room.memory.containers = {} as any;
+			if (!this.room.memory.remoteRooms) this.room.memory.remoteRooms = {};
+			if (!this.room.memory.settings)
+				this.room.memory.settings = {
+					basePlanning: { debug: false }
+				} as any;
+			if (!this.room.memory.stats) {
+				this.room.memory.stats = {
+					energyHarvested: 0,
+					energyDeposited: 0,
+					controlPoints: 0,
+					constructionPoints: 0,
+					creepsSpawned: 0,
+					creepPartsSpawned: 0,
+					controllerLevelReached: 0,
+					npcInvadersKilled: 0,
+					hostilePlayerCreepsKilled: 0,
+					mineralsHarvested: {},
+					labStats: { compoundsMade: {}, creepsBoosted: 0, boostsUsed: {}, energySpentBoosting: 0 }
+				} as any;
+			}
+		} catch (e) {
+			console.log(`Execution Error In Function: RoomManager.initializeMemory(${this.room.name}) on Tick ${Game.time}. Error: ${e}`);
+		}
+	}
+
+	/** Load a stored base plan and rehydrate RoomPositions */
+	private loadBasePlanFromMemory(): void {
+		try {
+			const memPlan = this.room.memory.basePlan?.data as PlanResult | undefined;
+			if (!memPlan) return;
+			this.basePlan = this.hydratePlan(memPlan);
+			this.room.memory.data.centerPoint = { x: this.basePlan.startPos.x, y: this.basePlan.startPos.y } as any;
+		} catch (e) {
+			console.log(`Execution Error In Function: RoomManager.loadBasePlanFromMemory(${this.room.name}) on Tick ${Game.time}. Error: ${e}`);
+		}
+	}
+
+	/** Ensure a base plan exists in memory and on this instance */
+	private ensureBasePlanGenerated(): void {
+		try {
+			if (this.basePlan) return;
+			if (this.room.memory.basePlan?.data) {
+				this.basePlan = this.hydratePlan(this.room.memory.basePlan.data as PlanResult);
+				return;
+			}
+			if (!this.basePlanner) this.basePlanner = new BasePlanner(this.room);
+			const plan = this.basePlanner.createPlan();
+			if (plan) {
+				this.basePlan = plan;
+				this.room.memory.data.centerPoint = { x: plan.startPos.x, y: plan.startPos.y } as any;
+				this.savePlanToMemory(plan);
+				this.room.log(`Generated base plan at (${plan.startPos.x},${plan.startPos.y})`);
+			}
+		} catch (e) {
+			console.log(`Execution Error In Function: RoomManager.ensureBasePlanGenerated(${this.room.name}) on Tick ${Game.time}. Error: ${e}`);
+		}
+	}
+
+	private hydratePlan(raw: PlanResult): PlanResult {
+		const startPos = new RoomPosition((raw.startPos as any).x, (raw.startPos as any).y, this.room.name);
+		const controllerArea = (raw.controllerArea || []).map((p: any) => new RoomPosition(p.x, p.y, this.room.name));
+		const ramparts = (raw.ramparts || []).map((p: any) => new RoomPosition(p.x, p.y, this.room.name));
+		return { ...raw, startPos, controllerArea, ramparts };
+	}
+
+	private savePlanToMemory(plan: PlanResult): void {
+		const serialized: PlanResult = {
+			...plan,
+			startPos: { x: plan.startPos.x, y: plan.startPos.y, roomName: this.room.name } as any,
+			controllerArea: plan.controllerArea.map(p => ({ x: p.x, y: p.y, roomName: p.roomName } as any)),
+			ramparts: plan.ramparts.map(p => ({ x: p.x, y: p.y, roomName: p.roomName } as any))
+		};
+
+		this.room.memory.basePlan = {
+			lastGenerated: Game.time,
+			rclAtGeneration: this.room.controller?.level ?? 0,
+			checksum: `${plan.startPos.x},${plan.startPos.y}-${Game.time}`,
+			data: serialized
+		};
+	}
+
+	private updateConstructionSites(): void {
+		this.previousCSites = this.constructionSites.length ?? 0;
+		this.constructionSites = this.room.find(FIND_MY_CONSTRUCTION_SITES);
+		this.currentCSites = this.constructionSites.length ?? 0;
+	}
+
+	private manageBuilderQuota(): void {
+		if (this.currentCSites > 3 && this.room.memory.quotas.builder < 3)
+			this.room.setQuota('builder', 3);
+		else if (this.currentCSites > 5 && this.room.memory.quotas.builder < 5)
+			this.room.setQuota('builder', 5);
+		else if (this.room.memory.quotas.builder > 1)
+			this.room.setQuota('builder', 1);
+	}
+
 }
