@@ -6,7 +6,7 @@ namespace NodeJS {
 
 	//# GLOBAL CONTEXT INTERFACE
 	interface Global {
-		adjustPathingValues(role: string, reuseValue: number, ignoreCreeps: boolean): void;
+		setPathingOpts(role: string, reuseValue: number, ignoreCreeps: boolean): void;
 		splitRoomName(roomName: string): [string, number, string, number];
 		roomExitsTo(roomName: string, direction: DirectionConstant | number | string): string;
 		calcPath(startPos: RoomPosition, endPos: RoomPosition): { path: RoomPosition[], length: number, ops: number, cost: number, incomplete: boolean };
@@ -45,7 +45,7 @@ namespace NodeJS {
 		log: any;
 		stats: { [key: string]: number | string };
 		globalData: { [key: string]: any };
-		globalSettings: { [key: string]: any };
+		globalSettings: GlobalSettings;
 		colonies: { [key: string]: any };
 		time?: {
 			lastTickTime?: number,
@@ -56,92 +56,22 @@ namespace NodeJS {
 	}
 
 	interface RoomMemory {
-		objects: {
-			sources?: Id<Source>[];
-			spawns?: Id<StructureSpawn>[];
-			towers?: Id<StructureTower>[];
-			controller?: Id<StructureController>[];
-			containers?: Id<StructureContainer>[];
-			links?: Id<StructureLink>[];
-			labs?: Id<StructureLab>[];
-			storage?: Id<StructureStorage>;
-			extensions?: Id<StructureExtension>[];
-			walls?: Id<StructureWall>[];
-			ramparts?: Id<StructureRampart>[];
-			terminal?: Id<StructureTerminal>;
-			extractor?: Id<StructureExtractor>;
-			powerSpawn?: Id<StructurePowerSpawn>;
-			factory?: Id<StructureFactory>;
-			observer?: Id<StructureObserver>;
-			nuker?: Id<StructureNuker>;
-			[key: string]: any;
-		 };
+		objects: RoomObjectCache;
 		sources: { [key: string]: string[] };
-		containers: {
-			sourceOne: Id<StructureContainer>;
-			sourceTwo: Id<StructureContainer>;
-			mineral: Id<StructureContainer>;
-			controller: Id<StructureContainer>;
-			prestorage: Id<StructureContainer>;
-		};
-		links: {
-			sourceOne: Id<StructureLink>;
-			sourceTwo: Id<StructureLink>;
-			controller: Id<StructureLink>;
-			storage: Id<StructureLink>;
-			remotes?: Id<StructureLink>[];
-		};
+		containers: RoomContainers;
+		links: RoomLinks;
 		settings: RoomSettings;
 		data: { [key: string]: any };
-		stats: ColonyStats;
+		stats: RoomStats;
 		energyManagement?: EnergyManagementData;
 		availableCreeps: string[];
-		remoteRooms: {
-			[key: string]: RemoteRoom
-		};
+		remoteRooms: { [key: string]: RemoteRoom };
 		quotas: { [key: string]: number };
-		hostileTracking: {
-			invaderCount: number;
-			playerCreepCount: number;
-		};
-		spawnManager: {
-			queue: SpawnRequest[];
-			scheduled: ScheduledSpawn[];
-			deferred?: SpawnRequest[];
-			lastProcessed: number;
-		}
-		buildQueue?: {
-			plannedAt: number;
-			lastBuiltTick: number;
-			index: number;
-			activeRCL: number;
-			failedPlacements?: Array<{pos: {x: number, y: number}, structure: string, error: string}>;
-		};
-		basePlan?: {
-			lastGenerated: number;
-			rclAtGeneration: number;
-			checksum: string;
-			data: PlanResult;
-			scheduleSize?: { [key: number]: number };
-			placedStructures?: {
-				struct: BuildableStructureConstant;
-				x: number;
-				y: number;
-			}[]
-		};
-		visuals: {
-			settings?: { [key: string]: any };
-			enableVisuals: boolean;
-			basePlan: {
-				visDistTrans?: boolean;
-				visFloodFill?: boolean;
-				visBasePlan?: boolean;
-				visPlanInfo?: boolean;
-				buildProgress?: boolean;
-			};
-			redAlertOverlay?: boolean;
-			showPlanning?: boolean;
-		};
+		hostileTracking: HostileTrackingData;
+		spawnManager: SpawnManagerData
+		buildQueue?: BuildQueue;
+		basePlan?: BasePlanData;
+		visuals: VizOptions;
 		remoteOfRoom?: string;
 	}
 
@@ -223,6 +153,87 @@ namespace NodeJS {
 		spawnFiller(maxEnergy: number): ScreepsReturnCode;
 	}
 
+	//# ROOM MEMORY SUB-INTERFACES
+
+	interface RoomObjectCache {
+		sources?: Id<Source>[];
+		spawns?: Id<StructureSpawn>[];
+		towers?: Id<StructureTower>[];
+		controller?: Id<StructureController>[];
+		containers?: Id<StructureContainer>[];
+		links?: Id<StructureLink>[];
+		labs?: Id<StructureLab>[];
+		storage?: Id<StructureStorage>;
+		extensions?: Id<StructureExtension>[];
+		walls?: Id<StructureWall>[];
+		ramparts?: Id<StructureRampart>[];
+		terminal?: Id<StructureTerminal>;
+		extractor?: Id<StructureExtractor>;
+		powerSpawn?: Id<StructurePowerSpawn>;
+		factory?: Id<StructureFactory>;
+		observer?: Id<StructureObserver>;
+		nuker?: Id<StructureNuker>;
+		[key: string]: any;
+	}
+
+	interface RoomContainers {
+		sourceOne: Id<StructureContainer>;
+		sourceTwo: Id<StructureContainer>;
+		mineral: Id<StructureContainer>;
+		controller: Id<StructureContainer>;
+		prestorage: Id<StructureContainer>;
+	}
+
+	interface RoomLinks {
+		sourceOne: Id<StructureLink>;
+		sourceTwo: Id<StructureLink>;
+		controller: Id<StructureLink>;
+		storage: Id<StructureLink>;
+		remotes?: Id<StructureLink>[];
+	}
+
+	interface BuildQueue {
+		plannedAt: number;
+		lastBuiltTick: number;
+		index: number;
+		activeRCL: number;
+		failedPlacements?: Array<{
+			pos: {
+				x: number;
+				y: number;
+			};
+			structure: string;
+			error: string;
+		}>;
+	}
+
+	interface BasePlanData {
+		lastGenerated: number;
+		rclAtGeneration: number;
+		checksum: string;
+		data: PlanResult;
+		scheduleSize?: {
+			[key: number]: number;
+		};
+		placedStructures?: {
+			struct: BuildableStructureConstant;
+			x: number;
+			y: number;
+		}[];
+	}
+
+	interface SpawnManagerData {
+		queue: SpawnRequest[];
+		scheduled: ScheduledSpawn[];
+		deferred?: SpawnRequest[];
+		lastProcessed: number;
+	}
+
+	interface HostileTrackingData {
+		invaderCount: number;
+		playerCreepCount: number;
+	}
+
 	//# PATHING INTERFACES
 	type RoomRoute = RoomPathStep[];
 
@@ -284,7 +295,8 @@ namespace NodeJS {
 	}
 
 	//# STATISTICS INTERFACES
-	interface ColonyStats {
+
+	interface RoomStats {
 		energyHarvested: number,
 		energyDeposited: number,
 		controlPoints: number,
@@ -292,11 +304,52 @@ namespace NodeJS {
 		creepsSpawned: number,
 		creepPartsSpawned: number,
 		energySpentOnSpawns?: number,
-		mineralsHarvested?: MineralStats,
+		upkeepCosts: UpkeepStats;
 		controllerLevelReached: number,
 		npcInvadersKilled: number,
 		hostilePlayerCreepsKilled: number,
-		labStats?: LabStats;
+		mineralsHarvested?: MineralStats,
+		labStats?: LabStats,
+		terminalStats?: TerminalStats,
+		linkStats?: LinkStats
+	}
+
+	interface UpkeepStats {
+		roadUpkeepPaid: number;
+		containerUpkeepPaid: number;
+		rampartUpkeepPaid: number;
+	}
+
+	interface LinkStats {
+		controllerLink: {
+			energySent: number;
+			energyFeesPaid: number;
+			timesFired: number;
+		}
+		sourceLinkOne: {
+			energySent: number;
+			energyFeesPaid: number;
+			timesFired: number;
+		}
+		sourceLinkTwo: {
+			energySent: number;
+			energyFeesPaid: number;
+			timesFired: number;
+		}
+		storageLink: {
+			energySent: number;
+			energyFeesPaid: number;
+			timesFired: number;
+		}
+		otherLinks: {
+			energySent: number;
+			energyFeesPaid: number;
+			timesFired: number;
+		}
+	}
+
+	interface TerminalStats {
+		[key: string]: any;
 	}
 
 	interface MineralStats {
@@ -352,6 +405,7 @@ namespace NodeJS {
 		catalyzedGhodiumAcid: number;
 		catalyzedGhodiumAlkalide: number;
 	}
+
 
 	type SourceAssignmentUpdate = {
 		source: Id<Source> | false,
@@ -418,13 +472,15 @@ namespace NodeJS {
 		consoleSpawnInterval: number;
 		alertDisabled: boolean;
 		reusePathValue: number;
-		ignoreCreeps: boolean,
-		creepSettings: {
-			[key: string]: {
-				reusePathValue: number;
-				ignoreCreeps: boolean;
-			}
-		};
+		ignoreCreeps: boolean;
+		creepSettings: { [key: string]: any };
+		debug?: { [key: string]: any };
+		basePlanner?: BasePlannerSettings;
+		[key: string]: any;
+	}
+
+	interface BasePlannerSettings {
+		ANCHOR_RADIUS?: number;
 	}
 
 	interface RoomFlags {
@@ -480,9 +536,25 @@ namespace NodeJS {
 		color: string;
 	}
 
+	interface VizOptions {
+		settings?: {
+			[key: string]: any;
+		};
+		enableVisuals: boolean;
+		basePlan: {
+			visDistTrans?: boolean;
+			visFloodFill?: boolean;
+			visBasePlan?: boolean;
+			visPlanInfo?: boolean;
+			buildProgress?: boolean;
+		};
+		redAlertOverlay?: boolean;
+		showPlanning?: boolean;
+	}
+
 	//# OTHER/GENERAL TYPEDEFS
 	type alignment = 'left' | 'right' | 'center';
-	type CreepRole = "harvester" | "upgrader" | "builder" | "repairer" | "defender" | "filler" | "hauler" | "remoteharvester" | "reserver" | "scout" | "conveyor" | "worker" | "infantry";
+	type CreepRole = 'harvester' | 'upgrader' | 'builder' | 'repairer' | 'defender' | 'filler' | 'hauler' | 'remoteharvester' | 'reserver' | 'scout' | 'conveyor' | 'worker' | 'infantry';
 
 	//# ROOM MANAGER INTERFACES
 	interface RoomData {
@@ -507,10 +579,6 @@ namespace NodeJS {
 		lastProcessed: number;
 	}
 
-	interface RoomMemoryExtension {
-		spawnManager?: SpawnManagerMemory;
-	}
-
 	interface RoomResources {
 		sources: Source[];
 		minerals: Mineral[];
@@ -528,7 +596,7 @@ namespace NodeJS {
 		extractor: StructureExtractor | undefined;
 	}
 
-	interface RoomStats {
+	interface RoomManagerStats {
 		controllerLevel: number;
 		energyAvailable: number;
 		energyCapacityAvailable: number;
@@ -557,11 +625,6 @@ namespace NodeJS {
 		| 'empty'
 		| 'mineral'
 		| 'wall';
-
-	interface StructurePlacement {
-		structure: StructureConstant | 'container' | 'road';
-		pos: Pos;
-	}
 
 	interface PlanResult {
 		startPos: RoomPosition;
@@ -637,33 +700,6 @@ namespace NodeJS {
 		structures?: Record<string, RawOffset[]>;
 		subStampsUsed?: RawSubStamp[];
 	};
-
-	interface ParsedStructurePlacement {
-		structure: BuildableStructureConstant;
-		pos: Pos;
-		offset: { dx: number; dy: number };
-	}
-
-	interface ParsedSubStamp {
-		stamp: string;
-		placedAt: Pos;
-		mirrorVert: boolean;
-		mirrorHoriz: boolean;
-		rotate90: number;
-		buildRoads: boolean;
-	}
-
-	interface ParsedStamp {
-		name: string;
-		anchorPoint: Pos;
-		stampWidth: number;
-		stampHeight: number;
-		centerPoint?: Pos;
-		centerSquare?: Pos[];
-		rotationOrigin: Pos;
-		placements: ParsedStructurePlacement[];
-		subStampsUsed?: ParsedSubStamp[];
-	}
 
 	interface ParsedStructurePlacement {
 		structure: BuildableStructureConstant;

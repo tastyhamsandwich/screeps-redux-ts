@@ -63,7 +63,7 @@ module.exports.loop = function() {
 
 		// Execute specific role-based creep script for every creep, based on role assigned in CreepMemory
 
-		const creepSuspend = Memory.globalSettings.debug.suspendCreeps;
+		const creepSuspend = (Memory.globalSettings.debug) ? Memory.globalSettings.debug.suspendCreeps : false;
 
 		for (const name in Game.creeps) {
 			const creep = Game.creeps[name];
@@ -257,7 +257,7 @@ module.exports.loop = function() {
 							const controllerLevel = room.controller.level;
 							const storedLevel = room.memory.data.controllerLevel;
 
-							if (Memory.globalSettings.debug.dataDebug)
+							if (Memory.globalSettings.debug && Memory.globalSettings.debug.dataDebug)
 								room.log(`Update C.Level: ${room.controller!.level !== room.memory.data.controllerLevel} | Update C.StatsLevel: ${room.controller!.level > room.memory.stats.controllerLevelReached}`);
 							if (storedLevel !== controllerLevel) {
 								room.memory.data.controllerLevel = room.controller.level;
