@@ -503,7 +503,7 @@ Creep.prototype.unloadEnergy = function (bucketID?: Id<AnyStoreStructure>): void
 					this.say('⏩');
 					return;
 				} else {
-					if (Memory.globalSettings.debug.creepDebug)
+					if (Memory.globalSettings.debug && Memory.globalSettings.debug.creepDebug)
 						console.log(`${this.room.link()}${this.name}: ERROR: ${FUNC.getReturnCode(result)}`);
 				}
 			}

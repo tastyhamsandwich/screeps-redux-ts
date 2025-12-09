@@ -212,6 +212,7 @@ namespace NodeJS {
 		rclAtGeneration: number;
 		checksum: string;
 		data: PlanResult;
+		centerPoint?: { x: number, y: number };
 		scheduleSize?: {
 			[key: number]: number;
 		};
@@ -304,7 +305,7 @@ namespace NodeJS {
 		creepsSpawned: number,
 		creepPartsSpawned: number,
 		energySpentOnSpawns?: number,
-		upkeepCosts: UpkeepStats;
+		upkeepCosts?: UpkeepStats;
 		controllerLevelReached: number,
 		npcInvadersKilled: number,
 		hostilePlayerCreepsKilled: number,
