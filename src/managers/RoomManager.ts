@@ -16,7 +16,7 @@ export default class RoomManager {
 	private room: Room;
 	public rooms: Room[];
 	private resources: RoomResources;
-	private stats: RoomStats;
+	private stats: RoomManagerStats;
 	private spawnManager: SpawnManager;
 	private energyManager: EnergyManager;
 	//private TaskManager: TaskManager;
@@ -446,7 +446,7 @@ export default class RoomManager {
 	}
 
 	/** Gathers current room statistics */
-	private gatherStats(): RoomStats {
+	private gatherStats(): RoomManagerStats {
 		try {
 			const damagedStructures = this.room.find(FIND_STRUCTURES, {
 				filter: (s) => s.hits < s.hitsMax && s.structureType !== STRUCTURE_WALL
@@ -1003,7 +1003,7 @@ export default class RoomManager {
 	}
 
 	/** Gets the current room stats (for external access) */
-	getStats(): RoomStats {
+	getStats(): RoomManagerStats {
 		return this.stats;
 	}
 
@@ -1303,7 +1303,7 @@ export default class RoomManager {
 				this.room.memory.data = {
 					flags: {
 						dropHarvestingEnabled: false,
-						basePlanGeneratde: false,
+						basePlanGenerated: false,
 						bootstrappingMode: false,
 						initialized: false,
 						advSpawnSystem: false
