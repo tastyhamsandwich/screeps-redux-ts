@@ -775,6 +775,9 @@ Room.prototype.initRoom = function () {
 	const spawnInfo = { alignment: 'right', color: 'white', fontSize: 0.4 };
 	const towerSettings: TowerRepairSettings = { creeps: true, walls: false, ramparts: false, roads: false, others: false, wallLimit: 10, rampartLimit: 10, maxRange: 10 };
 	const repairSettings: RepairSettings = { walls: false, ramparts: false, roads: true, others: true, wallLimit: 10, rampartLimit: 10, towerSettings: towerSettings };
+	const upkeepCosts: UpkeepStats = { roadUpkeepPaid: 0, containerUpkeepPaid: 0,	rampartUpkeepPaid: 0 };
+	const linkStats: LinkStats = { controllerLink: { energySent: 0, energyFeesPaid: 0, timesFired: 0 }, sourceLinkOne: { energySent: 0,	energyFeesPaid: 0, timesFired: 0 },
+		sourceLinkTwo: { energySent: 0, energyFeesPaid: 0, timesFired: 0 }, storageLink: { energySent: 0, energyFeesPaid: 0, timesFired: 0 }, otherLinks: { energySent: 0, energyFeesPaid: 0, timesFired: 0 } };
 	const mineralsHarvested: MineralStats = { hydrogen: 0, oxygen: 0, utrium: 0, lemergium: 0, keanium: 0, zynthium: 0, catalyst: 0, ghodium: 0 };
 	const compoundStats: CompoundStats = { hydroxide: 0, zynthiumKeanite: 0, utriumLemergite: 0, utriumHydride: 0, utriumOxide: 0, keaniumHydride: 0, keaniumOxide: 0,
 		lemergiumHydride: 0, lemergiumOxide: 0, zynthiumHydride: 0, zynthiumOxide: 0, ghodiumHydride: 0, ghodiumOxide: 0, utriumAcid: 0, utriumAlkalide: 0, keaniumAcid: 0,
@@ -800,60 +803,73 @@ Room.prototype.initRoom = function () {
 			remotes: []
 		};
 
-	this.memory.data = {
-		flags: {
-			dropHarvestingEnabled: false
-		},
-		indices: {
-			lastBootstrapRoleIndex: 0,
-			lastNormalRoleIndex: 0,
-			haulerIndex: 0,
-			nextHarvesterAssigned: 0
-		},
-		controllerLevel: 0,
-		numCSites: 0,
-		spawnEnergyLimit: 0
-	};
-	this.memory.settings = {
-		visualSettings: visualSettings,
-		repairSettings: repairSettings,
-		flags: {},
-		basePlanner: {
-			debug: false
-		}
-	};
-	this.memory.stats = {
-		energyHarvested: 0,
-		energyDeposited: 0,
-		controlPoints: 0,
-		constructionPoints: 0,
-		creepsSpawned: 0,
-		creepPartsSpawned: 0,
-		controllerLevelReached: 0,
-		npcInvadersKilled: 0,
-		hostilePlayerCreepsKilled: 0,
-		mineralsHarvested: mineralsHarvested,
-		labStats: labStats
-	};
-	this.memory.visuals = {
-		settings: {
-			spawnInfo: spawnInfo,
-			roomFlags: roomFlags,
-			progressInfo: progressInfo,
-			displayTowerRanges: false,
-			displayControllerUpgradeRange: false
-		},
-		basePlan: {
-			visDistTrans: false,
-			visBasePlan: false,
-			visFloodFill: false,
-			visPlanInfo: false,
-			buildProgress: false,
-		},
-		enableVisuals: false,
-		redAlertOverlay: true,
-	};
-	this.memory.remoteRooms = {};
+	if (!this.memory.data)
+		this.memory.data = {
+			flags: {
+				dropHarvestingEnabled: false,
+				basePlanGenerated: false,
+				bootstrappingMode: false,
+				initialized: false,
+				advSpawnSystem: false
+			},
+			indices: {
+				nextHarvesterAssigned: 0,
+				haulerIndex: 0,
+				lastBootstrapRoleIndex: 0,
+				lastNormalRoleIndex: 0
+			},
+			controllerLevel: 0,
+			numCSites: 0,
+			spawnEnergyLimit: 0
+		};
+	if (!this.memory.settings)
+		this.memory.settings = {
+			visualSettings: visualSettings,
+			repairSettings: repairSettings,
+			flags: {},
+			basePlanner: {
+				debug: false
+			}
+		};
+	if (!this.memory.stats)
+		this.memory.stats = {
+			energyHarvested: 0,
+			energyDeposited: 0,
+			controlPoints: 0,
+			constructionPoints: 0,
+			creepsSpawned: 0,
+			creepPartsSpawned: 0,
+			upkeepCosts: upkeepCosts,
+			controllerLevelReached: 0,
+			npcInvadersKilled: 0,
+			hostilePlayerCreepsKilled: 0,
+			mineralsHarvested: mineralsHarvested,
+			labStats: labStats,
+			linkStats: linkStats
+		};
+	if (!this.memory.visuals)
+		this.memory.visuals = {
+			settings: {
+				spawnInfo: spawnInfo,
+				roomFlags: roomFlags,
+				progressInfo: progressInfo,
+				displayTowerRanges: false,
+				displayControllerUpgradeRange: false
+			},
+			basePlan: {
+				visDistTrans: false,
+				visBasePlan: false,
+				visFloodFill: false,
+				visPlanInfo: false,
+				buildProgress: false,
+			},
+			enableVisuals: false,
+			redAlertOverlay: true,
+		};
+
+	if (!this.memory.remoteRooms)
+		this.memory.remoteRooms = {};
+
 	this.cacheObjects();
 }
 
