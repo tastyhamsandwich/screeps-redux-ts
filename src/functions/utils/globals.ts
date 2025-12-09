@@ -374,47 +374,50 @@ export function initGlobal(eraseAll: boolean = false): boolean {
 		log(`Zeroed out Game Memory object in advance of Global Initialization!`);
 	} else log(`Executing Global Initialization without pre-clearing Game Memory.`);
 
-	if (!Memory.globalSettings) Memory.globalSettings = {};
-	Memory.globalSettings = {
-		consoleSpawnInterval: 25,
-		alertDisabled: true,
-		reusePathValue: 5,
-		ignoreCreeps: true,
-		creepSettings: {
-			builder: {
-				reusePathValue: 3,
-				ignoreCreeps: true
+	if (!Memory.globalSettings)
+		Memory.globalSettings = {
+			consoleSpawnInterval: 25,
+			alertDisabled: true,
+			reusePathValue: 5,
+			ignoreCreeps: true,
+			basePlanner: {
+				ANCHOR_RADIUS: 8
 			},
-			defender: {
-				reusePathValue: 3,
-				ignoreCreeps: true
-			},
-			filler: {
-				reusePathValue: 3,
-				ignoreCreeps: true
-			},
-			harvester: {
-				reusePathValue: 3,
-				ignoreCreeps: true
-			},
-			hauler: {
-				reusePathValue: 3,
-				ignoreCreeps: true
-			},
-			repairer: {
-				reusePathValue: 3,
-				ignoreCreeps: true
-			},
-			reserver: {
-				reusePathValue: 3,
-				ignoreCreeps: true
-			},
-			upgrader: {
-				reusePathValue: 3,
-				ignoreCreeps: true
-			},
+			creepSettings: {
+				builder: {
+					reusePathValue: 3,
+					ignoreCreeps: true
+				},
+				defender: {
+					reusePathValue: 3,
+					ignoreCreeps: true
+				},
+				filler: {
+					reusePathValue: 3,
+					ignoreCreeps: true
+				},
+				harvester: {
+					reusePathValue: 3,
+					ignoreCreeps: true
+				},
+				hauler: {
+					reusePathValue: 3,
+					ignoreCreeps: true
+				},
+				repairer: {
+					reusePathValue: 3,
+					ignoreCreeps: true
+				},
+				reserver: {
+					reusePathValue: 3,
+					ignoreCreeps: true
+				},
+				upgrader: {
+					reusePathValue: 3,
+					ignoreCreeps: true
+				},
+			}
 		}
-	}
 
 	if (!Memory.globalSettings.debug)
 		Memory.globalSettings.debug = {
@@ -439,7 +442,6 @@ export function initGlobal(eraseAll: boolean = false): boolean {
 			plannerDebug: false,
 			spawnDebug: false,
 			visualsDebug: false,
-
 		}
 
 	if (!Memory.stats) Memory.stats = {
@@ -449,11 +451,18 @@ export function initGlobal(eraseAll: boolean = false): boolean {
 	Memory.globalData.numColonies = 0;
 
 	Memory.globalData.onBirthInitComplete = true;
-	console.log(`Initialized global settings!`);
+	log(`Initialized global settings!`);
 	return true;
 }
 
-export function adjustPathingValues(role: string, reuseValue: number = 3, ignoreCreeps: boolean = true): void {
+/** Set the reuse value number and ignore creeps flag for a given creep role
+ * @param role The Creep role to set for
+ * @param reuseValue How many ticks between pathing regenerations
+ * @param ignoreCreeps Whether or not the pathing will attempt to navigate around creeps
+ * @example
+ * setPathingOpts('harvester', 5, false);
+ */
+export function setPathingOpts(role: string, reuseValue: number = 3, ignoreCreeps: boolean = true): void {
 
 	Memory.globalSettings.creepSettings[role].reusePathValue = reuseValue;
 	Memory.globalSettings.creepSettings[role].ignoreCreeps = ignoreCreeps;
