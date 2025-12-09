@@ -198,7 +198,7 @@ export default class EnergyManager {
 	 * Calculate energy expenditure on upgrades
 	 * Base cost is 1 energy per control point
 	 */
-	private calculateUpgradeExpenditure(stats: ColonyStats): number {
+	private calculateUpgradeExpenditure(stats: RoomStats): number {
 		try {
 			const ticksSinceLastRecalc = Game.time - (this.room.memory.energyManagement?.lastRecalculation ?? Game.time);
 			if (ticksSinceLastRecalc <= 0) return 0;
@@ -225,7 +225,7 @@ export default class EnergyManager {
 	 * Calculate energy expenditure on construction
 	 * Cost is 1 energy per construction point
 	 */
-	private calculateConstructionExpenditure(stats: ColonyStats): number {
+	private calculateConstructionExpenditure(stats: RoomStats): number {
 		try {
 			// Construction points are a 1:1 mapping with construction work points
 			// Each work point = 1 progress, which costs 1 energy
@@ -239,7 +239,7 @@ export default class EnergyManager {
 	/**
 	 * Calculate energy expenditure on creep spawning
 	 */
-	private calculateSpawnExpenditure(stats: ColonyStats): number {
+	private calculateSpawnExpenditure(stats: RoomStats): number {
 		try {
 			// Use tracked energySpentOnSpawns if available, otherwise estimate from body parts
 			if (stats.energySpentOnSpawns !== undefined && stats.energySpentOnSpawns > 0) {
