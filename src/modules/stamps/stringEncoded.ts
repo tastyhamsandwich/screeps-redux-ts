@@ -1,4 +1,4 @@
-type EncodedSymbols = `x` | `T` | `.` | `-` | `S` | `^` | `8` | `L` | `C` | `N` | `O` | `F` | `E` | `P` | `B` | `%` | `R` | `$`;
+export type EncodedSymbols = `x` | `e` | `T` | `.` | `-` | `S` | `^` | `8` | `L` | `C` | `N` | `O` | `F` | `E` | `P` | `B` | `%` | `R` | `$`;
                  //   ext  tower empty road  spawn  term  stor  link cntnr nuker  obsv  fact  ext  pspwn  lab   wall  ramp cntrlr
 
 interface StringEncodedStamp {
@@ -16,6 +16,7 @@ export function stringToConstant(string: string): Array<StructureConstant | null
 	for (let i = 0; i < string.length; i++) {
 		switch (string[i]) {
 			case 'x':
+			case 'e':
 				constantArray.push(STRUCTURE_EXTENSION);
 				break;
 			case 'T':
