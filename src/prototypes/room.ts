@@ -768,6 +768,7 @@ Room.prototype.enableDropHarvesting = function() {
 /** Initializes a room with default memory structure and settings. Sets up quotas, visual settings, repair settings, and stats tracking. */
 Room.prototype.initRoom = function () {
 	this.initQuotas();
+	this.log(`Spawn quotas initialized!`);
 
 	const visualSettings: VisualSettings = { progressInfo: { alignment: 'left', xOffset: 1, yOffsetFactor: 0.6, stroke: '#000000', fontSize: 0.6, color: '' } };
 	const progressInfo = { alignment: 'left', xOffset: 1, yOffsetFactor: 0.6, stroke: '#000000', fontSize: 0.6, color: '' };
@@ -785,7 +786,29 @@ Room.prototype.initRoom = function () {
 		catalyzedUtriumAlkalide: 0, catalyzedKeaniumAcid: 0, catalyzedKeaniumAlkalide: 0, catalyzedLemergiumAcid: 0, catalyzedLemergiumAlkalide: 0, catalyzedZynthiumAcid: 0,
 		catalyzedZynthiumAlkalide: 0, catalyzedGhodiumAcid: 0, catalyzedGhodiumAlkalide: 0 };
 	const labStats: LabStats = { compoundsMade: compoundStats, creepsBoosted: 0, boostsUsed: compoundStats, energySpentBoosting: 0 };
+	const roomDataFlags = {
+		dropHarvestingEnabled: false,
+		basePlanGenerated: false,
+		bootstrappingMode: false,
+		initialized: true,
+		advSpawnSystem: false
+	};
+	const roomDataIndices = {
+		nextHarvesterAssigned: 0,
+		haulerIndex: 0,
+		lastBootstrapRoleIndex: 0,
+		lastNormalRoleIndex: 0
+	};
+	const roomData = {
+		flags: roomDataFlags,
+		indices: roomDataIndices,
+		controllerLevel: 0,
+		numCSites: 0,
+		spawnEnergyLimit: 0
+	};
 
+
+	this.log(`Initializing memory objects...`);
 	if (!this.memory.containers)
 		this.memory.containers = {
 			sourceOne: '' as Id<StructureContainer>,
@@ -794,6 +817,8 @@ Room.prototype.initRoom = function () {
 			mineral: '' as Id<StructureContainer>,
 			prestorage: '' as Id<StructureContainer>
 		};
+	if (this.memory.containers) this.log(`...<memory>.containers initialized!`);
+
 	if (!this.memory.links)
 		this.memory.links = {
 			sourceOne: '' as Id<StructureLink>,
@@ -802,35 +827,29 @@ Room.prototype.initRoom = function () {
 			storage: '' as Id<StructureLink>,
 			remotes: []
 		};
+	if (this.memory.links) this.log(`...<memory>.links initialized!`);
 
 	if (!this.memory.data)
-		this.memory.data = {
-			flags: {
-				dropHarvestingEnabled: false,
-				basePlanGenerated: false,
-				bootstrappingMode: false,
-				initialized: false,
-				advSpawnSystem: false
-			},
-			indices: {
-				nextHarvesterAssigned: 0,
-				haulerIndex: 0,
-				lastBootstrapRoleIndex: 0,
-				lastNormalRoleIndex: 0
-			},
-			controllerLevel: 0,
-			numCSites: 0,
-			spawnEnergyLimit: 0
-		};
+		this.memory.data = { controllerLevel: 0, numCSites: 0, spawnEnergyLimit: 0 };
+
+	if (!this.memory.data.flags)
+		this.memory.data.flags = roomDataFlags;
+	if (!this.memory.data.indices)
+		this.memory.data.indices = roomDataIndices;
+
+	if (this.memory.data && this.memory.data.flags && this.memory.data.indices) this.log(`...<memory>.data initialized!`);
+
 	if (!this.memory.settings)
 		this.memory.settings = {
 			visualSettings: visualSettings,
 			repairSettings: repairSettings,
 			flags: {},
-			basePlanner: {
+			basePlanning: {
 				debug: false
 			}
 		};
+	if (this.memory.settings) this.log(`...<memory>.settings initialized!`);
+
 	if (!this.memory.stats)
 		this.memory.stats = {
 			energyHarvested: 0,
@@ -847,6 +866,8 @@ Room.prototype.initRoom = function () {
 			labStats: labStats,
 			linkStats: linkStats
 		};
+	if (this.memory.stats) this.log(`...<memory>.stats initialized!`);
+
 	if (!this.memory.visuals)
 		this.memory.visuals = {
 			settings: {
@@ -865,12 +886,16 @@ Room.prototype.initRoom = function () {
 			},
 			enableVisuals: false,
 			redAlertOverlay: true,
+			showPlanning: false
 		};
+	if (this.memory.visuals) this.log(`...<memory>.visuals initialized!`);
 
-	if (!this.memory.remoteRooms)
-		this.memory.remoteRooms = {};
+	if (!this.memory.remoteRooms)	this.memory.remoteRooms = {};
+	if (this.memory.remoteRooms) this.log(`...<memory>.remoteRooms initialized!`);
 
+	this.log(`Room Memory fully initialized, caching objects...`);
 	this.cacheObjects();
+	this.log(`Initialization and Object Caching sequence complete!`);
 }
 
 /** Disables all BasePlanner room visuals */
@@ -879,7 +904,7 @@ Room.prototype.toggleBasePlannerVisuals = function (): void {
 	this.memory.visuals.basePlan.visFloodFill = !this.memory.visuals.basePlan.visFloodFill;
 	this.memory.visuals.basePlan.visBasePlan  = !this.memory.visuals.basePlan.visBasePlan;
 	this.memory.visuals.basePlan.visPlanInfo  = !this.memory.visuals.basePlan.visPlanInfo;
-	log(`Base Planner visuals are now set to '${this.memory.visuals.basePlan.visDistTrans}'`);
+	this.log(`Base Planner visuals are now set to '${this.memory.visuals.basePlan.visDistTrans}'`);
 }
 
 /** Initializes room flags with default settings. Sets up various behavior flags for creeps and structures. */
@@ -896,7 +921,7 @@ Room.prototype.initFlags = function () {
 	if (flagSettings.closestConSites === undefined)
 		flagSettings.closestConSites = false;
 
-	log(`Room flags initialized: haulersPickupEnergy(${flagSettings.haulersPickupEnergy}), closestConSites(${flagSettings.closestConSites})`, this);
+	this.log(`Room flags initialized: haulersPickupEnergy(${flagSettings.haulersPickupEnergy}), closestConSites(${flagSettings.closestConSites})`);
 	return;
 }
 

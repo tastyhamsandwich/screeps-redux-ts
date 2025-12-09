@@ -132,6 +132,7 @@ export default class BasePlanner {
 	 * @author randomencounter
 	 */
 	public createPlan(): PlanResult {
+		this.resetState();
 		console.log(`${this.room.link()} Starting base planning...`);
 
 		// Step 1: Generate distance transform
@@ -183,6 +184,20 @@ export default class BasePlanner {
 			controllerArea: this.controllerUpgradeArea,
 			timestamp: Game.time
 		};
+	}
+
+	/**
+	 * Clears cached planning state so repeated runs don't accumulate placements
+	 */
+	private resetState(): void {
+		this.dtGrid = [];
+		this.floodGrid = [];
+		this.startPos = null;
+		this.controllerUpgradeArea = [];
+		this.ramparts = [];
+		this.structurePlacements.clear();
+		this.placementLookup.clear();
+		this.extensionStampTransformCache.clear();
 	}
 
 	/**

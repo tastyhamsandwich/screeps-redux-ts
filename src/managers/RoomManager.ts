@@ -35,13 +35,8 @@ export default class RoomManager {
 
 	constructor(room: Room) {
 		this.room = room;
-
-		// Initialize all required room memory structures
-		this.initializeMemory(); // Partial initialization - other settings added as needed
-		if (!room.memory.data?.flags?.initialized) {
-			this.room.initRoom();
-		}
-		this.room.cacheObjects();
+		this.room.initRoom();// Initialize all required room memory structures
+		//this.initializeMemory(); // Partial initialization - other settings added as needed
 		this.resources = this.scanResources();
 		this.stats = this.gatherStats();
 		this.spawnManager = new SpawnManager(room);
@@ -60,10 +55,15 @@ export default class RoomManager {
 		this.previousCSites = 0;
 		this.currentCSites = 0;
 
-		Memory.globalData.numColonies++;
+		this.room.memory.data.flags.advSpawnSystem = false;
 		this.room.memory.data.flags.initialized = true;
-		this.room.log(`First Time Room Initialization Complete!`);
+		this.room.memory.data.flags.dropHarvestingEnabled = false;
+		this.room.memory.data.flags.bootstrappingMode = false;
+		this.room.memory.data.flags.basePlanGenerated = false;
 
+		Memory.globalData.numColonies++;
+		//this.room.log(`Initialized: ${this.room.memory.data.flags.initialized}!`);
+		this.room.log(`First Time Room Initialization Complete!`);
 	}
 
 	get spawns(): StructureSpawn[] {
@@ -1299,45 +1299,87 @@ export default class RoomManager {
 
 	private initializeMemory() {
 		try {
-			if (!this.room.memory.data)
-				this.room.memory.data = {
-					flags: {
-						dropHarvestingEnabled: false,
-						basePlanGenerated: false,
-						bootstrappingMode: false,
-						initialized: false,
-						advSpawnSystem: false
-					},
-					indices: {
-						nextHarvesterAssigned: 0,
-						haulerIndex: 0,
-						lastBootstrapRoleIndex: 0,
-						lastNormalRoleIndex: 0
-					},
-					controllerLevel: 0,
+			const visualSettings: VisualSettings = { progressInfo: { alignment: 'left', xOffset: 1, yOffsetFactor: 0.6, stroke: '#000000', fontSize: 0.6, color: '' } };
+			const progressInfo = { alignment: 'left', xOffset: 1, yOffsetFactor: 0.6, stroke: '#000000', fontSize: 0.6, color: '' };
+			const roomFlags = { displayCoords: [0, 49], color: '#ff0033', fontSize: 0.4 };
+			const spawnInfo = { alignment: 'right', color: 'white', fontSize: 0.4 };
+			const towerSettings: TowerRepairSettings = { creeps: true, walls: false, ramparts: false, roads: false, others: false, wallLimit: 10, rampartLimit: 10, maxRange: 10 };
+			const repairSettings: RepairSettings = { walls: false, ramparts: false, roads: true, others: true, wallLimit: 10, rampartLimit: 10, towerSettings: towerSettings };
+			const upkeepCosts: UpkeepStats = { roadUpkeepPaid: 0, containerUpkeepPaid: 0, rampartUpkeepPaid: 0 };
+			const linkStats: LinkStats = {
+				controllerLink: { energySent: 0, energyFeesPaid: 0, timesFired: 0 }, sourceLinkOne: { energySent: 0, energyFeesPaid: 0, timesFired: 0 },
+				sourceLinkTwo: { energySent: 0, energyFeesPaid: 0, timesFired: 0 }, storageLink: { energySent: 0, energyFeesPaid: 0, timesFired: 0 }, otherLinks: { energySent: 0, energyFeesPaid: 0, timesFired: 0 }
+			};
+			const mineralsHarvested: MineralStats = { hydrogen: 0, oxygen: 0, utrium: 0, lemergium: 0, keanium: 0, zynthium: 0, catalyst: 0, ghodium: 0 };
+			const compoundStats: CompoundStats = {
+				hydroxide: 0, zynthiumKeanite: 0, utriumLemergite: 0, utriumHydride: 0, utriumOxide: 0, keaniumHydride: 0, keaniumOxide: 0,
+				lemergiumHydride: 0, lemergiumOxide: 0, zynthiumHydride: 0, zynthiumOxide: 0, ghodiumHydride: 0, ghodiumOxide: 0, utriumAcid: 0, utriumAlkalide: 0, keaniumAcid: 0,
+				keaniumAlkalide: 0, lemergiumAcid: 0, lemergiumAlkalide: 0, zynthiumAcid: 0, zynthiumAlkalide: 0, ghodiumAcid: 0, ghodiumAlkalide: 0, catalyzedUtriumAcid: 0,
+				catalyzedUtriumAlkalide: 0, catalyzedKeaniumAcid: 0, catalyzedKeaniumAlkalide: 0, catalyzedLemergiumAcid: 0, catalyzedLemergiumAlkalide: 0, catalyzedZynthiumAcid: 0,
+				catalyzedZynthiumAlkalide: 0, catalyzedGhodiumAcid: 0, catalyzedGhodiumAlkalide: 0
+			};
+			const labStats: LabStats = { compoundsMade: compoundStats, creepsBoosted: 0, boostsUsed: compoundStats, energySpentBoosting: 0 };
+			const roomDataFlags = {
+				dropHarvestingEnabled: false,
+				basePlanGenerated: false,
+				bootstrappingMode: false,
+				initialized: true,
+				advSpawnSystem: false
+			};
+			const roomDataIndices = {
+				nextHarvesterAssigned: 0,
+				haulerIndex: 0,
+				lastBootstrapRoleIndex: 0,
+				lastNormalRoleIndex: 0
+			};
+			const roomData = {
+				flags: roomDataFlags,
+				indices: roomDataIndices,
+				controllerLevel: 0,
+				numCSites: 0,
+				spawnEnergyLimit: 0
+			};
+
+			this.room.log(`Initializing memory objects...`);
+			if (!this.room.memory.containers) {
+				this.room.memory.containers = {
+					sourceOne: '' as Id<StructureContainer>,
+					sourceTwo: '' as Id<StructureContainer>,
+					controller: '' as Id<StructureContainer>,
+					mineral: '' as Id<StructureContainer>,
+					prestorage: '' as Id<StructureContainer>
 				};
-			if (!this.room.memory.visuals)
-				this.room.memory.visuals = {
-					settings: {},
-					basePlan: {
-						visDistTrans: false,
-						visBasePlan: false,
-						visFloodFill: false,
-						visPlanInfo: false,
-						buildProgress: false
-					},
-					enableVisuals: false,
-					redAlertOverlay: true,
-					showPlanning: false
+			}
+			if (this.room.memory.containers) this.room.log(`...<memory>.containers initialized!`);
+
+			if (!this.room.memory.links) {
+				this.room.memory.links = {
+					sourceOne: '' as Id<StructureLink>,
+					sourceTwo: '' as Id<StructureLink>,
+					controller: '' as Id<StructureLink>,
+					storage: '' as Id<StructureLink>,
+					remotes: []
 				};
-			if (!this.room.memory.quotas) this.room.memory.quotas = {};
-			if (!this.room.memory.objects) this.room.memory.objects = {};
-			if (!this.room.memory.containers) this.room.memory.containers = {} as any;
-			if (!this.room.memory.remoteRooms) this.room.memory.remoteRooms = {};
-			if (!this.room.memory.settings)
+			}
+			if (this.room.memory.links) this.room.log(`...<memory>.links initialized!`);
+
+			if (!this.room.memory.data) {
+				this.room.memory.data = roomData;
+			}
+			if (this.room.memory.data) this.room.log(`...<memory>.data initialized!`);
+
+			if (!this.room.memory.settings) {
 				this.room.memory.settings = {
-					basePlanning: { debug: false }
-				} as any;
+					visualSettings: visualSettings,
+					repairSettings: repairSettings,
+					flags: {},
+					basePlanning: {
+						debug: false
+					}
+				};
+			}
+			if (this.room.memory.settings) this.room.log(`...<memory>.settings initialized!`);
+
 			if (!this.room.memory.stats) {
 				this.room.memory.stats = {
 					energyHarvested: 0,
@@ -1346,13 +1388,48 @@ export default class RoomManager {
 					constructionPoints: 0,
 					creepsSpawned: 0,
 					creepPartsSpawned: 0,
+					upkeepCosts: upkeepCosts,
 					controllerLevelReached: 0,
 					npcInvadersKilled: 0,
 					hostilePlayerCreepsKilled: 0,
-					mineralsHarvested: {},
-					labStats: { compoundsMade: {}, creepsBoosted: 0, boostsUsed: {}, energySpentBoosting: 0 }
-				} as any;
+					mineralsHarvested: mineralsHarvested,
+					labStats: labStats,
+					linkStats: linkStats
+				};
 			}
+			if (this.room.memory.stats) this.room.log(`...<memory>.stats initialized!`);
+
+			if (!this.room.memory.visuals) {
+				this.room.memory.visuals = {
+					settings: {
+						spawnInfo: spawnInfo,
+						roomFlags: roomFlags,
+						progressInfo: progressInfo,
+						displayTowerRanges: false,
+						displayControllerUpgradeRange: false
+					},
+					basePlan: {
+						visDistTrans: false,
+						visBasePlan: false,
+						visFloodFill: false,
+						visPlanInfo: false,
+						buildProgress: false,
+					},
+					enableVisuals: false,
+					redAlertOverlay: true,
+					showPlanning: false
+				};
+			}
+			if (this.room.memory.visuals) this.room.log(`...<memory>.visuals initialized!`);
+
+			if (!this.room.memory.remoteRooms) this.room.memory.remoteRooms = {};
+			if (this.room.memory.remoteRooms) this.room.log(`...<memory>.remoteRooms initialized!`);
+
+			this.room.log(`Room Memory fully initialized, caching objects...`);
+			this.room.cacheObjects();
+			this.room.log(`Initializing spawning quotas...`);
+			this.room.initQuotas();
+			this.room.log(`Memory Initialization, Spawn Quotas, and Object Caching sequence complete!`);
 		} catch (e) {
 			console.log(`Execution Error In Function: RoomManager.initializeMemory(${this.room.name}) on Tick ${Game.time}. Error: ${e}`);
 		}
@@ -1364,7 +1441,7 @@ export default class RoomManager {
 			const memPlan = this.room.memory.basePlan?.data as PlanResult | undefined;
 			if (!memPlan) return;
 			this.basePlan = this.hydratePlan(memPlan);
-			this.room.memory.data.centerPoint = { x: this.basePlan.startPos.x, y: this.basePlan.startPos.y } as any;
+			this.room.memory.basePlan!.centerPoint = { x: this.basePlan.startPos.x, y: this.basePlan.startPos.y } as any;
 		} catch (e) {
 			console.log(`Execution Error In Function: RoomManager.loadBasePlanFromMemory(${this.room.name}) on Tick ${Game.time}. Error: ${e}`);
 		}
@@ -1380,12 +1457,12 @@ export default class RoomManager {
 			}
 			if (!this.basePlanner) this.basePlanner = new BasePlanner(this.room);
 			const plan = this.basePlanner.createPlan();
-			if (plan) {
-				this.basePlan = plan;
-				this.room.memory.data.centerPoint = { x: plan.startPos.x, y: plan.startPos.y } as any;
-				this.savePlanToMemory(plan);
-				this.room.log(`Generated base plan at (${plan.startPos.x},${plan.startPos.y})`);
-			}
+			if (!plan) return;
+
+			this.basePlan = plan;
+			this.savePlanToMemory(plan);
+			this.room.memory.data.flags.basePlanGenerated = true;
+			this.room.log(`Generated base plan at (${plan.startPos.x},${plan.startPos.y})`);
 		} catch (e) {
 			console.log(`Execution Error In Function: RoomManager.ensureBasePlanGenerated(${this.room.name}) on Tick ${Game.time}. Error: ${e}`);
 		}
