@@ -93,6 +93,11 @@ const STRUCTURE_LIMITS: { [key in BuildableStructureConstant]?: number[] } = {
 	[STRUCTURE_FACTORY]: [0, 0, 0, 0, 0, 0, 0, 1, 1]
 };
 
+type CachedStampTransform = {
+	transform: StampTransformOptions;
+	placements: Array<{ structure: BuildableStructureConstant; pos: Pos }>;
+};
+
 /**
  * Advanced base planner that uses distance transform, flood fill, and minimum cut algorithms
  * to generate optimized base layouts
@@ -109,6 +114,7 @@ export default class BasePlanner {
 	private structurePlacements: Map<string, StructurePlacement> = new Map();
 	private extensionStampCatalog: ParsedStamp[] = extensionParsedStamps;
 	private placementLookup: Map<string, StructurePlacement[]> = new Map();
+	private extensionStampTransformCache: Map<string, CachedStampTransform[]> = new Map();
 
 	/**
 	 * Creates a new BasePlanner instance for the given room
@@ -599,7 +605,7 @@ export default class BasePlanner {
 	): { extensions: Pos[]; roads: Pos[] } | null {
 		if (!this.startPos) return null;
 
-		const searchRadius = 12;
+		const searchRadius = Memory.globalSettings?.basePlanner?.ANCHOR_RADIUS ?? 8;
 		const anchors: Pos[] = [];
 		for (let x = Math.max(1, this.startPos.x - searchRadius); x <= Math.min(48, this.startPos.x + searchRadius); x++) {
 			for (let y = Math.max(1, this.startPos.y - searchRadius); y <= Math.min(48, this.startPos.y + searchRadius); y++) {
@@ -617,18 +623,18 @@ export default class BasePlanner {
 			return da - db;
 		});
 
+		const MAX_ANCHORS = 200;
+		if (anchors.length > MAX_ANCHORS) anchors.length = MAX_ANCHORS;
+
 		const transforms: StampTransformOptions[] = [];
 		for (let rot = 0; rot < 4; rot++) {
-			for (const mirrorHoriz of [false, true]) {
-				for (const mirrorVert of [false, true]) {
-					transforms.push({ rotate90: rot as 0 | 1 | 2 | 3, mirrorHoriz, mirrorVert });
-				}
-			}
+			transforms.push({ rotate90: rot as 0 | 1 | 2 | 3, mirrorHoriz: false, mirrorVert: false });
 		}
 
 		for (const entry of catalog) {
 			if (entry.extCount <= 0 || entry.extCount > remaining) continue;
 
+			const cachedTransforms = this.getCachedStampTransforms(entry.stamp, transforms);
 			let best: {
 				extensions: Pos[];
 				roads: Pos[];
@@ -637,11 +643,10 @@ export default class BasePlanner {
 			} | null = null;
 
 			for (const anchor of anchors) {
-				for (const transform of transforms) {
+				for (const cached of cachedTransforms) {
 					const evaluated = this.evaluateExtensionStampPlacement(
-						entry.stamp,
+						cached.placements,
 						anchor,
-						transform,
 						existingExtensions,
 						existingRoads,
 						lookup
@@ -667,28 +672,28 @@ export default class BasePlanner {
 	}
 
 	private evaluateExtensionStampPlacement(
-		stamp: ParsedStamp,
+		placements: Array<{ structure: BuildableStructureConstant; pos: Pos }>,
 		anchor: Pos,
-		transform: StampTransformOptions,
 		existingExtensions: Set<string>,
 		existingRoads: Set<string>,
 		lookup: Map<string, StructurePlacement[]>
 	): { extensions: Pos[]; roads: Pos[]; roadOverlap: number; newRoads: number } | null {
-		const placements = jsonToConstant(stamp, { ...transform, anchor, buildRoads: true });
 		const extensions: Pos[] = [];
 		const roads: Pos[] = [];
 		let roadOverlap = 0;
 		let newRoads = 0;
 
 		for (const placement of placements) {
-			const { x, y } = placement.pos;
+			const x = anchor.x + placement.pos.x;
+			const y = anchor.y + placement.pos.y;
 
 			// Bounds and terrain
 			if (x < 1 || x > 48 || y < 1 || y > 48) return null;
 			if (this.terrain.get(x, y) === TERRAIN_MASK_WALL) return null;
 
 			const key = `${x},${y}`;
-			const planned = this.findPlannedStructureAt(placement.pos, lookup);
+			const absolutePos = { x, y };
+			const planned = this.findPlannedStructureAt(absolutePos, lookup);
 
 			if (placement.structure === STRUCTURE_EXTENSION) {
 				// avoid conflicts
@@ -696,7 +701,7 @@ export default class BasePlanner {
 				if (existingRoads.has(key)) return null;
 
 				// adjacency to previous stamps: no more than 2 cardinal neighbors already placed
-				if (this.countAdjacentExtensions(placement.pos, existingExtensions) > 2) return null;
+				if (this.countAdjacentExtensions(absolutePos, existingExtensions) > 2) return null;
 
 				extensions.push({ x, y });
 			} else if (placement.structure === STRUCTURE_ROAD) {
@@ -716,6 +721,23 @@ export default class BasePlanner {
 		if (extensions.length === 0) return null;
 
 		return { extensions, roads, roadOverlap, newRoads };
+	}
+
+	private getCachedStampTransforms(stamp: ParsedStamp, transforms: StampTransformOptions[]): CachedStampTransform[] {
+		const transformKey = transforms
+			.map(t => `${t.rotate90 ?? 0}-${t.mirrorHoriz ? 1 : 0}-${t.mirrorVert ? 1 : 0}`)
+			.join('|');
+		const key = `${stamp.name ?? 'stamp'}|${stamp.stampWidth ?? 0}x${stamp.stampHeight ?? 0}|${transformKey}`;
+		const cached = this.extensionStampTransformCache.get(key);
+		if (cached) return cached;
+
+		const computed = transforms.map(transform => ({
+			transform,
+			placements: jsonToConstant(stamp, { ...transform, anchor: { x: 0, y: 0 }, buildRoads: true })
+		}));
+
+		this.extensionStampTransformCache.set(key, computed);
+		return computed;
 	}
 
 	private countAdjacentExtensions(pos: Pos, existingExtensions: Set<string>): number {
