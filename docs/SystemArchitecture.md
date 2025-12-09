@@ -14,26 +14,26 @@ The entry point that orchestrates all operations:
 export const loop = () => {
     // Global initialization
     if (!Memory.globalSettings) global.initGlobal();
-    
+
     // Tick timing calculation
     calcTickTime();
-    
+
     // Creep memory cleanup
     for (const name in Memory.creeps) {
         if (!(name in Game.creeps)) {
             delete Memory.creeps[name];
         }
     }
-    
+
     // Execute creep AI
     for (const name in Game.creeps) {
         const creep = Game.creeps[name];
         // Role-based dispatch to CreepAI modules
     }
-    
+
     // Room management
     _.forEach(Game.rooms, room => {
-        const manager = global.roomManagers[room.name] 
+        const manager = global.roomManagers[room.name]
             || new RoomManager(room);
         manager.run();
     });
@@ -60,9 +60,9 @@ The central controller for all room-level operations:
 class RoomManager {
     private room: Room;
     private resources: RoomResources;
-    private stats: RoomStats;
+    private stats: RoomManagerStats;
     private spawnManager: SpawnManager;
-    
+
     run(): void {
         // Update resources and stats
         // Run spawn manager
@@ -97,7 +97,7 @@ class SpawnManager {
     private spawnQueue: SpawnRequest[];
     private scheduledSpawns: ScheduledSpawn[];
     private energyForecast: EnergyForecast;
-    
+
     run(): void {
         // Calculate energy forecast
         // Update predictive spawns
@@ -442,7 +442,7 @@ Memory {
                 deferred: SpawnRequest[],
                 lastProcessed: number
             },
-            stats: ColonyStats,
+            stats: RoomStats,
             outposts: OutpostData,
             settings: RoomSettings,
             flags: RoomFlags
@@ -497,8 +497,8 @@ private updateBootstrapState(): void {
     const level = this.stats.controllerLevel;
     const hasContainer = this.resources.containers.length > 0;
     const creepCount = this.room.find(FIND_MY_CREEPS).length;
-    
-    this.room.memory.flags.bootstrap = 
+
+    this.room.memory.flags.bootstrap =
         (level === 1 && creepCount < 5 && !hasContainer);
 }
 ```
@@ -516,4 +516,4 @@ The architecture supports easy extension:
 2. **New Managers**: Create class implementing `run()` method
 3. **New Prototype Methods**: Add to appropriate prototype file
 4. **New Infrastructure**: Extend RoomManager planning methods
-5. **New Statistics**: Add to `ColonyStats` interface
+5. **New Statistics**: Add to `RoomStats` interface

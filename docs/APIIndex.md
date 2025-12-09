@@ -26,12 +26,12 @@ Central controller for all room-level operations.
 **Public Methods:**
 - `run(): void`
 - `getResources(): RoomResources`
-- `getStats(): RoomStats`
+- `getStats(): RoomManagerStats`
 - `getSpawnManager(): SpawnManager`
 
 **Private Methods:**
 - `scanResources(): RoomResources`
-- `gatherStats(): RoomStats`
+- `gatherStats(): RoomManagerStats`
 - `planSourceContainers(): void`
 - `planControllerContainer(): void`
 - `planMineralContainer(): void`
@@ -161,7 +161,7 @@ interface RoomMemory {
     };
     settings: RoomSettings;
     data: { [key: string]: any };
-    stats: ColonyStats;
+    stats: RoomStats;
     availableCreeps: string[];
     outposts: {
         list: { [key: string]: OutpostData };
@@ -258,9 +258,9 @@ interface RoomFlags {
 
 ### Statistics Interfaces
 
-#### ColonyStats
+#### RoomStats
 ```typescript
-interface ColonyStats {
+interface RoomStats {
     energyHarvested: number;
     controlPoints: number;
     constructionPoints: number;

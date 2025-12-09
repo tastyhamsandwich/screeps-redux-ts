@@ -8,13 +8,13 @@ The `RoomManager` class is the central controller for all room-level operations,
 class RoomManager {
     private room: Room;
     private resources: RoomResources;
-    private stats: RoomStats;
+    private stats: RoomManagerStats;
     private spawnManager: SpawnManager;
-    
+
     constructor(room: Room);
     run(): void;
     getResources(): RoomResources;
-    getStats(): RoomStats;
+    getStats(): RoomManagerStats;
     getSpawnManager(): SpawnManager;
 }
 ```
@@ -88,7 +88,7 @@ Returns current room resources snapshot.
 }
 ```
 
-### `getStats(): RoomStats`
+### `getStats(): RoomManagerStats`
 
 Returns current room statistics.
 
@@ -126,7 +126,7 @@ Scans the room for all relevant structures and resources.
 
 **Called:** Every tick in `run()`
 
-#### `gatherStats(): RoomStats`
+#### `gatherStats(): RoomManagerStats`
 
 Gathers current room statistics including damaged structures.
 
@@ -236,7 +236,7 @@ Determines if additional harvesters are needed based on work parts per source.
 ```typescript
 // Each source needs 5 WORK parts (generates 10 energy/tick)
 const neededWorkParts = sources.length * 5;
-const totalWorkParts = harvesters.reduce((sum, h) => 
+const totalWorkParts = harvesters.reduce((sum, h) =>
     sum + h.getActiveBodyparts(WORK), 0);
 return totalWorkParts < neededWorkParts;
 ```
@@ -298,8 +298,8 @@ Determines if room should operate in bootstrap mode.
 
 **Bootstrap Conditions:**
 ```typescript
-RCL === 1 && 
-creepCount < 5 && 
+RCL === 1 &&
+creepCount < 5 &&
 !hasContainer
 ```
 
