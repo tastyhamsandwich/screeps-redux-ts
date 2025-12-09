@@ -366,13 +366,13 @@ export function randomColorAsInt(): number { // Random color returned as INTEGER
 export function initGlobal(eraseAll: boolean = false): boolean {
 
 	// Set parameter flag to 'true' to ensure Game Memory is cleared prior to init
-	if (eraseAll) {
-		for (const key in Memory) {
-			if (Object.prototype.hasOwnProperty.call(Memory, key))
-				delete Memory[key];
-		}
-		log(`Zeroed out Game Memory object in advance of Global Initialization!`);
-	} else log(`Executing Global Initialization without pre-clearing Game Memory.`);
+	//if (eraseAll) {
+	//for (const key in Memory) {
+	//		if (Object.prototype.hasOwnProperty.call(Memory, key))
+	//			delete Memory[key];
+	//}
+	log(`Zeroed out Game Memory object in advance of Global Initialization!`);
+	//} else log(`Executing Global Initialization without pre-clearing Game Memory.`);
 
 	if (!Memory.globalSettings)
 		Memory.globalSettings = {

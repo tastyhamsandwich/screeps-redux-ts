@@ -55,6 +55,10 @@ export function resetGame() {
 }
 
 /** Wipe Memory after respawn */
-export default function resetOnRespawn() {
-	if (hasRespawned()) resetGame()
+export default function resetOnRespawn(): boolean {
+	if (hasRespawned()) {
+		resetGame();
+		return true;
+	} else return false;
+
 }
