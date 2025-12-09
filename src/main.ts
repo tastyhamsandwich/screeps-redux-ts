@@ -52,8 +52,7 @@ let tickCount = 0;
 
 module.exports.loop = function() {
 	try {
-		resetOnRespawn();
-		if (Memory?.globalData?.onBirthInitComplete === undefined || Memory?.globalData?.onBirthInitComplete === false)
+		if (resetOnRespawn())
 			FUNC.initGlobal();
 
 		FUNC.calcTickTime();
@@ -253,7 +252,7 @@ module.exports.loop = function() {
 						FUNC.displayEnergyCapacity(room);
 						FUNC.displayEnergyStorage(room);
 
-						if (room.controller) {
+						/* if (room.controller) {
 							const controllerLevel = room.controller.level;
 							const storedLevel = room.memory.data.controllerLevel;
 
@@ -261,14 +260,14 @@ module.exports.loop = function() {
 								room.log(`Update C.Level: ${room.controller!.level !== room.memory.data.controllerLevel} | Update C.StatsLevel: ${room.controller!.level > room.memory.stats.controllerLevelReached}`);
 							if (storedLevel !== controllerLevel) {
 								room.memory.data.controllerLevel = room.controller.level;
-								room.manager?.clearRCL();
+								//room.manager?.clearRCL();
 								room.log(`Updated Controller Level! (was ${room.controller!.level - 1}, now ${room.controller!.level})`);
 							}
 							if (controllerLevel > storedLevel) {
 								room.memory.stats.controllerLevelReached = room.controller.level;
 								room.log(`New highest controller for the room reached!`);
 							}
-						}
+						}*/
 
 					} catch (e) {
 						console.log(`Execution Error In Function: RoomManager.run(${roomName}) on Tick ${Game.time}. Error: ${e}`);

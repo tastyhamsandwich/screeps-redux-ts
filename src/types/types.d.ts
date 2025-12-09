@@ -636,6 +636,7 @@ namespace NodeJS {
 		timestamp: number;
 		dtGrid: number[][];
 		floodFill: number[][];
+		maxPlannedRCL?: RCLLevel;
 	}
 
 	interface StampTemplate {

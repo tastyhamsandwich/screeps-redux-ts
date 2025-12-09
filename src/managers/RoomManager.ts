@@ -1450,19 +1450,27 @@ export default class RoomManager {
 	/** Ensure a base plan exists in memory and on this instance */
 	private ensureBasePlanGenerated(): void {
 		try {
-			if (this.basePlan) return;
+			const controllerLevel = this.room.controller?.level ?? 0;
+			const targetMaxRCL = Math.min(8, (controllerLevel || 0) + 1) as RCLLevel;
+
+			// If we already have a plan that goes far enough, reuse it
+			if (this.basePlan && (this.basePlan as any).maxPlannedRCL >= targetMaxRCL) return;
 			if (this.room.memory.basePlan?.data) {
-				this.basePlan = this.hydratePlan(this.room.memory.basePlan.data as PlanResult);
-				return;
+				const hydrated = this.hydratePlan(this.room.memory.basePlan.data as PlanResult);
+				if ((hydrated as any).maxPlannedRCL >= targetMaxRCL) {
+					this.basePlan = hydrated;
+					return;
+				}
 			}
+
 			if (!this.basePlanner) this.basePlanner = new BasePlanner(this.room);
-			const plan = this.basePlanner.createPlan();
+			const plan = this.basePlanner.createPlan(targetMaxRCL);
 			if (!plan) return;
 
 			this.basePlan = plan;
 			this.savePlanToMemory(plan);
 			this.room.memory.data.flags.basePlanGenerated = true;
-			this.room.log(`Generated base plan at (${plan.startPos.x},${plan.startPos.y})`);
+			this.room.log(`Generated base plan at (${plan.startPos.x},${plan.startPos.y}) for RCL<=${plan.maxPlannedRCL}`);
 		} catch (e) {
 			console.log(`Execution Error In Function: RoomManager.ensureBasePlanGenerated(${this.room.name}) on Tick ${Game.time}. Error: ${e}`);
 		}
@@ -1480,7 +1488,8 @@ export default class RoomManager {
 			...plan,
 			startPos: { x: plan.startPos.x, y: plan.startPos.y, roomName: this.room.name } as any,
 			controllerArea: plan.controllerArea.map(p => ({ x: p.x, y: p.y, roomName: p.roomName } as any)),
-			ramparts: plan.ramparts.map(p => ({ x: p.x, y: p.y, roomName: p.roomName } as any))
+			ramparts: plan.ramparts.map(p => ({ x: p.x, y: p.y, roomName: p.roomName } as any)),
+			maxPlannedRCL: plan.maxPlannedRCL
 		};
 
 		this.room.memory.basePlan = {

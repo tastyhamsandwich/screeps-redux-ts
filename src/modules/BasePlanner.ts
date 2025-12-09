@@ -108,6 +108,7 @@ export default class BasePlanner {
 	private terrain: RoomTerrain;
 	public dtGrid: number[][] = [];
 	public floodGrid: number[][] = [];
+	private maxRCL: RCLLevel = 8;
 	private startPos: RoomPosition | null = null;
 	private controllerUpgradeArea: RoomPosition[] = [];
 	private ramparts: RoomPosition[] = [];
@@ -131,8 +132,9 @@ export default class BasePlanner {
 	 * @returns Complete base plan with RCL-specific build orders
 	 * @author randomencounter
 	 */
-	public createPlan(): PlanResult {
+	public createPlan(maxRCL: RCLLevel = 8): PlanResult {
 		this.resetState();
+		this.maxRCL = maxRCL;
 		console.log(`${this.room.link()} Starting base planning...`);
 
 		// Step 1: Generate distance transform
@@ -182,7 +184,8 @@ export default class BasePlanner {
 			rclSchedule: schedule,
 			ramparts: this.ramparts,
 			controllerArea: this.controllerUpgradeArea,
-			timestamp: Game.time
+			timestamp: Game.time,
+			maxPlannedRCL: this.maxRCL
 		};
 	}
 
@@ -552,6 +555,7 @@ export default class BasePlanner {
 			.sort((a, b) => b.extCount - a.extCount);
 
 		for (const rcl of [2, 3, 4, 5, 6, 7, 8]) {
+			if (rcl > this.maxRCL) break;
 			let remaining = extensionsPerRCL[rcl];
 			if (remaining <= 0) continue;
 
@@ -1175,6 +1179,7 @@ export default class BasePlanner {
 	 */
 	private positionLabs(): void {
 		if (!this.startPos) return;
+		if (this.maxRCL < 6) return;
 
 		// Find suitable location for lab stamp
 		let bestPos: RoomPosition | null = null;
@@ -1343,6 +1348,7 @@ export default class BasePlanner {
 	 */
 	private optimizeRamparts(): void {
 		if (!this.startPos) return;
+		if (this.maxRCL < 3) return;
 
 		// Get core positions to protect
 		const coresToProtect: RoomPosition[] = [];
@@ -1382,7 +1388,8 @@ export default class BasePlanner {
 					this.structurePlacements.set(key, {
 						pos: { x: pos.x, y: pos.y },
 						structure: STRUCTURE_RAMPART,
-						priority: 8
+						priority: 8,
+						meta: { minRCL: 3 }
 					});
 
 					// Also place roads on ramparts for mobility
@@ -1391,7 +1398,8 @@ export default class BasePlanner {
 						this.structurePlacements.set(roadKey, {
 							pos: { x: pos.x, y: pos.y },
 							structure: STRUCTURE_ROAD,
-							priority: 9
+							priority: 9,
+							meta: { minRCL: 3 }
 						});
 					}
 				}
@@ -1408,6 +1416,7 @@ export default class BasePlanner {
 	 */
 	private placeTowers(): void {
 		if (!this.startPos) return;
+		if (this.maxRCL < 3) return;
 
 		const towerCount = 6; // RCL 8 max
 		const towers: RoomPosition[] = [];
@@ -1477,7 +1486,8 @@ export default class BasePlanner {
 			this.structurePlacements.set(key, {
 				pos: { x: tower.pos.x, y: tower.pos.y },
 				structure: STRUCTURE_TOWER,
-				priority: 2
+				priority: 2,
+				meta: { minRCL: 3 }
 			});
 
 			towers.push(tower.pos);
@@ -1491,14 +1501,16 @@ export default class BasePlanner {
 	 * @author randomencounter
 	 */
 	private placeRemainingStructures(): void {
+		if (this.maxRCL < 4) return; // nothing beyond early game
+
 		// Observer - place anywhere within base
-		this.placeStructureNearCore(STRUCTURE_OBSERVER, 15);
+		if (this.maxRCL >= 8) this.placeStructureNearCore(STRUCTURE_OBSERVER, 15);
 
 		// Additional spawns
-		this.placeAdditionalSpawns();
+		if (this.maxRCL >= 5) this.placeAdditionalSpawns();
 
 		// Additional links
-		this.placeAdditionalLinks();
+		if (this.maxRCL >= 5) this.placeAdditionalLinks();
 	}
 
 	/**
@@ -1515,6 +1527,7 @@ export default class BasePlanner {
 		const structureCounts: Map<BuildableStructureConstant, StructurePlacement[]> = new Map();
 
 		for (const [_, placement] of this.structurePlacements) {
+			if (placement.meta?.minRCL && placement.meta.minRCL > this.maxRCL) continue;
 			const type = placement.structure as BuildableStructureConstant;
 			if (!structureCounts.has(type)) {
 				structureCounts.set(type, []);
@@ -1532,16 +1545,23 @@ export default class BasePlanner {
 				console.log(`${this.room.link()} WARNING: No structure limits found for ${type}`);
 				continue;
 			}
+			// Skip structures whose earliest allowable RCL is above our planning horizon
+			const earliestAllowed = limits.findIndex(lim => lim > 0);
+			if (earliestAllowed > this.maxRCL && earliestAllowed !== -1) {
+				continue;
+			}
 
 			// Track how many of this structure type have been assigned to each RCL
 			const assignedPerRCL: number[] = [0, 0, 0, 0, 0, 0, 0, 0, 0]; // index 0-8
 
 			for (const placement of placements) {
 				const minRCL = placement.meta?.minRCL || 1;
+				if (minRCL > this.maxRCL) continue;
 
 				// Find the earliest RCL where this can be placed
 				let placed = false;
 				for (let rcl = minRCL; rcl <= 8; rcl++) {
+					if (rcl > this.maxRCL) break;
 					const limit = limits[rcl];
 					const alreadyAssigned = assignedPerRCL[rcl];
 
@@ -1605,6 +1625,7 @@ export default class BasePlanner {
 				if (upgradeTo === STRUCTURE_LINK) {
 					// Controller link at RCL 5, source links at RCL 6
 					const rcl = placement.meta.type === 'controller' ? 5 : 6;
+					if (rcl > this.maxRCL) continue;
 					const limits = STRUCTURE_LIMITS[STRUCTURE_LINK];
 
 					if (limits && limits[rcl] > 0) {
@@ -1617,7 +1638,7 @@ export default class BasePlanner {
 					}
 				} else if (upgradeTo === STRUCTURE_STORAGE && STRUCTURE_LIMITS[STRUCTURE_STORAGE]) {
 					// Storage at RCL 4
-					if (STRUCTURE_LIMITS[STRUCTURE_STORAGE][4] > 0) {
+					if (STRUCTURE_LIMITS[STRUCTURE_STORAGE][4] > 0 && this.maxRCL >= 4) {
 						schedule[4].push({
 							pos: placement.pos,
 							structure: STRUCTURE_STORAGE,
@@ -1632,6 +1653,7 @@ export default class BasePlanner {
 		// Handle storage location with container placeholder
 		const storage = this.getPlacementByType(STRUCTURE_STORAGE);
 		if (storage) {
+			if (this.maxRCL < 1) return;
 			// Place container one tile to the right of storage location for RCL 1-3
 			const containerPlacement: StructurePlacement = {
 				pos: { x: storage.pos.x + 1, y: storage.pos.y },
@@ -1732,6 +1754,13 @@ export default class BasePlanner {
 	 */
 	private placeStructureNearCore(structure: StructureConstant, maxRange: number): void {
 		if (!this.startPos) return;
+		if (structure === STRUCTURE_OBSERVER && this.maxRCL < 8) return;
+		if (structure === STRUCTURE_POWER_SPAWN && this.maxRCL < 8) return;
+		if (structure === STRUCTURE_NUKER && this.maxRCL < 8) return;
+		if (structure === STRUCTURE_FACTORY && this.maxRCL < 7) return;
+		if (structure === STRUCTURE_TERMINAL && this.maxRCL < 6) return;
+		if (structure === STRUCTURE_LINK && this.maxRCL < 5) return;
+		if (structure === STRUCTURE_TOWER && this.maxRCL < 3) return;
 
 		for (let range = 3; range <= maxRange; range++) {
 			for (let dx = -range; dx <= range; dx++) {
