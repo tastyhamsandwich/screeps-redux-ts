@@ -128,7 +128,6 @@ export default class RoomManager {
 			const ready_for_drop_harvesting = Boolean(room.containerOne && room.containerTwo && room.energyCapacityAvailable >= 550 && !room.memory.data.flags.dropHarvestingEnabled);
 			const storage_built = Boolean(room.storage && room.prestorage && room.controller && room.controller.level === 4 && room.prestorage.store.getUsedCapacity() === 0);
 			const controller_upgraded = Boolean(this.room.controller && roomMem.data.controllerLevel !== rcl);
-			this.room.log(`roomMem.controllerLevel (${this.room.memory.data.controllerLevel}) | RCL (${this.room.controller!.level}) | controller_upgraded: ${controller_upgraded}`);
 
 			if (controller_upgraded)
 				this.handleRCLUpgrade();
@@ -181,6 +180,7 @@ export default class RoomManager {
 
 			this.updateConstructionSites();
 			this.manageBuilderQuota();
+			this.manageUpgraderQuota();
 
 			// Run task management for workers
 			//this.TaskManager.run();
@@ -1507,12 +1507,142 @@ export default class RoomManager {
 	}
 
 	private manageBuilderQuota(): void {
-		if (this.currentCSites > 3 && this.room.memory.quotas.builder < 3)
+		const quotas = this.room.memory.quotas;
+
+		if (this.currentCSites > 3 && this.room.memory.quotas.builder < 3) {
+			if (quotas.builder === 3) return;
 			this.room.setQuota('builder', 3);
-		else if (this.currentCSites > 5 && this.room.memory.quotas.builder < 5)
+			this.room.log(`Updated Builder quota based on moderate amount of CSites.`);
+		}
+		else if (this.currentCSites > 5 && this.room.memory.quotas.builder < 5) {
+			if (quotas.builder === 5) return;
 			this.room.setQuota('builder', 5);
-		else if (this.room.memory.quotas.builder > 1)
+			this.room.log(`Updated Builder quota based on large number of CSites.`);
+		}
+		else if (this.currentCSites === 0 && this.room.memory.quotas.builder !== 0) {
+			if (quotas.builder === 0) return;
+			this.room.setQuota('builder', 0);
+			this.room.log(`Updated Builder quota based on lack of CSites.`);
+		}
+		else if (this.room.memory.quotas.builder > 1) {
+			if (quotas.builder === 1) return;
 			this.room.setQuota('builder', 1);
+			this.room.log(`Updated Builder quota based on low number of CSites.`);
+		}
+		else return;
 	}
 
+	private manageUpgraderQuota(): void {
+		// TODO update live energy income/expenditure analysis into algorithm
+		const quotas = this.room.memory.quotas;
+		if (this.currentCSites === 0 && quotas.builder < 3 && quotas.upgrader !== 5) {
+			if (quotas.upgrader === 5) return;
+			this.room.setQuota('upgrader', 5);
+			this.room.log(`Updated Upgrader quota based on lack of CSites.`);
+		}
+		else if (this.currentCSites > 3 && quotas.builder > 1 && quotas.upgrader !== 2) {
+			if (quotas.upgrader === 2) return;
+			this.room.setQuota('upgrader', 2);
+			this.room.log(`Updated Upgrader quota based on large number of CSites.`);
+		}
+		else if (this.currentCSites < 3 && this.currentCSites > 0 && quotas.upgrader !== 3) {
+			if (quotas.upgrader === 3) return;
+			this.room.setQuota('upgrader', 3);
+			this.room.log(`Updated Upgrader quota based on low number of CSites.`);
+		}
+		else return;
+	}
+
+	/** Attempt to place construciton sites for designated RCL schedule. If no parameter is provided, defaults to current RCL. Returns if no RCL schedule is present.
+	 * @param rcl The RCL to use for base plan placements
+	 * @example
+	 * // Places structures acording to RCL 5 building list
+	 * Game.rooms.W1N1.manager.attemptBaseUpgrades(5);
+	 * // Places structures using the current RCL
+	 * Game.rooms.E2S2.manager.attemptBaseUpgrades();
+	 */
+	public attemptBaseUpgrades(rcl: number = this.room.memory.data.controllerLevel): void {
+
+		// Object shape
+		type structureEntry = {
+			pos: {x: number, y: number},
+			structure: string,
+			priority?: number,
+			meta?: { [key: string]: any }
+		}
+
+		// Return if no base plan
+		if (!this.room.memory.basePlan) return;
+
+		// Save RCL Schedule to working object
+		const structureList: structureEntry[] = this.room.memory.basePlan.data.rclSchedule[rcl];
+
+		// Helper method for converting structure as string to BuildableStructureConstant
+		const structureStringToConstant = (string: string): BuildableStructureConstant => {
+			switch (string) {
+				case 'road':
+					return STRUCTURE_ROAD;
+				case 'extension':
+					return STRUCTURE_EXTENSION;
+				case 'spawn':
+					return STRUCTURE_SPAWN;
+				case 'tower':
+					return STRUCTURE_TOWER;
+				case 'storage':
+					return STRUCTURE_STORAGE;
+				case 'link':
+					return STRUCTURE_LINK;
+				case 'terminal':
+					return STRUCTURE_TERMINAL;
+				case 'lab':
+					return STRUCTURE_LAB;
+				case 'container':
+					return STRUCTURE_CONTAINER;
+				case 'nuker':
+					return STRUCTURE_NUKER;
+				case 'factory':
+					return STRUCTURE_FACTORY;
+				case 'observer':
+					return STRUCTURE_OBSERVER;
+				case 'powerSpawn':
+					return STRUCTURE_POWER_SPAWN;
+				case 'extractor':
+					return STRUCTURE_EXTRACTOR;
+				case 'rampart':
+					return STRUCTURE_RAMPART;
+				case 'constructedWall':
+					return STRUCTURE_WALL;
+				default:
+					throw new Error(`Unknown structure type: ${string}`);
+			}
+		}
+
+		// Sort by priority, low numbers built before higher ones
+		structureList.sort((a, b) => {
+			const aPri = a.priority ?? 10;
+			const bPri = b.priority ?? 10;
+			return aPri - bPri
+		});
+
+		const totalSites = structureList.length;
+		let placedSuccessfully = 0;
+		let placedWithErrors = 0;
+
+		// Attempt to place construction sites and count successes/failures
+		for (const structEntry of structureList) {
+			const structPos = new RoomPosition(structEntry.pos.x, structEntry.pos.y, this.room.name);
+			const structConst = structureStringToConstant(structEntry.structure);
+			const cSite = this.room.createConstructionSite(structPos, structConst);
+
+			if (cSite === OK) {
+				placedSuccessfully++;
+			} else {
+				this.room.log(`Error placing cSite for '${structConst}' at positon x${structPos.x},y${structPos.y}: ${getReturnCode(cSite)}`);
+				placedWithErrors++;
+			}
+		}
+
+		this.room.log(`All consruction sites placed according to RCL Schedule for RCL${rcl}. ${placedSuccessfully} placed sucessfully, ${placedWithErrors} encoutnered errors.`);
+		return;
+	}
 }
