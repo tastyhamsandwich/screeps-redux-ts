@@ -62,8 +62,7 @@ RoomPosition.prototype.getOpenPositions = function (): RoomPosition[] {
 
 /** Returns just the number of unblocked tiles around the caller's RoomPosition. */
 RoomPosition.prototype.getNumOpenPositions = function (): number {
-	const freePos = this.getOpenPositions();
-	return freePos.length;
+	return this.getOpenPositions().length;
 }
 
 /** Invokes a console log output that provides the caller's current room and position in the header. */

@@ -93,7 +93,7 @@ namespace NodeJS {
 		log(message: string, critical?: boolean): void;
 		getSourcePositions(sourceID: string): RoomPosition[];
 		link(): string;
-		cacheObjects(): void;
+		cacheObjects(logOutput?: boolean): void;
 		initQuotas(): void;
 		enableDropHarvesting(): void;
 		initRoom(): void;

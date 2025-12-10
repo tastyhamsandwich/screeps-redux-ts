@@ -471,7 +471,12 @@ Room.prototype.link = function(): string {
 /** Caches all room objects (sources, minerals, structures, etc.) into memory for faster access. Organizes objects by type and updates relevant container assignments.
  * @returns true when caching is complete
  */
-Room.prototype.cacheObjects = function () {
+Room.prototype.cacheObjects = function (logOutput: boolean = false) {
+
+	if (Memory.globalSettings.debug && Memory.globalSettings.debug.dataDebug) {
+		console.log(`--||TICK Local<${global.tickCount}> Server<${Game.time}>||-- room.cacheObjects() invocation stack trace is as follows:`);
+		console.log(new Error().stack);
+	}
 
 	// Initialize memory structures
 	if (!this.memory.objects) this.memory.objects = {};
@@ -492,7 +497,7 @@ Room.prototype.cacheObjects = function () {
 			remotes: []
 		};
 
-	log('Caching room objects...', this);
+	if (logOutput) this.log('Caching room objects...');
 
 	/** Helper function to cache objects */
 	const cacheObjectArray = (objects: (RoomObject & { id: Id<any> })[], key: string, isSingular = false) => {
@@ -511,7 +516,7 @@ Room.prototype.cacheObjects = function () {
 		this.memory.objects[key] = isSingular ? [ids[0]] : ids;
 
 		const count = isSingular ? 1 : objects.length;
-		log(`Cached ${count} ${formatLogName(key)}${count > 1 ? 's' : ''}.`, this);
+		if (logOutput) this.log(`Cached ${count} ${formatLogName(key)}${count > 1 ? 's' : ''}.`);
 		return ids;
 	};
 
@@ -537,7 +542,7 @@ Room.prototype.cacheObjects = function () {
 	// Find and cache controller
 	if (this.controller) {
 		this.memory.objects.controller = [this.controller.id];
-		this.log('Cached 1 controller.');
+		if (logOutput) this.log('Cached 1 controller.');
 	}
 
 	// Find structures more efficiently by type
@@ -629,7 +634,7 @@ Room.prototype.cacheObjects = function () {
 
 		this.memory.objects.containers = orderedContainers;
 
-		this.log(`Cached ${containers.length} container${containers.length > 1 ? 's' : ''}.`);
+		if (logOutput) this.log(`Cached ${containers.length} container${containers.length > 1 ? 's' : ''}.`);
 	}
 
 	// Cache remaining structures
@@ -698,7 +703,7 @@ Room.prototype.cacheObjects = function () {
 		}
 
 		this.memory.objects.links = orderedLinks;
-		log(`Cached ${links.length} link${links.length > 1 ? 's' : ''}.`, this);
+		if (logOutput) this.log(`Cached ${links.length} link${links.length > 1 ? 's' : ''}.`);
 	}
 
 	const extractor = this.find(FIND_MY_STRUCTURES, { filter: { structureType: STRUCTURE_EXTRACTOR }});
@@ -738,7 +743,7 @@ Room.prototype.cacheObjects = function () {
 	const walls = this.find(FIND_STRUCTURES, { filter: { structureType: STRUCTURE_WALL }});
 	cacheObjectArray(walls, 'walls');
 
-	log('Caching objects for room \'' + this.name + '\' completed.', this);
+	if (logOutput) this.log('Caching objects for room \'' + this.name + '\' completed.');
 	return true;
 }
 
@@ -746,20 +751,35 @@ Room.prototype.cacheObjects = function () {
 Room.prototype.initQuotas = function (roleQuotaObject?): void {
 	if (!this.memory.quotas) this.memory.quotas = {};
 
+	let numOpenOne = 0;
+	let numOpenTwo = 0;
+	const sources = this.find(FIND_SOURCES);
+
+	if (sources.length)
+		numOpenOne = sources[0].pos.getWalkablePositions().length;
+	if (sources.length > 1)
+		numOpenTwo = sources[1].pos.getWalkablePositions().length;
+
+	const totalOpen = numOpenOne + numOpenTwo;
+	const startingHarvesters = (totalOpen >= 4) ? 4 : totalOpen;
+
 	this.memory.quotas = {
-		harvesters: roleQuotaObject?.harvester || 4,
-		upgraders: roleQuotaObject?.upgrader || 2,
-		fillers: roleQuotaObject?.filler || 2,
-		haulers: roleQuotaObject?.hauler || 0,
-		builders: roleQuotaObject?.builder || 1,
-		repairers: roleQuotaObject?.repairer || 1,
-		defenders: roleQuotaObject?.defender || 0,
-		reservers: roleQuotaObject?.reserver || 0,
-		scouts: roleQuotaObject?.scout || 0,
-		remoteharvesters: roleQuotaObject?.remoteharvester || 0,
+		harvesters: roleQuotaObject?.harvester ?? startingHarvesters,
+		upgraders: roleQuotaObject?.upgrader ?? 2,
+		fillers: roleQuotaObject?.filler ?? 1,
+		haulers: roleQuotaObject?.hauler ?? 0,
+		builders: roleQuotaObject?.builder ?? 1,
+		repairers: roleQuotaObject?.repairer ?? 0,
+		defenders: roleQuotaObject?.defender ?? 0,
+		reservers: roleQuotaObject?.reserver ?? 0,
+		scouts: roleQuotaObject?.scout ?? 0,
+		conveyors: roleQuotaObject?.conveyor ?? 0,
+		workers: roleQuotaObject?.worker ?? 0,
+		infantry: roleQuotaObject?.infantry ?? 0,
+		remoteharvesters: roleQuotaObject?.remoteharvester ?? 0,
 	}
 
-	log(`Quotas initialized: Harvesters (2), Upgraders (2), Fillers (2), Haulers (0), Builders (1), Defenders (0), Reservers (0), Scouts (0), Remote Harvesters (0)`);
+	log(`Quotas initialized: Harvesters (4), Upgraders (2), Fillers (2), Haulers (0), Builders (1), Defenders (0), Reservers (0), Scouts (0), Remote Harvesters (0)`);
 }
 
 Room.prototype.enableDropHarvesting = function() {
@@ -767,9 +787,8 @@ Room.prototype.enableDropHarvesting = function() {
 }
 /** Initializes a room with default memory structure and settings. Sets up quotas, visual settings, repair settings, and stats tracking. */
 Room.prototype.initRoom = function () {
-	this.initQuotas();
-	this.log(`Spawn quotas initialized!`);
 
+	// Set up various objects for direct assignment later (rather than spelling it all out in a single assignment)
 	const visualSettings: VisualSettings = { progressInfo: { alignment: 'left', xOffset: 1, yOffsetFactor: 0.6, stroke: '#000000', fontSize: 0.6, color: '' } };
 	const progressInfo = { alignment: 'left', xOffset: 1, yOffsetFactor: 0.6, stroke: '#000000', fontSize: 0.6, color: '' };
 	const roomFlags = { displayCoords: [0, 49], color: '#ff0033', fontSize: 0.4 };
@@ -807,8 +826,8 @@ Room.prototype.initRoom = function () {
 		spawnEnergyLimit: 0
 	};
 
-
 	this.log(`Initializing memory objects...`);
+	// Set up <memory.containers>
 	if (!this.memory.containers)
 		this.memory.containers = {
 			sourceOne: '' as Id<StructureContainer>,
@@ -819,6 +838,7 @@ Room.prototype.initRoom = function () {
 		};
 	if (this.memory.containers) this.log(`...<memory>.containers initialized!`);
 
+	// Set up <memory.links>
 	if (!this.memory.links)
 		this.memory.links = {
 			sourceOne: '' as Id<StructureLink>,
@@ -829,9 +849,12 @@ Room.prototype.initRoom = function () {
 		};
 	if (this.memory.links) this.log(`...<memory>.links initialized!`);
 
+	// Set up <memory.data>
 	if (!this.memory.data)
 		this.memory.data = { controllerLevel: 0, numCSites: 0, spawnEnergyLimit: 0 };
 
+	// Add <memory.data.flags> & <memory.data.indice> -- Had extreme difficulty getting these parts of <memory.data> to
+	// properly initialize on private servers when done as a single assignment call
 	if (!this.memory.data.flags)
 		this.memory.data.flags = roomDataFlags;
 	if (!this.memory.data.indices)
@@ -839,6 +862,7 @@ Room.prototype.initRoom = function () {
 
 	if (this.memory.data && this.memory.data.flags && this.memory.data.indices) this.log(`...<memory>.data initialized!`);
 
+	// Set up <memory.settings>
 	if (!this.memory.settings)
 		this.memory.settings = {
 			visualSettings: visualSettings,
@@ -850,6 +874,7 @@ Room.prototype.initRoom = function () {
 		};
 	if (this.memory.settings) this.log(`...<memory>.settings initialized!`);
 
+	// Set up <memory.stats>
 	if (!this.memory.stats)
 		this.memory.stats = {
 			energyHarvested: 0,
@@ -868,6 +893,7 @@ Room.prototype.initRoom = function () {
 		};
 	if (this.memory.stats) this.log(`...<memory>.stats initialized!`);
 
+	// Set up <memory.visuals>
 	if (!this.memory.visuals)
 		this.memory.visuals = {
 			settings: {
@@ -890,12 +916,17 @@ Room.prototype.initRoom = function () {
 		};
 	if (this.memory.visuals) this.log(`...<memory>.visuals initialized!`);
 
+	// Set up placeholder for <memory.remoteRooms>
 	if (!this.memory.remoteRooms)	this.memory.remoteRooms = {};
 	if (this.memory.remoteRooms) this.log(`...<memory>.remoteRooms initialized!`);
 
+	// Set up <memory.quotas> with default values
+	this.initQuotas();
+
+	// All done!
 	this.log(`Room Memory fully initialized, caching objects...`);
-	this.cacheObjects();
-	this.log(`Initialization and Object Caching sequence complete!`);
+	this.cacheObjects(true);
+	this.log(`Initialization sequence completed successfully!`);
 }
 
 /** Disables all BasePlanner room visuals */
@@ -980,7 +1011,7 @@ Room.prototype.registerLogisticalPairs = function (): boolean {
 		for (let i = 0; i < sourceBoxes.length; i++) {
 			const onePair: LogisticsPair = { source: sourceBoxes[i].id, destination: this.storage.id, resource: 'energy', locality: 'local', descriptor: 'source to storage' };
 			if (onePair.source && onePair.destination) logisticalPairs.push(onePair);
-			else log('Malformed Pair: ' + onePair, this);
+			else this.log('Malformed Pair: ' + onePair);
 		}
 
 		// DEPRECATED CODE BLOCK FOR PROCESSING "REMOTE LINKS"
@@ -1048,18 +1079,18 @@ Room.prototype.registerLogisticalPairs = function (): boolean {
 		if (energyInboxArray && energyInboxArray.length > 0) {
 			const onePairStoU: LogisticsPair = { source: this.storage.id, destination: energyInboxArray[0].id, resource: 'energy', locality: 'local', descriptor: 'storage to upgrader' };
 			if (onePairStoU.source && onePairStoU.destination) logisticalPairs.push(onePairStoU);
-			else log('Malformed Pair: ' + onePairStoU, this);
+			else this.log('Malformed Pair: ' + onePairStoU);
 			this.memory.containers.controller = energyInboxArray[0].id;
 		}
 
 		//* Build the extractor box to storage pair
 		if (extractorBuilt && typeof mineralOutbox === 'string') {
-			log('mineralOutbox: ' + mineralOutbox, this);
-			log('storage: ' + this.storage.id, this);
+			this.log('mineralOutbox: ' + mineralOutbox);
+			this.log('storage: ' + this.storage.id);
 			const minType: MineralConstant = minerals[0].mineralType;
 			const onePair: LogisticsPair = { source: mineralOutbox, destination: this.storage.id, resource: minType, locality: 'local', descriptor: 'extractor to storage' };
 			if (onePair.source && onePair.destination) logisticalPairs.push(onePair);
-			else log('Malformed Pair: ' + onePair, this);
+			else this.log('Malformed Pair: ' + onePair);
 		}
 		//* For rooms without storage
 	} else {
@@ -1067,7 +1098,7 @@ Room.prototype.registerLogisticalPairs = function (): boolean {
 		for (let i = 0; i < sourceBoxes.length; i++) {
 			const onePair: LogisticsPair = { source: sourceBoxes[i].id, destination: energyInboxArray![0].id, resource: 'energy', locality: 'local', descriptor: 'source to upgrader' };
 			if (onePair.source && onePair.destination) logisticalPairs.push(onePair);
-			else log('Malformed Pre-Storage Pair: ' + onePair, this);
+			else this.log('Malformed Pre-Storage Pair: ' + onePair);
 		}
 	}
 
@@ -1136,11 +1167,12 @@ Room.prototype.registerLogisticalPairs = function (): boolean {
  */
 Room.prototype.setQuota = function (roleTarget: CreepRole, newTarget: number) {
 
-	const pluralRoleTarget: string = roleTarget + 's';
+	const lastChar = roleTarget.charAt(roleTarget.length - 1);
+	const pluralRoleTarget: string = (lastChar.toLowerCase() === 's' && roleTarget !== 'infantry') ? roleTarget : roleTarget + 's';
 	const oldTarget = this.memory.quotas[pluralRoleTarget];
 	this.memory.quotas[pluralRoleTarget] = newTarget;
 
-	log('Set role \'' + pluralRoleTarget + '\' quota to ' + newTarget + ' (was ' + oldTarget + ').', this);
+	this.log('Set role \'' + pluralRoleTarget + '\' quota to ' + newTarget + ' (was ' + oldTarget + ').');
 	return;
 }
 
