@@ -129,8 +129,10 @@ export default class RoomManager {
 			const storage_built = Boolean(room.storage && room.prestorage && room.controller && room.controller.level === 4 && room.prestorage.store.getUsedCapacity() === 0);
 			const controller_upgraded = Boolean(this.room.controller && roomMem.data.controllerLevel !== rcl);
 
-			if (controller_upgraded)
+			if (controller_upgraded) {
+				this.setRclTasks(rcl);
 				this.handleRCLUpgrade();
+			}
 			if (storage_built)
 				room.prestorage.destroy();
 			if (ready_for_remotes)
@@ -139,7 +141,6 @@ export default class RoomManager {
 				room.setQuota('conveyor', 1);
 			if (ready_for_drop_harvesting) {
 				room.memory.data.flags.dropHarvestingEnabled = true;
-				room.setQuota('upgrader', 4);
 			}
 
 			// Ensure we have a base plan ready
@@ -179,7 +180,9 @@ export default class RoomManager {
 			}
 
 			this.updateConstructionSites();
-			this.manageBuilderQuota();
+			if (this.currentCSites !== this.previousCSites)
+				this.manageBuilderQuota();
+
 			this.manageUpgraderQuota();
 
 			// Run task management for workers
@@ -189,7 +192,7 @@ export default class RoomManager {
 			this.assignCreepTasks();
 
 			// Manage towers
-			this.manageTowers();
+			DefenseManager.run(this.room);
 
 			// Manage hauler container pairs
 			if (this.shouldManageContainers()) this.manageContainers();
@@ -965,11 +968,11 @@ export default class RoomManager {
 	}
 
 	/** Manages tower operations (defense and repair) */
-	private manageTowers(): void {
+	/* private manageTowers(): void {
 		const towers = this.room.memory.objects.towers?.map(id => Game.getObjectById(id));
 		if (towers)
 			for (const tower of towers) if (tower) DefenseManager(tower);
-	}
+	} */
 
 	/** Manages link energy transfers */
 	private manageLinks(): void {
@@ -1017,67 +1020,7 @@ export default class RoomManager {
 		return this.energyManager;
 	}
 
-	/** Sets what tasks need to be prioritized based on new RCL */
-	private setRclTasks(rcl: number): void {
-		switch (rcl) {
-			case 0:
-				// For new room, set quotas for harvesters (they will build their own containers)
-				// Then built, and focus energy into upgrader output
-				log(`Setting creep role quotas for early, low-tech spawn system.`);
-				this.room.setQuota('harvester', 4) // Ensures 80% utilization per source
-				this.room.setQuota('hauler', 0);
-				this.room.setQuota('builder', 1);
-				this.room.setQuota('upgrader', 3);
 
-				log(`Quotas: Harvesters (4)  Haulers (0)  Builders (1)  Upgraders (3)`);
-
-				break;
-			case 1:
-				break;
-			case 2:
-				break;
-			case 3:
-				break;
-			case 4:
-				break;
-			case 5:
-				break;
-			case 6:
-				break;
-			case 7:
-				break;
-			case 8:
-				break;
-			default:
-				break;
-		}
-	}
-
-	/** Sets allowed capabilities for manager daemon based upon RCL input */
-	private enableCapabilities(rcl: number): void {
-		switch (rcl) {
-			case 0:
-				break;
-			case 1:
-				break;
-			case 2:
-				break;
-			case 3:
-				break;
-			case 4:
-				break;
-			case 5:
-				break;
-			case 6:
-				break;
-			case 7:
-				break;
-			case 8:
-				break;
-			default:
-				break;
-		}
-	}
 
 	/** Determine if there is a need to update or create new hauler route pair information. */
 	private shouldManageContainers(debug: boolean = false): boolean {
@@ -1277,6 +1220,7 @@ export default class RoomManager {
 			}
 		}
 		this.room.memory.remoteRooms = remoteRooms;
+		this.room.memory.quotas.reservers = remoteRooms.length;
 	}
 }
 
@@ -1295,7 +1239,6 @@ export default class RoomManager {
 		this.room.log(`Cleared stored RCL in Room Data!`);
 		return isZero;
 	}
-
 
 	private initializeMemory() {
 		try {
@@ -1508,24 +1451,21 @@ export default class RoomManager {
 
 	private manageBuilderQuota(): void {
 		const quotas = this.room.memory.quotas;
+		const numCSites = this.currentCSites;
 
-		if (this.currentCSites > 3 && this.room.memory.quotas.builder < 3) {
-			if (quotas.builder === 3) return;
+		if (numCSites > 3 && quotas.builders !== 3 && quotas.builders < 3) {
 			this.room.setQuota('builder', 3);
 			this.room.log(`Updated Builder quota based on moderate amount of CSites.`);
 		}
-		else if (this.currentCSites > 5 && this.room.memory.quotas.builder < 5) {
-			if (quotas.builder === 5) return;
+		else if (numCSites > 5 && quotas.builders !== 5 && quotas.builders < 5) {
 			this.room.setQuota('builder', 5);
 			this.room.log(`Updated Builder quota based on large number of CSites.`);
 		}
-		else if (this.currentCSites === 0 && this.room.memory.quotas.builder !== 0) {
-			if (quotas.builder === 0) return;
+		else if (numCSites === 0 && quotas.builders !== 0) {
 			this.room.setQuota('builder', 0);
 			this.room.log(`Updated Builder quota based on lack of CSites.`);
 		}
-		else if (this.room.memory.quotas.builder > 1) {
-			if (quotas.builder === 1) return;
+		else if (quotas.builders > 1) {
 			this.room.setQuota('builder', 1);
 			this.room.log(`Updated Builder quota based on low number of CSites.`);
 		}
@@ -1535,22 +1475,30 @@ export default class RoomManager {
 	private manageUpgraderQuota(): void {
 		// TODO update live energy income/expenditure analysis into algorithm
 		const quotas = this.room.memory.quotas;
-		if (this.currentCSites === 0 && quotas.builder < 3 && quotas.upgrader !== 5) {
-			if (quotas.upgrader === 5) return;
+		const numCSites = this.currentCSites;
+		if (numCSites === 0 && quotas.builders < 3 && quotas.upgraders !== 5) {
 			this.room.setQuota('upgrader', 5);
 			this.room.log(`Updated Upgrader quota based on lack of CSites.`);
 		}
-		else if (this.currentCSites > 3 && quotas.builder > 1 && quotas.upgrader !== 2) {
-			if (quotas.upgrader === 2) return;
+		else if (numCSites > 3 && quotas.builders > 1 && quotas.upgraders !== 2) {
 			this.room.setQuota('upgrader', 2);
 			this.room.log(`Updated Upgrader quota based on large number of CSites.`);
 		}
-		else if (this.currentCSites < 3 && this.currentCSites > 0 && quotas.upgrader !== 3) {
-			if (quotas.upgrader === 3) return;
+		else if (numCSites < 3 && numCSites > 0 && quotas.upgraders !== 3) {
 			this.room.setQuota('upgrader', 3);
 			this.room.log(`Updated Upgrader quota based on low number of CSites.`);
 		}
 		else return;
+	}
+
+	private assessRemoteHarvesterNeeds(): void {
+		let numRemoteSources = 0;
+		const rooms = Object.keys(this.room.memory.remoteRooms);
+		for (let i = 0; i < rooms.length; i++)
+			numRemoteSources += this.room.memory.remoteRooms[rooms[i]].sources.length;
+		if (this.room.memory.quotas.remoteharvesters !== numRemoteSources)
+			this.room.setQuota('remoteharvester', numRemoteSources);
+		return;
 	}
 
 	/** Attempt to place construciton sites for designated RCL schedule. If no parameter is provided, defaults to current RCL. Returns if no RCL schedule is present.
@@ -1561,7 +1509,7 @@ export default class RoomManager {
 	 * // Places structures using the current RCL
 	 * Game.rooms.E2S2.manager.attemptBaseUpgrades();
 	 */
-	public attemptBaseUpgrades(rcl: number = this.room.memory.data.controllerLevel): void {
+	public attemptBaseUpgrades(rcl: number = this.room.memory.data.controllerLevel!): void {
 
 		// Object shape
 		type structureEntry = {
@@ -1644,5 +1592,70 @@ export default class RoomManager {
 
 		this.room.log(`All consruction sites placed according to RCL Schedule for RCL${rcl}. ${placedSuccessfully} placed sucessfully, ${placedWithErrors} encoutnered errors.`);
 		return;
+	}
+
+	/** Sets what tasks need to be prioritized based on new RCL */
+	private setRclTasks(rcl: number): void {
+		switch (rcl) {
+			case 0:
+				break;
+			case 1:
+				// For new room, set quotas for harvesters (they will build their own containers)
+				// Then built, and focus energy into upgrader output
+				this.room.log(`Setting creep role quotas for early, low-tech spawn system.`);
+				this.room.setQuota('harvester', 4) // Ensures 80% utilization per source
+				this.room.setQuota('filler', 1);
+				this.room.setQuota('hauler', 0);
+				this.room.setQuota('builder', 1);
+				this.room.setQuota('upgrader', 3);
+				this.room.log(`Quotas: Harvesters (4)  Fillers (1)  Haulers (0)  Builders (1)  Upgraders (3)`);
+				break;
+			case 2:
+				this.room.setQuota('filler', 2);
+				this.room.log(`Quotas: Fillers (2)`);
+				break;
+			case 3:
+				this.room.setQuota('repairer', 1);
+				this.room.log(`Quotas: Repairers (1)`);
+				break;
+			case 4:
+				break;
+			case 5:
+				break;
+			case 6:
+				break;
+			case 7:
+				break;
+			case 8:
+				break;
+			default:
+				break;
+		}
+	}
+
+	/** Sets allowed capabilities for manager daemon based upon RCL input */
+	private enableCapabilities(rcl: number): void {
+		switch (rcl) {
+			case 0:
+				break;
+			case 1:
+				break;
+			case 2:
+				break;
+			case 3:
+				break;
+			case 4:
+				break;
+			case 5:
+				break;
+			case 6:
+				break;
+			case 7:
+				break;
+			case 8:
+				break;
+			default:
+				break;
+		}
 	}
 }

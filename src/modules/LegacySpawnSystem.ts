@@ -98,6 +98,13 @@ function trySpawnCreep(spawn: StructureSpawn,	role: string,	memory: CreepMemory,
 		if (pending && room.energyAvailable >= pending.cost) {
 			const result = spawn.spawnCreep(pending.body, pending.name, { memory: pending.memory });
 			if (result === OK) {
+				if (role === 'reserver') {
+					Game.rooms[room.name].memory.remoteRooms[pending.memory.targetRoom].creepAssignments.reserver = pending.name;
+				}
+				if (role === 'remoteharvester') {
+					const sourceNum = (pending.memory.sourceNum === 1) ? 'sourceOne' : 'sourceTwo';
+					Game.rooms[room.name].memory.remoteRooms[pending.memory.targetRoom].creepAssignments[sourceNum] = pending.name;
+				}
 				spawn.log(`Resuming pending spawn for ${pending.memory.role} (${pending.name})`);
 				delete room.memory.data.pendingSpawn;
 				room.memory.stats.creepsSpawned++;
@@ -126,6 +133,13 @@ function trySpawnCreep(spawn: StructureSpawn,	role: string,	memory: CreepMemory,
 		}
 
 		if (result === OK) {
+			if (role === 'reserver') {
+				Game.rooms[room.name].memory.remoteRooms[pending.memory.targetRoom].creepAssignments.reserver = pending.name;
+			}
+			if (role === 'remoteharvester') {
+				const sourceNum = (pending.memory.sourceNum === 1) ? 'sourceOne' : 'sourceTwo';
+				Game.rooms[room.name].memory.remoteRooms[pending.memory.targetRoom].creepAssignments[sourceNum] = pending.name;
+			}
 			spawn.log(`Spawning ${role} ${name} in ${room.name}`);
 			room.memory.stats.creepsSpawned++;
 			room.memory.stats.creepPartsSpawned += body.length;
@@ -196,7 +210,7 @@ function getNextRoleToSpawn(
 					name: 'builder',
 					count: creepCount.builders.length,
 					target: creepTargets.builderTarget,
-					check: () => room.memory.data.numCSites > 0
+					check: () => room.memory.data.numCSites! > 0
 				},
 				{
 					name: 'repairer',
@@ -464,7 +478,15 @@ export const legacySpawnManager = {
 								trySpawnCreep(spawn, 'repairer', { role: 'repairer', RFQ: 'repairer', home: room.name, room: room.name, working: false, disable: false, rally: 'none' }, room, colName);
 								return;
 							case 'reserver':
-								trySpawnCreep(spawn, 'reserver', { role: 'reserver', RFQ: 'reserver', home: room.name, room: room.name, working: false, disable: false, rally: 'none' }, room, colName);
+								const rooms = Object.keys(room.memory.remoteRooms);
+								let roomAssignment;
+								for (let i=0; i < rooms.length; i++) {
+									if (!room.memory.remoteRooms[rooms[i]].creepAssignments.reserver) {
+										roomAssignment = rooms[i];
+										break;
+									} else continue;
+								}
+								trySpawnCreep(spawn, 'reserver', { role: 'reserver', RFQ: 'reserver', home: room.name, room: room.name, working: false, disable: false, rally: 'none', targetRoom: roomAssignment }, room, colName);
 								return;
 							case 'conveyor':
 								trySpawnCreep(spawn, 'conveyor', { role: 'conveyor', RFQ: 'conveyor', home: room.name, room: room.name, disable: false, rally: 'none'}, room, colName);
@@ -475,6 +497,30 @@ export const legacySpawnManager = {
 							case 'infantry':
 								trySpawnCreep(spawn, 'infantry', { role: 'infantry', RFQ: 'infantry', home: room.name, room: room.name, disable: false, rally: 'none'}, room, colName);
 								return;
+							case 'remoteharvester': {
+								const rooms = Object.keys(room.memory.remoteRooms);
+								let sourceAssignment = '';
+								let sourceNum = 0;
+								let targetRoom = '';
+								for (let i=0; i < rooms.length; i++) {
+									const remoteRoom = room.memory.remoteRooms[rooms[i]];
+									if (!remoteRoom.creepAssignments.sourceOne) {
+										sourceAssignment = remoteRoom.sources[0];
+										sourceNum = 1;
+										targetRoom = rooms[i];
+										break;
+									} else if (remoteRoom.sources.length > 1) {
+										if (!remoteRoom.creepAssignments.sourceTwo) {
+											sourceAssignment = remoteRoom.sources[1];
+											sourceNum = 2;
+											targetRoom = rooms[i];
+											break;
+										}
+									}
+									continue;
+								}
+								trySpawnCreep(spawn, 'remoteharvester', { role: 'remoteharvester', RFQ: 'remoteharvester', home: room.name, room: room.name, targetRoom: '', source: sourceAssignment, sourceNum: sourceNum, disable: false, rally: 'none'}, room, colName);
+							}
 						}
 					}
 					// If round-robin didn't select a role, attempt remote/reserver spawning using cached remoteRooms
