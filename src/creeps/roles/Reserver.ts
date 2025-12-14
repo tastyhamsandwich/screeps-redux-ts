@@ -22,6 +22,12 @@ const Reserver = {
 			if (cMem.disable) aiAlert(creep);
 			else if (cMem.rally !== 'none') navRallyPoint(creep);
 			else {
+
+				if (creep.ticksToLive! <= 5 && !cMem.completedDeathTask) {
+					rMem.remoteRooms[cMem.targetRoom].creepAssignments.reserver = '';
+					cMem.completedDeathTask = true;
+				}
+
 				if (cMem.targetRoom) {
 					const targetRoom = Game.rooms[cMem.targetRoom];
 					if (targetRoom?.controller !== undefined) {

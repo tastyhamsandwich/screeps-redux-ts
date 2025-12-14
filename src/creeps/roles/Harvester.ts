@@ -38,6 +38,29 @@ const Harvester = {
 				const isBootstrap = creep.room.memory.data.flags.bootstrappingMode;
 				const source: Source = Game.getObjectById(sourceID)!;
 
+				//: BOOTSTRAPPING RUINS RAIDER LOGIC
+				if (isBootstrap && !cMem.noRuins) {
+					const spawn = room.find(FIND_MY_SPAWNS);
+					const ruins = room.find(FIND_RUINS, { filter: (i) => i.store[RESOURCE_ENERGY] > 0 });
+					if (!ruins.length) cMem.noRuins = true;
+					if (creep.store.getUsedCapacity(RESOURCE_ENERGY) === 0) {
+						if (spawn[0].store.getUsedCapacity(RESOURCE_ENERGY) > 0) {
+							if (ruins.length) {
+								const closest = pos.findClosestByRange(ruins);
+								if (closest) {
+									if (creep.withdraw(closest, RESOURCE_ENERGY) === ERR_NOT_IN_RANGE)
+										creep.advMoveTo(closest, pathing.harvesterPathing);
+
+								}
+							}
+						} else {
+							const result = creep.transfer(spawn[0], RESOURCE_ENERGY)
+							if (result === ERR_NOT_IN_RANGE)
+								creep.advMoveTo(spawn[0], pathing.harvesterPathing);
+						}
+					}
+				}
+
 				//: DROP HARVESTING LOGIC
 				if (creep.getActiveBodyparts(CARRY) === 0) {
 					if (cMem.inPosition)
@@ -165,6 +188,9 @@ const Harvester = {
 			const cMem: CreepMemory = creep.memory;
 			const rMem: RoomMemory = Game.rooms[cMem.home].memory;
 			const pos: RoomPosition = creep.pos;
+			const bucket: StructureContainer | null = cMem.bucket ? Game.getObjectById(cMem.bucket as Id<StructureContainer>) : null;
+			const assignedSource: Source | null = cMem.source ? Game.getObjectById(cMem.source as Id<Source>) : null;
+			const homeStorage: StructureStorage | undefined = Game.rooms[cMem.home]?.storage;
 
 			cMem.disable ??= false;
 			cMem.rally ??= 'none';
@@ -187,9 +213,8 @@ const Harvester = {
 						}
 					}
 
-					let source: Source;
 					if (creep.getActiveBodyparts(CARRY) === 0) {
-						source = Game.getObjectById(cMem.source) as unknown as Source;
+						const source = assignedSource as Source;
 						if (!pos.isNearTo(source)) creep.advMoveTo(source, pathing.harvesterPathing, true);
 						else {
 							const containers: StructureContainer[] = source.pos.findInRange(FIND_STRUCTURES, 2, { filter: { structureType: STRUCTURE_CONTAINER } });
@@ -203,6 +228,66 @@ const Harvester = {
 							} else creep.harvestEnergy();
 						}
 					} else {
+						const bucketEnergy = bucket?.store.getUsedCapacity(RESOURCE_ENERGY) ?? 0;
+						const bucketCapacity = bucket?.store.getCapacity(RESOURCE_ENERGY) ?? 2000;
+						const bucketFull = bucketEnergy >= 2000;
+						const bucketBelow75 = bucket ? bucketEnergy < (bucketCapacity * 0.75) : false;
+
+						if (bucket && bucketFull && homeStorage) {
+							if (!cMem.remoteRoadPath || !Array.isArray(cMem.remoteRoadPath) || !cMem.remoteRoadPath.length) {
+								const roadSearch = PathFinder.search(bucket.pos, { pos: homeStorage.pos, range: 1 });
+								cMem.remoteRoadPath = roadSearch.path.map((step) => ({ x: step.x, y: step.y, roomName: step.roomName }));
+								cMem.remoteRoadIndex = 0;
+							}
+						}
+
+						if (bucketBelow75) {
+							cMem.remoteRoadBuilding = false;
+							cMem.remoteRoadIndex = 0;
+						}
+
+						const hasRoadPath = Array.isArray(cMem.remoteRoadPath) && cMem.remoteRoadPath.length > 0;
+						const readyForRoadWork = hasRoadPath && bucket && !bucketBelow75;
+
+						if (readyForRoadWork && /*(cMem.remoteRoadBuilding ||*/ creep.store.getFreeCapacity() === 0)/* && creep.store[RESOURCE_ENERGY] > 0)*/ {
+							cMem.remoteRoadBuilding = true;
+							const path = cMem.remoteRoadPath as Array<{ x: number; y: number; roomName: string }>;
+							let stepIndex = typeof cMem.remoteRoadIndex === 'number' ? cMem.remoteRoadIndex : 0;
+							if (stepIndex >= path.length) stepIndex = path.length - 1;
+
+							const targetStep = path[stepIndex];
+							const targetPos = new RoomPosition(targetStep.x, targetStep.y, targetStep.roomName);
+
+							if (!pos.isEqualTo(targetPos)) {
+								creep.advMoveTo(targetPos, pathing.harvesterPathing, true);
+								cMem.remoteRoadIndex = stepIndex;
+								return;
+							}
+
+							const hasRoad = pos.lookFor(LOOK_STRUCTURES).some((s) => s.structureType === STRUCTURE_ROAD);
+							const roadSite = pos.lookFor(LOOK_CONSTRUCTION_SITES).find((s) => s.structureType === STRUCTURE_ROAD);
+
+							if (hasRoad) {
+								if (stepIndex < path.length - 1) cMem.remoteRoadIndex = stepIndex + 1;
+							} else if (roadSite) {
+								creep.build(roadSite);
+							} else {
+								const created = creep.room.createConstructionSite(pos, STRUCTURE_ROAD);
+								if (created === OK) {
+									const newSite = pos.lookFor(LOOK_CONSTRUCTION_SITES).find((s) => s.structureType === STRUCTURE_ROAD);
+									if (newSite) creep.build(newSite);
+								}
+								cMem.remoteRoadIndex = stepIndex; // stay on this tile until we at least start the road
+							}
+
+							const nextIndex = cMem.remoteRoadIndex ?? stepIndex;
+							if (nextIndex > stepIndex && path[nextIndex]) {
+								const nextPos = new RoomPosition(path[nextIndex].x, path[nextIndex].y, path[nextIndex].roomName);
+								if (!pos.isEqualTo(nextPos)) creep.advMoveTo(nextPos, pathing.harvesterPathing, true);
+							}
+							return;
+						}
+
 						if (creep.store.getFreeCapacity() == 0 || creep.store.getFreeCapacity() < (creep.getActiveBodyparts(WORK) * 2)) {
 							if (cMem.returnEnergy === true) {
 								const spawns = creep.room.find(FIND_MY_SPAWNS);
@@ -213,7 +298,7 @@ const Harvester = {
 							} else {
 								if (cMem.bucket) creep.unloadEnergy(cMem.bucket);
 								else {
-									const containers: StructureContainer[] = pos.findInRange(FIND_STRUCTURES, 1, { filter: (i) => i.structureType === STRUCTURE_CONTAINER }) as StructureContainer[];
+									const containers: StructureContainer[] = assignedSource!.pos.findInRange(FIND_STRUCTURES, 1, { filter: (i) => i.structureType === STRUCTURE_CONTAINER }) as StructureContainer[];
 									if (containers.length) {
 										console.log(`Found container)`);
 										const target: StructureContainer = pos.findClosestByRange(containers)!;
@@ -245,7 +330,7 @@ const Harvester = {
 							}
 						} else {
 							// Move to source before harvesting
-							source = Game.getObjectById(cMem.source) as Source;
+							const source = assignedSource as Source;
 							if (!source) {
 								if (creep.room.name !== cMem.targetRoom) {
 									const roomPos = new RoomPosition(25,25,cMem.targetRoom);
@@ -282,26 +367,37 @@ function buildContainer(creep: Creep): void {
 		const nearbySites = source.pos.findInRange(FIND_CONSTRUCTION_SITES, 1, {
 			filter: (s) => s.structureType === STRUCTURE_CONTAINER
 		});
+		const nearbyContainers = source.pos.findInRange(FIND_STRUCTURES, 1, {
+			filter: (s) => s.structureType === STRUCTURE_CONTAINER
+		});
 
-		if (nearbySites.length === 0) {
+		if (nearbySites.length === 0 && nearbyContainers.length === 0) {
 			// Find the best position next to the source (where the harvester should stand)
 			const walkablePositions = source.pos.getWalkablePositions();
 			if (walkablePositions.length > 0) {
 
-				const pathBack = PathFinder.search(source.pos, (Game.getObjectById(room.memory.objects.spawns![0]) as StructureSpawn).pos);
-				if (walkablePositions.includes(pathBack[0])) {
-					const containerPos = pathBack[0].pos.isNearTo(source) ? pathBack[1].pos : pathBack[0].pos;
-					room.createConstructionSite(containerPos.x, containerPos.y, STRUCTURE_CONTAINER);
+				const pathBack = PathFinder.search((Game.getObjectById(room.memory.objects.spawns![0]) as StructureSpawn).pos, {pos: source.pos, range: 1});
+				const path = pathBack.path;
+				const pbLen = pathBack.path.length;
+				if (walkablePositions.includes(path[pbLen-1])) {
+					room.createConstructionSite(path[pbLen-1].x, path[pbLen-1].y, STRUCTURE_CONTAINER);
 					cMem.buildingContainer = true;
 					return;
+				} else {
+					// Place container at current position if we're next to source, otherwise pick first walkable spot
+					const containerPos = path[pbLen - 1].isNearTo(source) ? path[pbLen - 1] : creep.pos;
+					room.createConstructionSite(containerPos.x, containerPos.y, STRUCTURE_CONTAINER);
+					// Mark that we're building a container to prevent task abandonment
+					cMem.buildingContainer = true;
 				}
-				// Place container at current position if we're next to source, otherwise pick first walkable spot
-				const containerPos = pos.isNearTo(source) ? pos : walkablePositions[0];
-				room.createConstructionSite(containerPos.x, containerPos.y, STRUCTURE_CONTAINER);
-				// Mark that we're building a container to prevent task abandonment
-				cMem.buildingContainer = true;
 			}
 		} else {
+			if (nearbyContainers.length > 0) {
+				if (!cMem.bucket)
+					cMem.bucket = nearbyContainers[0].id;
+				delete cMem.buildingContainer;
+				return;
+			}
 			// Build the container site
 			const site = nearbySites[0];
 			if (creep.build(site) === ERR_NOT_IN_RANGE) {
@@ -311,6 +407,7 @@ function buildContainer(creep: Creep): void {
 				creep.room.cacheObjects();
 				Game.rooms[cMem.home].manager?.manageContainers();
 				cMem.buildingContainer = false;
+				creep.log(`Finished building container for source #${cMem.sourceNum}!`);
 			}
 		}
 	}

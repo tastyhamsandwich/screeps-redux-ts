@@ -118,6 +118,20 @@ export function upgraderBehavior(creep: Creep): void {
 			}	else creep.memory.bucket = creep.room.memory.containers.controller;
 		}
 
+		if (creep.ticksToLive! <= 10) {
+			if (creep.store.getUsedCapacity(RESOURCE_ENERGY) > 0) {
+				const bucket = Game.getObjectById(creep.memory.bucket as Id<StructureContainer>);
+				if (bucket) {
+					if (creep.transfer(bucket, RESOURCE_ENERGY) === ERR_NOT_IN_RANGE)
+						creep.advMoveTo(bucket, pathing.upgraderPathing);
+				}
+			}
+			if (creep.ticksToLive! <= 2) {
+				creep.say(`Goodbye cruel world!`);
+			}
+			return;
+		}
+
 		if (creep.store.getFreeCapacity() === 0) creep.memory.working = true;
 
 		if (creep.store.getUsedCapacity() === 0) {
@@ -142,7 +156,6 @@ export function upgraderBehavior(creep: Creep): void {
 						creep.advMoveTo(controllerObject, { visualizePathStyle: { stroke: 'green', lineStyle: 'dashed', opacity: 0.3 } });
 						return;
 					}	else if (result === OK)	{
-						creep.say('🔋');
 						creep.room.memory.stats.controlPoints += (creep.getActiveBodyparts(WORK));
 					}
 				}

@@ -32,15 +32,18 @@ const Defender = {
 					else if (pos.y == 49) creep.move(TOP);
 					else if (pos.y == 0) 	creep.move(BOTTOM);
 
-					if (room.name !== guardPost) {
-						creep.advMoveTo(Game.flags[guardPost], pathing.remoteGuard);
+					if (cMem.guardPost !== room.name) {
+						const roomPos = new RoomPosition(25, 25, cMem.guardPost);
+						creep.advMoveTo(roomPos, pathing.remoteGuard, true);
 					} else {
 						if (cMem.target) {
 							const targetId: Id<Creep> = cMem.target;
 							const target: Creep | null = Game.getObjectById(targetId);
 							if (target) {
-								if (creep.attack(target) === ERR_NOT_IN_RANGE)
+								if (creep.attack(target) === ERR_NOT_IN_RANGE) {
+									creep.say('ATK!')
 									creep.advMoveTo(target, pathing.remoteGuard);
+								}
 							} else {
 								delete cMem.target;
 								const hostiles = room.find(FIND_HOSTILE_CREEPS);
@@ -48,8 +51,10 @@ const Defender = {
 									const target = pos.findClosestByRange(hostiles);
 									if (target) {
 										cMem.target = target.id;
-										if (creep.attack(target) === ERR_NOT_IN_RANGE)
+										if (creep.attack(target) === ERR_NOT_IN_RANGE) {
+											creep.say('ATK2!');
 											creep.advMoveTo(target, pathing.remoteGuard);
+										}
 									}
 								}
 							}
@@ -59,12 +64,17 @@ const Defender = {
 								const target = pos.findClosestByRange(hostiles);
 								if (target) {
 									cMem.target = target.id;
-									if (creep.attack(target) === ERR_NOT_IN_RANGE)
+									if (creep.attack(target) === ERR_NOT_IN_RANGE) {
+										creep.say('ATK3!');
 										creep.advMoveTo(target, pathing.remoteGuard);
+									}
 								}
 							} else {
-								if (!pos.isNearTo(Game.flags[guardPost]))
-									creep.advMoveTo(Game.flags[guardPost], pathing.remoteGuard);
+								const roomPos = new RoomPosition(25, 25, cMem.guardPost);
+								if (!pos.isNearTo(roomPos)) {
+									creep.say('MOVE!');
+									creep.advMoveTo(roomPos, pathing.remoteGuard);
+								}
 							}
 						}
 					}

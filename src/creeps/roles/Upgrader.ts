@@ -32,6 +32,21 @@ const Upgrader = {
 				aiAlert(creep);
 			} else {
 				if (cMem.rally === 'none') {
+
+					if (creep.ticksToLive! <= 10) {
+						if (creep.store.getUsedCapacity(RESOURCE_ENERGY) > 0) {
+							const bucket = Game.getObjectById(creep.memory.bucket as Id<StructureContainer>);
+							if (bucket) {
+								if (creep.transfer(bucket, RESOURCE_ENERGY) === ERR_NOT_IN_RANGE)
+									creep.advMoveTo(bucket, pathing.upgraderPathing);
+							}
+						}
+						if (creep.ticksToLive! <= 2) {
+							creep.say(`Goodbye cruel world!`);
+						}
+						return;
+					}
+
 					// State transition logic: toggle working flag based on energy levels
 					if (creep.store.getUsedCapacity(RESOURCE_ENERGY) === 0) {
 						cMem.working = false;
