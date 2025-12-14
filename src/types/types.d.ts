@@ -61,7 +61,7 @@ namespace NodeJS {
 		containers: RoomContainers;
 		links: RoomLinks;
 		settings: RoomSettings;
-		data: { [key: string]: any };
+		data: RoomData;
 		stats: RoomStats;
 		energyManagement?: EnergyManagementData;
 		availableCreeps: string[];
@@ -155,6 +155,23 @@ namespace NodeJS {
 
 	//# ROOM MEMORY SUB-INTERFACES
 
+	interface RoomData {
+		sourceOne?: { source: Id<Source>; container: Id<StructureContainer | ConstructionSite> };
+		sourceTwo?: { source: Id<Source>; container: Id<StructureContainer | ConstructionSite> };
+		controllerContainer?: Id<StructureContainer | ConstructionSite>;
+		mineralContainer?: { mineral: Id<Mineral>; container: Id<StructureContainer | ConstructionSite> };
+		nextHarvesterAssigned?: number;
+		numCSites?: number;
+		logisticalPairs?: any;
+		basePlanGenerated?: boolean;
+		objectsChecksum?: string;
+		controllerLevel?: number;
+		spawnCheckRate?:  number;
+		lastSpawnCheck?: number;
+		lastResourceScan?: number;
+		_lastContainerHash?: string;
+		[key: string]: any;
+	}
 	interface RoomObjectCache {
 		sources?: Id<Source>[];
 		spawns?: Id<StructureSpawn>[];
@@ -285,7 +302,7 @@ namespace NodeJS {
 		controllerId?: Id<StructureController>;
 		scoutAssigned?: string
 		cSites?: Id<ConstructionSite>[];
-		creepAssignments?: {
+		creepAssignments: {
 			sourceOne?: string;
 			sourceTwo?: string;
 			reserver?: string;
@@ -558,20 +575,6 @@ namespace NodeJS {
 	type CreepRole = 'harvester' | 'upgrader' | 'builder' | 'repairer' | 'defender' | 'filler' | 'hauler' | 'remoteharvester' | 'reserver' | 'scout' | 'conveyor' | 'worker' | 'infantry';
 
 	//# ROOM MANAGER INTERFACES
-	interface RoomData {
-		sourceOne?: { source: Id<Source>; container: Id<StructureContainer | ConstructionSite> };
-		sourceTwo?: { source: Id<Source>; container: Id<StructureContainer | ConstructionSite> };
-		controllerContainer?: Id<StructureContainer | ConstructionSite>;
-		mineralContainer?: { mineral: Id<Mineral>; container: Id<StructureContainer | ConstructionSite> };
-		nextHarvesterAssigned?: number;
-		controllerLevel?: number;
-		numCSites?: number;
-		logisticalPairs?: any;
-		enabledCapabilities: {
-			room: { [key: string]: boolean };
-			creep: { [key: string]: boolean };
-		}
-	}
 
 	interface SpawnManagerMemory {
 		queue: any[];
@@ -654,11 +657,6 @@ namespace NodeJS {
 		structure: StructureConstant;
 		priority: number;
 		meta?: any;
-	}
-
-	interface RoomData {
-		basePlanGenerated?: boolean;
-		[key: string]: any;
 	}
 
 	interface RCLSchedule {
