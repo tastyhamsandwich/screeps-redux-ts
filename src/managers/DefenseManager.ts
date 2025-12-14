@@ -1,189 +1,235 @@
 "use strict";
+import { getExitBounds, type BoundingBox } from '@funcs/room/utils';
+import { getReturnCode } from '@globals';
+import { get, inRange } from 'lodash';
 
-export function DefenseMgr(tower: StructureTower) {
-	try {
-		if (!tower) return;
+const DefenseManager = {
+	run: (room: Room) => {
+		try {
 
-		const room = tower.room;
-		const pos = tower.pos;
+			// Ensure there are towers cached in the room
+			if (!room.memory.objects.towers) {
+				room.cacheObjects();
+				// If still no towers cached, there are none, so return
+				if (!room.memory.objects.towers)
+					return;
+			}
+			const towers: StructureTower[] = room.memory.objects.towers.map(tower => Game.getObjectById(tower)!);
+			const towerSettings = room.memory.settings.repairSettings.towerSettings;
+			// Still no towers? RETURN, MAN, RETURN!
+			if (!towers.length) return;
 
-		const topLeft = new RoomPosition(tower.pos.x - 5, tower.pos.y - 5, room.name); // RoomPos for visual overlay
+			// Create a set of bounding boxes that define regions encompassing each exit
+			// area of the room borders (to prevent wasted energy on peek-a-boo baiting)
+			const exits = Object.keys(Game.map.describeExits(room.name));
+			const exitBoundingBoxes: Array<BoundingBox | null> = [];
+			if (exits.includes('1')) { // North exit
+				const northernBoundingBoxes = getExitBounds(room.find(FIND_EXIT_TOP));
+				exitBoundingBoxes.push(northernBoundingBoxes);
+			}
+			if (exits.includes('3')) { // East exit
+				const easternBoundingBoxes = getExitBounds(room.find(FIND_EXIT_RIGHT));
+				exitBoundingBoxes.push(easternBoundingBoxes);
+			}
+			if (exits.includes('5')) { // South exit
+				const southernBoundingBoxes = getExitBounds(room.find(FIND_EXIT_BOTTOM));
+				exitBoundingBoxes.push(southernBoundingBoxes);
+			}
+			if (exits.includes('7')) { // West exit
+				const westernBoundingBoxes = getExitBounds(room.find(FIND_EXIT_LEFT));
+				exitBoundingBoxes.push(westernBoundingBoxes);
+			}
 
-		const hostilesInRoom: Creep[] = room.find(FIND_HOSTILE_CREEPS, { filter: (i) => ((i.pos.x <= 46 && i.pos.x >= 3 && i.pos.y <= 46 && i.pos.y >= 3) && i.owner.username !== 'Invader')});
+			// Get all hostile creeps in the room
+			const allHostiles: Creep[] = room.find(FIND_HOSTILE_CREEPS);
 
-		if (hostilesInRoom.length) {
-			room.log(`Owner Name: ${hostilesInRoom[0].owner.username} | ${hostilesInRoom}`);
-			Game.map.visual.rect(topLeft, 11, 11, { fill: 'transparent', stroke: '#ff0000'});
+			// Filter out hostiles that are within exit bounds
+			const hostilesInRoom: Creep[] = allHostiles.filter(creep => {
+				// Check if the creep is inside any of the bounding boxes (with padding)
+				for (const box of exitBoundingBoxes) {
+					if (box === null) continue;
 
-			const attackHostiles = hostilesInRoom.filter((creep) => {
-				if (creep.getActiveBodyparts(ATTACK) > 0 || creep.getActiveBodyparts(RANGED_ATTACK) > 0 ||
-				creep.getActiveBodyparts(WORK) > 0 || creep.getActiveBodyparts(CARRY) > 0)
-				 return creep;
-				else return false;
+					// Pad the bounding box by 2 tiles (move inward from exits)
+					const paddedMinX = box.minX + 2;
+					const paddedMaxX = box.maxX - 2;
+					const paddedMinY = box.minY + 2;
+					const paddedMaxY = box.maxY - 2;
+
+					// If creep is inside this padded box, exclude it
+					if (creep.pos.x >= paddedMinX && creep.pos.x <= paddedMaxX &&
+						creep.pos.y >= paddedMinY && creep.pos.y <= paddedMaxY) {
+						return false; // Exclude this creep
+					}
+				}
+				return true; // Keep this creep
 			});
-			const healHostiles = hostilesInRoom.filter(
-				(creep) => {
-					if (creep.getActiveBodyparts(HEAL) > 0) return creep;
-					else return false;
-				});
 
-			if (healHostiles.length) {
-				// If we detect healer hostiles, post advisory in console
-				room.log(`Healer Hostiles: ${healHostiles}`);
-				const closestHealer = tower.pos.findClosestByRange(healHostiles);
-
-				// Attack the nearest healer first
-				if (closestHealer) {
-					tower.attack(closestHealer);
-					return;
-				}
-			} else if (attackHostiles.length) {
-				room.log(`Attack Hostiles: ${attackHostiles}`);
-				const closestAttacker = tower.pos.findClosestByRange(attackHostiles);
-
-				if (closestAttacker) {
-					tower.attack(closestAttacker);
-					return;
-				}
-			}
-		}
-	} catch (e) {
-
-	}
-}
-export default function DefenseManager(tower: StructureTower) {
-	try {
-		const room = tower.room;
-
-		if (tower) {
-			const topLeft = new RoomPosition(tower.pos.x - 5, tower.pos.y - 5, room.name); // RoomPos for visual overlay
-			// Find hostile creeps that have advanced beyond the edge of the room borders (to prevent wasted energy on peek-a-boo bait attacks)
-			const hostilesInRoom: Creep[] = tower.room.find(FIND_HOSTILE_CREEPS, { filter: (i) => ((i.pos.x <= 5 && i.pos.y >= 4) || (i.pos.x >= 4 && i.pos.y <= 5)) && i.owner.username !== 'Invader' });
-
+			// If hostiles are found, filter into NPC Creeps and Player Creeps arrays
 			if (hostilesInRoom.length) {
+				const invaderHostiles = hostilesInRoom.filter((i) => i.owner.username === 'Invader');
+				const playerHostiles = hostilesInRoom.filter((i) => i.owner.username !== 'Invader' && i.owner.username !== 'Source Keeper');
 
-				// If we have hostiles present within the borders, post the owner to console and room overlay
-				console.log(tower.room.link() + 'Owner Name: ' + hostilesInRoom[0].owner.username + ' | ' + hostilesInRoom);
-				Game.map.visual.rect(topLeft, 11, 11, { fill: 'transparent', stroke: '#ff0000' });
-
-				// Filter hostile creeps for military targets - those with ATTACK, RANGED_ATTACK, and WORK parts
-				const attackHostiles = hostilesInRoom.filter(
-					(creep) => {
-						if (creep.getActiveBodyparts(ATTACK) > 0 || creep.getActiveBodyparts(RANGED_ATTACK) > 0 || creep.getActiveBodyparts(WORK) > 0) return creep;
-						return false;
-					});
-
-				// Also create a list of hostiles with HEAL parts - fuckin' medics!
-				const healHostiles = hostilesInRoom.filter(
-					(creep) => {
-						if (creep.getActiveBodyparts(HEAL) > 0) return creep;
-						return false;
-					});
-
-				if (healHostiles.length) {
-
-					// If we detect healer hostiles, post advisory in console
-					console.log(tower.room.link() + 'Healer Hostiles: ' + healHostiles);
-					const closestHealer = tower.pos.findClosestByRange(healHostiles);
-
-					// Attack the nearest healer first
-					if (closestHealer)
-						tower.attack(closestHealer);
-
-				} else if (attackHostiles.length) {
-
-					// If no more / no healers, print advisory to console regarding standard hostiles
-					console.log(tower.room.link() + 'Attack Hostiles: ' + attackHostiles);
-					const closestAttacker = tower.pos.findClosestByRange(attackHostiles);
-
-					// Engage hostiles
-					if (closestAttacker) {
-						tower.attack(closestAttacker);
-						return;
+				// Make an array listing the usernames who control player-owned Creeps
+				const enemyPlayerList: string[] = [];
+				if (playerHostiles.length) {
+					for (const hostile of playerHostiles) {
+						if (!enemyPlayerList.includes(hostile.owner.username))
+							enemyPlayerList.push(hostile.owner.username);
 					}
+
+					// Post the owners to console and room overlay
+					// Generate string of enemy player names
+					let enemyPlayerString = '';
+					if (enemyPlayerList.length >= 1)
+						enemyPlayerString = enemyPlayerList[0];
+					if (enemyPlayerList.length > 1) {
+						for (let i = 1; i < enemyPlayerList.length; i++)
+							enemyPlayerString += `, ${enemyPlayerList[i]}`;
+					}
+					// Log it and display it
+					room.log(`Enemy Hostiles Present! Owners: ` + enemyPlayerString, true);
+					Game.map.visual.rect(new RoomPosition(1, 1, room.name), 11, 11,
+						{ fill: 'transparent', stroke: '#ff0000' });
+					Game.map.visual.text(enemyPlayerString, new RoomPosition(11.1, 11.1, room.name),
+						{ align: 'left', color: '#cccccc', stroke: '#000000', strokeWidth: 0.1 });
+
+					// Engage enemy players with available towers
+					// TODO Expand targeting logic to discern specific creep types (i.e. healers) and prioritize targeting
+					for (const tower of towers) {
+						const maxRange = towerSettings.maxRange ?? 20;
+						const inRangeHostiles = tower.pos.findInRange(playerHostiles, maxRange);
+						if  (inRangeHostiles.length) {
+							const closestInRangeHostile = tower.pos.findClosestByRange(inRangeHostiles);
+							if (closestInRangeHostile) {
+								const result = tower.attack(closestInRangeHostile);
+								if (result === ERR_NOT_ENOUGH_ENERGY)
+									room.log(`Tower at position x${tower.pos.x},y${tower.pos.y} does not have enough energy to engage ${closestInRangeHostile.owner.username}'s creep!`, true);
+								break;
+							}
+						}
+					}
+					return;
 				}
-			}
-			// If no player-owned hostiles remain, search for NPC invader creeps to engage
-			const invaderHostiles = tower.room.find(FIND_HOSTILE_CREEPS, { filter: (i) => i.owner.username === 'Invader' });
-			if (invaderHostiles.length) {
 
-				// If we find NPC invaders, print advisory and draw overlay
-				console.log(invaderHostiles[0].owner.username + ' | ' + invaderHostiles);
-				Game.map.visual.rect(topLeft, 11, 11, { fill: 'transparent', stroke: '#ff0000' });
-
-				const closestInvader = tower.pos.findClosestByRange(invaderHostiles);
-
-				// Find nearest NPC invader and engage
-				if (closestInvader) {
-					tower.attack(closestInvader)
+				// If Invader (NPC) creeps are present in room, announce and engage
+				if (invaderHostiles.length) {
+					room.log(`WARNING! ${invaderHostiles.length} Invader Creeps have been sighted, available towers are engaging!`, true);
+					for (const tower of towers) {
+						const maxRange = room.memory.settings.repairSettings.towerSettings.maxRange ?? 20;
+						const inRangeInvaders = tower.pos.findInRange(invaderHostiles, maxRange);
+						if (inRangeInvaders.length) {
+							const closestInRangeInvader = tower.pos.findClosestByRange(inRangeInvaders);
+							if (closestInRangeInvader) {
+								const result = tower.attack(closestInRangeInvader);
+								if (result === ERR_NOT_ENOUGH_ENERGY)
+									room.log(`Tower at position x${tower.pos.x},y${tower.pos.y} does not have enough energy to engage Invaders!`, true);
+								break;
+							}
+						}
+					}
 					return;
 				}
 			}
-			// If no NPC invaders to deal with, check room settings for heal/repair settings and provide services if allowed
-			const towerSettings: TowerRepairSettings = tower.room.memory.settings.repairSettings.towerSettings;
-			if (towerSettings.creeps) {
-				const damagedCreeps: Creep[] = tower.room.find(FIND_MY_CREEPS, { filter:  (i) => { i.hits < i.hitsMax }});
-				if (damagedCreeps.length) {
-					const creepsInRange = tower.pos.findInRange(damagedCreeps, towerSettings.maxRange)
 
-					if (creepsInRange) {
-						creepsInRange.sort((a, b) => b.hits - a.hits);
-						tower.heal(creepsInRange[0]);
-						return;
+			// If there are no NPC invaders to deal with,
+			// heal & repair according to room settings
+
+			// If towers are allowed to heal hurt friendly Creeps
+			if (towerSettings.creeps) {
+				const damagedCreeps: Creep[] = room.find(FIND_MY_CREEPS, { filter: (i) => i.hits < i.hitsMax });
+				if (damagedCreeps.length) {
+					const towerMinEnergy = 350;
+					for (const tower of towers) {
+						// No healing if towers are under their minimum energy limit, in case of emergencies
+						if (tower.store.getUsedCapacity(RESOURCE_ENERGY) <= 350) continue;
+
+						const creepsInRange = tower.pos.findInRange(damagedCreeps, towerSettings.maxRange)
+						console.log(creepsInRange);
+						if (creepsInRange) {
+							creepsInRange.sort((a, b) => a.hits - b.hits);
+							const result = tower.heal(creepsInRange[0]);
+							if (result === ERR_NOT_ENOUGH_ENERGY)
+								room.log(`Tower at position x${tower.pos.x},y${tower.pos.y} lacks the energy to heal Creep '${creepsInRange[0].name}'`);
+							if (result === OK)
+								room.log(`Tower at position x${tower.pos.x},y${tower.pos.y} healing Creep '${creepsInRange[0].name}'`);
+							break;
+						}
 					}
 				}
+				return;
 			}
 
-			let ramparts: Array<StructureRampart> = [];
-			let walls: Array<StructureWall> = [];
-			let validTargets: Array<AnyStructure> = [];
+			// Otherwise, compile an array of damaged structures which
+			// are whitelisted for turrets to perform repairs on
+			let validTargets: AnyStructure[] = [];
 
-			const rampartsMax: number = tower.room.memory.settings.repairSettings.towerSettings.rampartLimit;
-			const wallsMax: number = tower.room.memory.settings.repairSettings.towerSettings.wallLimit;
+			// Repair limit for walls and ramparts, expressed as a percentage of max health (10 = 10%)
+			const rampartsMax: number = room.memory.settings.repairSettings.towerSettings.rampartLimit;
+			const wallsMax: number = room.memory.settings.repairSettings.towerSettings.wallLimit;
 
-			// search for roads, spawns, extensions, or towers under 95%
-			if (towerSettings.roads) {
-				let targets: Array<AnyStructure> = tower.room.find(FIND_STRUCTURES, {
-					filter: (i) => /*((i.hits / i.hitsMax) * 0.95) &&*/ (i.structureType == STRUCTURE_ROAD) });
+
+			if (towerSettings.roads) { // Search for damaed roads
+				const targets: StructureRoad[] = room.find(FIND_STRUCTURES, {
+					filter: (i) => i.hits < i.hitsMax && i.structureType == STRUCTURE_ROAD });
 				validTargets = validTargets.concat(targets);
 			}
-			if (towerSettings.others) {
-				let targets: Array<AnyStructure> = tower.room.find(FIND_STRUCTURES, {
-					filter: (i) => (i.hitsMax - i.hits <= 500) &&
-						(i.structureType == STRUCTURE_TOWER || i.structureType == STRUCTURE_SPAWN || i.structureType == STRUCTURE_EXTENSION || i.structureType == STRUCTURE_CONTAINER || i.structureType == STRUCTURE_EXTRACTOR || i.structureType == STRUCTURE_LAB || i.structureType == STRUCTURE_LINK || i.structureType == STRUCTURE_STORAGE || i.structureType == STRUCTURE_TERMINAL) });
+			if (towerSettings.others) { // Search for damaged anything that's not a road/wall/rampart
+				const targets: AnyStructure[] = room.find(FIND_STRUCTURES, {
+					filter: (i) => ((i.hits < i.hitsMax) && (i.structureType !== STRUCTURE_ROAD && i.structureType !== STRUCTURE_RAMPART && i.structureType !== STRUCTURE_WALL ))});
 				validTargets = validTargets.concat(targets);
 			}
-			if (towerSettings.ramparts) {
-				ramparts = tower.room.find(FIND_STRUCTURES, {
-					filter: (i) => ((i.hits / i.hitsMax <= rampartsMax) && (i.structureType == STRUCTURE_RAMPART)) });
+			if (towerSettings.ramparts) { // Search for ramparts udner the rampart repair limit
+				const ramparts = room.find(FIND_MY_STRUCTURES, {
+					filter: (i) => (((i.hits / i.hitsMax) * 100) < rampartsMax) && i.structureType === STRUCTURE_RAMPART });
 				validTargets = validTargets.concat(ramparts);
 			}
-			if (towerSettings.walls) {
-				walls = tower.room.find(FIND_STRUCTURES, {
-					filter: (i) => (i.structureType == STRUCTURE_WALL && (i.hits / i.hitsMax <= wallsMax)) })
+			if (towerSettings.walls) { // Search for walls under the wall repair limit
+				const walls = room.find(FIND_STRUCTURES, {
+					filter: (i) => (((i.hits / i.hitsMax) * 100) < wallsMax) && i.structureType === STRUCTURE_WALL });
 				validTargets = validTargets.concat(walls);
 			}
+
+			// Assuming there are structures that fit repair criteria, get repairin'
 			if (validTargets.length) {
-				const inRangeTargets: AnyStructure[] = tower.pos.findInRange(validTargets, towerSettings.maxRange);
-				inRangeTargets.sort((a, b) => {
-					const aUnder1000 = a.hits < 1000;
-					const bUnder1000 = b.hits < 1000;
+				const towerMinEnergy = 350; // No repairing if under 350 energy
 
-					// If only one is under 1000, prioritize it
-					if (aUnder1000 && !bUnder1000) return -1;
-					if (!aUnder1000 && bUnder1000) return 1;
+				for (const tower of towers) {
+					// If tower is low on energy, do not spend it on repairing structures in case of emergency
+					if (tower.store.getUsedCapacity(RESOURCE_ENERGY) <= towerMinEnergy) continue;
 
-					// Both under 1000 or both above: sort descending by value
-					return (b.hits / b.hitsMax) - (a.hits / a.hitsMax);
-				});
-				const target: AnyStructure = tower.pos.findClosestByRange(inRangeTargets)!;
-				if (target) {
-					tower.repair(target);
-					return;
+					// Determine which structures are within max range setting of tower
+					const inRangeTargets: AnyStructure[] = tower.pos.findInRange(validTargets, towerSettings.maxRange);
+
+					// Sort those structures in order of most damage to least damaged
+					if (inRangeTargets.length) {
+						inRangeTargets.sort((a, b) => {
+							const aUnder1000 = a.hits < 1000;
+							const bUnder1000 = b.hits < 1000;
+
+							// If only one is under 1000, prioritize it
+							if (aUnder1000 && !bUnder1000) return -1;
+							if (!aUnder1000 && bUnder1000) return 1;
+
+							// Both under 1000 or both above: sort descending by value
+							return (b.hits / b.hitsMax) - (a.hits / a.hitsMax);
+						});
+
+						// Select final target candidate and repair it
+
+						const target: AnyStructure | null = tower.pos.findClosestByRange(inRangeTargets);
+						if (target) {
+							const result = tower.repair(target);
+							if (result !== OK)
+								room.log(`Tower at position x${tower.pos.x},y${tower.pos.y} encountered error when repairing ${target}: ${getReturnCode(result)}`);
+						}
+					}
 				}
+				return;
 			}
+		} catch (e) {
+			console.log(`Execution Error In Function: DefenseManager(${room.name}) on Tick ${Game.time}. Error: ${e}`);
 		}
-	} catch (e) {
-		console.log(`Execution Error In Function: DefenseManager(${tower.id}) on Tick ${Game.time}. Error: ${e}`);
 	}
 }
+
+export default DefenseManager;
