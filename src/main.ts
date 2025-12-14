@@ -52,8 +52,10 @@ let tickCount = 0;
 
 module.exports.loop = function() {
 	try {
-		if (resetOnRespawn())
+		if (resetOnRespawn()) {
+			console.log(`Respawn deteceted! Initiating full memory reset...`)
 			FUNC.initGlobal();
+		}
 
 		FUNC.calcTickTime();
 

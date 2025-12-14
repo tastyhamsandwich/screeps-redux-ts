@@ -480,6 +480,9 @@ Room.prototype.cacheObjects = function (logOutput: boolean = false) {
 
 	// Initialize memory structures
 	if (!this.memory.objects) this.memory.objects = {};
+	if (!this.memory.data) this.memory.data = {};
+	const objectsCache: RoomObjectCache = { ...this.memory.objects };
+	const previousChecksum = this.memory.data.objectsChecksum;
 	if (!this.memory.containers)
 		this.memory.containers = {
 			sourceOne: '' as Id<StructureContainer>,
@@ -499,6 +502,25 @@ Room.prototype.cacheObjects = function (logOutput: boolean = false) {
 
 	if (logOutput) this.log('Caching room objects...');
 
+	/** Compute a checksum for deterministic change detection */
+	const computeChecksum = (cache: RoomObjectCache): string => {
+		const normalized: { [key: string]: unknown } = {};
+		for (const key of Object.keys(cache).sort()) {
+			const value = cache[key];
+			if (value !== undefined)
+				normalized[key] = value;
+		}
+
+		const str = JSON.stringify(normalized);
+		let hash = 0;
+		for (let i = 0; i < str.length; i++) {
+			const char = str.charCodeAt(i);
+			hash = ((hash << 5) - hash) + char;
+			hash = hash & hash; // Convert to 32-bit integer
+		}
+		return hash.toString(16);
+	};
+
 	/** Helper function to cache objects */
 	const cacheObjectArray = (objects: (RoomObject & { id: Id<any> })[], key: string, isSingular = false) => {
 		if (objects.length === 0) return;
@@ -513,13 +535,14 @@ Room.prototype.cacheObjects = function (logOutput: boolean = false) {
 		}
 
 		const ids = objects.map(obj => obj.id);
-		this.memory.objects[key] = isSingular ? [ids[0]] : ids;
+		objectsCache[key] = isSingular ? [ids[0]] : ids;
 
 		const count = isSingular ? 1 : objects.length;
 		if (logOutput) this.log(`Cached ${count} ${formatLogName(key)}${count > 1 ? 's' : ''}.`);
 		return ids;
 	};
 
+	let sourceIDs: Id<Source>[] | undefined;
 	// Find and cache sources (sorted left-to-right, then top-to-bottom)
 	const sources = this.find(FIND_SOURCES).sort((a, b) => {
 		// Sort by X position first (left to right)
@@ -528,7 +551,7 @@ Room.prototype.cacheObjects = function (logOutput: boolean = false) {
 		return a.pos.y - b.pos.y;
 	});
 	if (sources.length > 0) {
-		const sourceIDs = cacheObjectArray(sources, 'sources');
+		sourceIDs = cacheObjectArray(sources, 'sources');
 	}
 
 	// Find and cache minerals
@@ -541,7 +564,7 @@ Room.prototype.cacheObjects = function (logOutput: boolean = false) {
 
 	// Find and cache controller
 	if (this.controller) {
-		this.memory.objects.controller = [this.controller.id];
+		objectsCache.controller = [this.controller.id];
 		if (logOutput) this.log('Cached 1 controller.');
 	}
 
@@ -583,15 +606,17 @@ Room.prototype.cacheObjects = function (logOutput: boolean = false) {
 
 			// Check if near sources (within range 2)
 			let assigned = false;
+			const primarySource = sourceIDs?.[0] ?? this.memory.objects.sources?.[0];
+			const secondarySource = sourceIDs?.[1] ?? this.memory.objects.sources?.[1];
 			for (let i = 0; i < sourcePositions.length; i++) {
 				if (pos.inRangeTo(sourcePositions[i].pos, 1)) {
-					if (sourcePositions[i].id === this.memory.objects.sources?.[0]) {
+					if (sourcePositions[i].id === primarySource) {
 						this.memory.containers.sourceOne = container.id;
 						if (this.memory.remoteOfRoom) {
 							Game.rooms[this.memory.remoteOfRoom].memory.remoteRooms[this.name].containers
 						}
 					}
-					else if (sourcePositions[i].id === this.memory.objects.sources?.[1])
+					else if (sourcePositions[i].id === secondarySource)
 						this.memory.containers.sourceTwo = container.id;
 					assigned = true;
 					break;
@@ -632,7 +657,7 @@ Room.prototype.cacheObjects = function (logOutput: boolean = false) {
 		if (this.memory.remoteOfRoom)
 			Game.rooms[this.memory.remoteOfRoom].memory.remoteRooms[this.name].containers = orderedContainers;
 
-		this.memory.objects.containers = orderedContainers;
+		objectsCache.containers = orderedContainers;
 
 		if (logOutput) this.log(`Cached ${containers.length} container${containers.length > 1 ? 's' : ''}.`);
 	}
@@ -666,11 +691,13 @@ Room.prototype.cacheObjects = function (logOutput: boolean = false) {
 
 			// Check if near sources (within range 3)
 			let assigned = false;
+			const primarySource = sourceIDs?.[0] ?? this.memory.objects.sources?.[0];
+			const secondarySource = sourceIDs?.[1] ?? this.memory.objects.sources?.[1];
 			for (let i = 0; i < sourcePositions.length; i++) {
 				if (pos.inRangeTo(sourcePositions[i].pos, 3)) {
-					if (sourcePositions[i].id === this.memory.objects.sources?.[0])
+					if (sourcePositions[i].id === primarySource)
 						this.memory.links.sourceOne = link.id;
-					else if (sourcePositions[i].id === this.memory.objects.sources?.[1])
+					else if (sourcePositions[i].id === secondarySource)
 						this.memory.links.sourceTwo = link.id;
 					assigned = true;
 					break;
@@ -702,7 +729,7 @@ Room.prototype.cacheObjects = function (logOutput: boolean = false) {
 				orderedLinks.push(id);
 		}
 
-		this.memory.objects.links = orderedLinks;
+		objectsCache.links = orderedLinks;
 		if (logOutput) this.log(`Cached ${links.length} link${links.length > 1 ? 's' : ''}.`);
 	}
 
@@ -742,6 +769,12 @@ Room.prototype.cacheObjects = function (logOutput: boolean = false) {
 
 	const walls = this.find(FIND_STRUCTURES, { filter: { structureType: STRUCTURE_WALL }});
 	cacheObjectArray(walls, 'walls');
+
+	const newChecksum = computeChecksum(objectsCache);
+	if (newChecksum !== previousChecksum) {
+		this.memory.objects = objectsCache;
+		this.memory.data.objectsChecksum = newChecksum;
+	}
 
 	if (logOutput) this.log('Caching objects for room \'' + this.name + '\' completed.');
 	return true;
@@ -787,6 +820,9 @@ Room.prototype.enableDropHarvesting = function() {
 }
 /** Initializes a room with default memory structure and settings. Sets up quotas, visual settings, repair settings, and stats tracking. */
 Room.prototype.initRoom = function () {
+
+	if (this.memory.data.flags.initialized)
+		return;
 
 	// Set up various objects for direct assignment later (rather than spelling it all out in a single assignment)
 	const visualSettings: VisualSettings = { progressInfo: { alignment: 'left', xOffset: 1, yOffsetFactor: 0.6, stroke: '#000000', fontSize: 0.6, color: '' } };
