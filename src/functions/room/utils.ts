@@ -53,3 +53,28 @@ export function getRoomSourcesCapacity(room: RoomOwnershipData) {
 interface RoomOwnershipData {
 	controller?: { owner?: object; reservation?: object }
 }
+
+export type BoundingBox = {
+	minX: number;
+	maxX: number;
+	minY: number;
+	maxY: number;
+}
+
+/** Compute bounding box around a set of exit tiles.
+ *
+ * Returns null if no exits given.
+ * @author randomencounter
+ */
+export function getExitBounds(exits: RoomPosition[]): BoundingBox | null {
+	if (!exits.length) return null;
+
+	let minX = 49, maxX = 0, minY = 49, maxY = 0;
+	for (const pos of exits) {
+		if (pos.x < minX) minX = pos.x;
+		if (pos.x > maxX) maxX = pos.x;
+		if (pos.y < minY) minY = pos.y;
+		if (pos.y > maxY) maxY = pos.y;
+	}
+	return { minX, maxX, minY, maxY };
+}

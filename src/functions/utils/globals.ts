@@ -374,7 +374,7 @@ export function initGlobal(eraseAll: boolean = false): boolean {
 	log(`Zeroed out Game Memory object in advance of Global Initialization!`);
 	//} else log(`Executing Global Initialization without pre-clearing Game Memory.`);
 
-	if (!Memory.globalSettings)
+	if (!Memory.globalSettings) {
 		Memory.globalSettings = {
 			consoleSpawnInterval: 25,
 			alertDisabled: true,
@@ -418,8 +418,9 @@ export function initGlobal(eraseAll: boolean = false): boolean {
 				},
 			}
 		}
+	}
 
-	if (!Memory.globalSettings.debug)
+	if (!Memory.globalSettings.debug) {
 		Memory.globalSettings.debug = {
 			suspendCreeps: {
 				all: false,
@@ -443,14 +444,21 @@ export function initGlobal(eraseAll: boolean = false): boolean {
 			spawnDebug: false,
 			visualsDebug: false,
 		}
-
-	if (!Memory.stats) Memory.stats = {
-		totalEnergyHarvested: 0,
 	}
-	if (!Memory.globalData) Memory.globalData = {};
-	Memory.globalData.numColonies = 0;
 
-	Memory.globalData.onBirthInitComplete = true;
+	if (!Memory.stats) {
+		Memory.stats = {
+			totalEnergyHarvested: 0,
+		}
+	}
+
+	if (!Memory.globalData) {
+		Memory.globalData = {
+			numColonies: 0,
+			onBirthInitComplete: true
+		};
+	}
+
 	log(`Initialized global settings!`);
 	return true;
 }

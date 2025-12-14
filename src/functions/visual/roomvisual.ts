@@ -41,7 +41,7 @@ const dirs = [
 function calculateFactoryLevelGapsPoly() {
 	let x = -0.08;
 	let y = -0.52;
-	let result = [];
+	let result: number[][] = [];
 
 	let gapAngle = 16 * (Math.PI / 180);
 	let c1 = Math.cos(gapAngle);
@@ -114,7 +114,7 @@ RoomVisual.prototype.structure = function (x, y, type, opts: { [key: string]: an
 				[-0.68, 0.11]
 			];
 			this.poly(outline.map(p => [p[0] + x, p[1] + y]), {
-				fill: null,
+				fill: undefined,
 				stroke: colors.outline,
 				strokeWidth: 0.05,
 				opacity: opts.opacity
@@ -176,7 +176,7 @@ RoomVisual.prototype.structure = function (x, y, type, opts: { [key: string]: an
 			});
 			this.poly(factoryLevelGaps.map(p => [p[0] + x, p[1] + y]), {
 				fill: '#140a0a',
-				stroke: null,
+				stroke: undefined,
 				opacity: opts.opacity
 			});
 			// inner black circle

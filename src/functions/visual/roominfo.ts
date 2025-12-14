@@ -245,3 +245,13 @@ export function displayEnergyCapacity(room: Room) {
 			});
 	}
 }
+
+export function displayCreepQuotas(room: Room) {
+
+	const roomCreeps = _.filter(Game.creeps, (creep => creep.memory.home = room.name));
+
+	const box = new RoomVisual;
+	const textPos = new RoomPosition(1.1, 47.2, room.name);
+	box.rect(1, 47, 10, 5, { fill: '#555555', stroke: '#999999', opacity: 0.5, strokeWidth: 0.2});
+	box.text(`Harvesters: ${room}`, textPos, { align: 'left', color: '#cccccc', stroke: '#000000', strokeWidth: 0.1 });
+}
